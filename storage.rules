@@ -1,0 +1,1 @@
+rules_version='2';service firebase.storage{match /b/{bucket}/o{function admin(){return request.auth!=null&&firestore.get(/databases/(default)/documents/roles/$(request.auth.uid)).data.role in ['admin','superadmin'];}match /learning/{path=**}{allow read:if request.auth!=null;allow write:if admin()&&request.resource.size<30*1024*1024;}}}

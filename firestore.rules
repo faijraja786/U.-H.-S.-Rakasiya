@@ -1,0 +1,11 @@
+rules_version='2'; service cloud.firestore { match /databases/{database}/documents {
+function signed(){return request.auth!=null;} function role(){return get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.role;} function admin(){return signed() && role() in ['admin','superadmin'];}
+match /roles/{uid}{allow read:if signed()&&(uid==request.auth.uid||admin());allow write:if false;}
+match /quizzes/{id}{allow read:if signed()&&(admin()||resource.data.status=='published');allow write:if false;
+match /publicQuestions/{qid}{allow read:if signed()&&(admin()||get(/databases/$(database)/documents/quizzes/$(id)).data.status=='published');allow write:if false;}
+match /privateAnswers/{qid}{allow read,write:if admin();}
+match /attempts/{aid}{allow read:if signed()&&(admin()||resource.data.uid==request.auth.uid);allow write:if false;}
+match /leaderboard/{uid}{allow read:if signed()&&(admin()||get(/databases/$(database)/documents/quizzes/$(id)).data.resultsReleased==true);allow write:if false;}}
+match /users/{uid}/{path=**}{allow read,write:if signed()&&request.auth.uid==uid;}
+match /content/{id}{allow read:if signed()&&(admin()||resource.data.published==true);allow write:if admin();}
+match /{path=**}{allow read,write:if false;}}}
