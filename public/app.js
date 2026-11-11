@@ -8,7 +8,7 @@ const app = initializeApp(firebaseConfig), auth = getAuth(app), db = getFirestor
 const $ = id => document.getElementById(id), call = (n,d={}) => httpsCallable(functions,n)(d).then(r=>r.data);
 const esc = v => String(v ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 await setPersistence(auth,browserLocalPersistence);
-let user=null, role="student", tab="home", activeQuiz=null, answers={}, timer=null;
+let user=null, role="student", tab="home", activeQuiz=null, answers={}, timer=null, requestedLoginRole=null;
 
 function msg(t,ok=false){$("authMessage").textContent=t;$("authMessage").className=ok?"success":"error"}
 function alertMsg(t){window.alert(t)}
@@ -17,15 +17,15 @@ function dateText(v){if(!v)return "—";const d=new Date(v);return Number.isNaN(
 function openApp(){ $("auth").hidden=true;$("app").hidden=false }
 function openLogin(){ $("auth").hidden=false;$("app").hidden=true }
 
-$("signup").onclick=async()=>{try{if($("loginRole").value!=="student")throw Error("नया account केवल Student बना सकता है। Admin account Super Admin बनाएगा।");const name=$("name").value.trim(),email=$("email").value.trim(),password=$("password").value;if(!name||!email||password.length<6)throw Error("नाम, ईमेल और कम-से-कम 6 अक्षर का password भरें।");const c=await createUserWithEmailAndPassword(auth,email,password);await updateProfile(c.user,{displayName:name})}catch(e){msg(e.message)}};
-$("login").onclick=async()=>{try{await signInWithEmailAndPassword(auth,$("email").value.trim(),$("password").value)}catch(e){msg(e.message)}};
-$("google").onclick=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){msg(e.message)}};
+$("signup").onclick=async()=>{try{requestedLoginRole="student";if($("loginRole").value!=="student")throw Error("नया account केवल Student बना सकता है। Admin account Super Admin बनाएगा।");const name=$("name").value.trim(),email=$("email").value.trim(),password=$("password").value;if(!name||!email||password.length<6)throw Error("नाम, ईमेल और कम-से-कम 6 अक्षर का password भरें।");const c=await createUserWithEmailAndPassword(auth,email,password);await updateProfile(c.user,{displayName:name})}catch(e){msg(e.message)}};
+$("login").onclick=async()=>{try{requestedLoginRole=$("loginRole").value;await signInWithEmailAndPassword(auth,$("email").value.trim(),$("password").value)}catch(e){msg(e.message)}};
+$("google").onclick=async()=>{try{requestedLoginRole=$("loginRole").value;await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){msg(e.message)}};
 $("reset").onclick=async()=>{try{const email=$("email").value.trim();if(!email)throw Error("पहले ईमेल लिखें।");await sendPasswordResetEmail(auth,email);msg("Password reset link ईमेल पर भेज दिया गया है।",true)}catch(e){msg(e.message)}};
 $("logout").onclick=()=>signOut(auth);
 
 onAuthStateChanged(auth,async u=>{
   user=u;if(!u){openLogin();return}
-  const requestedRole=$("loginRole").value;
+  const requestedRole=requestedLoginRole;
   try{
     await call("ensureStudentRole");
     const s=await getDoc(doc(db,"roles",u.uid));role=s.exists()?s.data().role:"student";
@@ -35,12 +35,15 @@ onAuthStateChanged(auth,async u=>{
       role=boot.role;
     }
     // Login type is checked against the server-side role; it never grants privileges.
-    if(requestedRole!==role){
+    if(requestedRole && requestedRole!==role){
+      requestedLoginRole=null;
       await signOut(u);
       openLogin();
       msg("इस account की role "+role.toUpperCase()+" है। कृपया सही Login Type चुनें।");
       return;
     }
+    requestedLoginRole=null;
+    $("loginRole").value=role;
     openApp();$("identity").textContent=(u.displayName||u.email)+" • "+role.toUpperCase();
     $("roleBadge").textContent=role==="superadmin"?"✓ SUPER ADMIN":role==="admin"?"✓ ADMIN":"✓ STUDENT";tab="home";render();
   }catch(e){await signOut(u).catch(()=>{});openLogin();msg("Role verification नहीं हो सकी: "+e.message)}
