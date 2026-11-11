@@ -1,773 +1,225 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { initializeApp } = require("firebase-admin/app");
-const {
-  getFirestore,
-  FieldValue,
-  Timestamp
-} = require("firebase-admin/firestore");
+const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
 const { defineString } = require("firebase-functions/params");
 
 const BOOTSTRAP_ADMIN_EMAIL = defineString("BOOTSTRAP_ADMIN_EMAIL");
-
 initializeApp();
-
 const db = getFirestore();
+const auth = getAuth();
 
-// ADMIN CHECK
-async function admin(req, superOnly = false) {
-  if (!req.auth) {
-    throw new HttpsError("unauthenticated", "Sign in");
+function signedIn(req) {
+  if (!req.auth) throw new HttpsError("unauthenticated", "कृपया पहले लॉगिन करें।");
+  return req.auth.uid;
+}
+async function roleOf(uid) {
+  const snap = await db.doc("roles/" + uid).get();
+  return snap.exists ? snap.data().role : "student";
+}
+async function requireAdmin(req, superOnly = false) {
+  const uid = signedIn(req);
+  const role = await roleOf(uid);
+  if (!["admin", "superadmin"].includes(role) || (superOnly && role !== "superadmin")) {
+    throw new HttpsError("permission-denied", superOnly ? "यह सुविधा केवल Super Admin के लिए है।" : "केवल Admin उपयोग कर सकता है।");
   }
-
-  const s = await db.doc("roles/" + req.auth.uid).get();
-  const role = s.exists ? s.data().role : "student";
-
-  if (
-    !["admin", "superadmin"].includes(role) ||
-    (superOnly && role !== "superadmin")
-  ) {
-    throw new HttpsError("permission-denied", "Admin only");
-  }
+  return uid;
+}
+async function setRole(uid, role, extra = {}) {
+  const user = await auth.getUser(uid);
+  await db.doc("roles/" + uid).set({
+    role, email: (user.email || "").toLowerCase(),
+    displayName: user.displayName || "", updatedAt: FieldValue.serverTimestamp(), ...extra
+  }, { merge: true });
+  const claims = { ...(user.customClaims || {}) };
+  if (role === "student") delete claims.role;
+  else claims.role = role;
+  await auth.setCustomUserClaims(uid, claims);
 }
 
-// FIRST ADMIN
-exports.bootstrapFirstAdmin = onCall(async req => {
-  if (!req.auth) {
-    throw new HttpsError("unauthenticated", "Sign in");
-  }
-
-  const email = (req.auth.token.email || "").toLowerCase();
-
-  if (
-    email !==
-    (BOOTSTRAP_ADMIN_EMAIL.value() || "").toLowerCase()
-  ) {
-    throw new HttpsError("permission-denied", "Email not configured");
-  }
-
-  const s = await db.collection("roles")
-    .where("role", "in", ["admin", "superadmin"])
-    .limit(1)
-    .get();
-
-  if (!s.empty) {
-    throw new HttpsError("already-exists", "Admin already bootstrapped");
-  }
-
-  await db.doc("roles/" + req.auth.uid).set({
-    role: "superadmin",
-    email
-  });
-
-  await getAuth().setCustomUserClaims(req.auth.uid, {
-    role: "superadmin"
-  });
-
-  return { ok: true };
-});
-
-// ADD ADMIN
-exports.addAdmin = onCall(async req => {
-  await admin(req, true);
-
-  const email = String(req.data.email || "")
-    .toLowerCase()
-    .trim();
-
-  let u;
-
-  try {
-    u = await getAuth().getUserByEmail(email);
-  } catch (e) {
-    throw new HttpsError(
-      "not-found",
-      "Admin must sign in once first"
-    );
-  }
-
-  await db.doc("roles/" + u.uid).set({
-    role: "admin",
-    email,
-    addedBy: req.auth.uid
-  });
-
-  await getAuth().setCustomUserClaims(u.uid, {
-    role: "admin"
-  });
-
-  return { ok: true };
-});
-
-// SAVE QUIZ
-exports.saveQuiz = onCall(async req => {
-  await admin(req);
-
-  const d = req.data;
-  const qs = d.questions || [];
-
-  if (!d.title || !Array.isArray(qs) || !qs.length) {
-    throw new HttpsError(
-      "invalid-argument",
-      "Title and questions required"
-    );
-  }
-
-  if (qs.length > 249) {
-    throw new HttpsError(
-      "invalid-argument",
-      "Maximum 249 questions allowed per quiz"
-    );
-  }
-
-  for (const q of qs) {
-    if (
-      !q.text ||
-      !Array.isArray(q.options) ||
-      q.options.length < 2 ||
-      !Number.isInteger(q.answer) ||
-      q.answer < 0 ||
-      q.answer >= q.options.length
-    ) {
-      throw new HttpsError(
-        "invalid-argument",
-        "Invalid question"
-      );
-    }
-  }
-
-  const r = db.collection("quizzes").doc();
-  const b = db.batch();
-
-  b.set(r, {
-    title: d.title,
-    subject: d.subject || "General",
-    duration: Math.min(
-      240,
-      Math.max(1, +d.duration || 30)
-    ),
-    questionCount: qs.length,
-    status: d.publish ? "published" : "draft",
-    createdAt: FieldValue.serverTimestamp(),
-    resultsReleased: false
-  });
-
-  qs.forEach((q, i) => {
-    b.set(
-      r.collection("publicQuestions").doc(String(i)),
-      {
-        text: q.text,
-        options: q.options,
-        index: i
-      }
-    );
-
-    b.set(
-      r.collection("privateAnswers").doc(String(i)),
-      {
-        answer: q.answer,
-        explanation: q.explanation || ""
-      }
-    );
-  });
-
-  await b.commit();
-
-  return { id: r.id };
-});
-
-// START QUIZ
-exports.startQuiz = onCall(async req => {
-  if (!req.auth) {
-    throw new HttpsError("unauthenticated", "Sign in");
-  }
-
-  const r = db.doc("quizzes/" + req.data.id);
-  const s = await r.get();
-
-  if (!s.exists || s.data().status !== "published") {
-    throw new HttpsError("not-found", "Quiz unavailable");
-  }
-
-  const prev = await r.collection("attempts")
-    .where("uid", "==", req.auth.uid)
-    .limit(1)
-    .get();
-
-  if (!prev.empty) {
-    throw new HttpsError(
-      "already-exists",
-      "Already attempted"
-    );
-  }
-
-  const qs = await r.collection("publicQuestions")
-    .orderBy("index")
-    .get();
-
-  const a = r.collection("attempts").doc();
-
-  const exp = Timestamp.fromMillis(
-    Date.now() + s.data().duration * 60000
-  );
-
-  await a.set({
-    uid: req.auth.uid,
-    expiresAt: exp,
-    status: "started"
-  });
-
-  return {
-    attemptId: a.id,
-    title: s.data().title,
-    duration: s.data().duration,
-    questions: qs.docs.map(x => ({
-      id: x.id,
-      ...x.data()
-    }))
-  };
-});
-
-// SUBMIT QUIZ
-exports.submitQuiz = onCall(async req => {
-  if (!req.auth) {
-    throw new HttpsError("unauthenticated", "Sign in");
-  }
-
-  const r = db.doc("quizzes/" + req.data.id);
-  const a = r.collection("attempts").doc(req.data.attemptId);
-
-  const s = await a.get();
-
-  if (
-    !s.exists ||
-    s.data().uid !== req.auth.uid ||
-    s.data().status !== "started"
-  ) {
-    throw new HttpsError(
-      "permission-denied",
-      "Invalid attempt"
-    );
-  }
-
-  if (
-    Date.now() >
-    s.data().expiresAt.toMillis() + 30000
-  ) {
-    throw new HttpsError(
-      "deadline-exceeded",
-      "Time expired"
-    );
-  }
-
-  const keys = await r.collection("privateAnswers").get();
-
-  const answers =
-    req.data.answers &&
-    typeof req.data.answers === "object"
-      ? req.data.answers
-      : {};
-
-  let score = 0;
-
-  keys.forEach(k => {
-    if (
-      Number(answers[k.id]) ===
-      k.data().answer
-    ) {
-      score++;
-    }
-  });
-
-  const release = Timestamp.fromMillis(
-    Date.now() + 48 * 3600000
-  );
-
-  await a.update({
-    status: "submitted",
-    score,
-    total: keys.size,
-    answers,
-    releaseAt: release,
-    submittedAt: FieldValue.serverTimestamp()
-  });
-
-  await r.collection("leaderboard")
-    .doc(req.auth.uid)
-    .set({
-      uid: req.auth.uid,
-      score,
-      total: keys.size,
-      releaseAt: release
+exports.ensureStudentRole = onCall(async req => {
+  const uid = signedIn(req);
+  const ref = db.doc("roles/" + uid);
+  await db.runTransaction(async tx => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) tx.create(ref, {
+      role: "student", email: (req.auth.token.email || "").toLowerCase(),
+      displayName: req.auth.token.name || "", createdAt: FieldValue.serverTimestamp()
     });
-
-  return {
-    score,
-    total: keys.size,
-    releaseAt: release.toDate().toISOString()
-  };
+  });
+  return { role: await roleOf(uid) };
 });
 
-// GET LEADERBOARD
-exports.getLeaderboard = onCall(async req => {
-  if (!req.auth) {
-    throw new HttpsError("unauthenticated", "Sign in");
-  }
-
-  const quizRef = db.doc("quizzes/" + req.data.id);
-  const quiz = await quizRef.get();
-
-  if (!quiz.exists) {
-    throw new HttpsError("not-found", "Quiz not found");
-  }
-
-  const roleDoc = await db.doc("roles/" + req.auth.uid).get();
-
-  const userRole = roleDoc.exists
-    ? roleDoc.data().role
-    : "student";
-
-  const isAdmin = ["admin", "superadmin"].includes(userRole);
-
-  const snapshot = await quizRef
-    .collection("leaderboard")
-    .orderBy("score", "desc")
-    .get();
-
-  const now = Date.now();
-
-  const releasedRows = snapshot.docs
-    .filter(doc => {
-      const data = doc.data();
-
-      return (
-        isAdmin ||
-        (
-          data.releaseAt &&
-          now >= data.releaseAt.toMillis()
-        )
-      ); const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { initializeApp } = require("firebase-admin/app");
-const {
-  getFirestore,
-  FieldValue,
-  Timestamp
-} = require("firebase-admin/firestore");
-const { getAuth } = require("firebase-admin/auth");
-const { defineString } = require("firebase-functions/params");
-
-const BOOTSTRAP_ADMIN_EMAIL = defineString("BOOTSTRAP_ADMIN_EMAIL");
-
-initializeApp();
-
-const db = getFirestore();
-
-// ADMIN CHECK
-async function admin(req, superOnly = false) {
-  if (!req.auth) {
-    throw new HttpsError("unauthenticated", "Sign in");
-  }
-
-  const s = await db.doc("roles/" + req.auth.uid).get();
-  const role = s.exists ? s.data().role : "student";
-
-  if (
-    !["admin", "superadmin"].includes(role) ||
-    (superOnly && role !== "superadmin")
-  ) {
-    throw new HttpsError("permission-denied", "Admin only");
-  }
-}
-
-// FIRST ADMIN
 exports.bootstrapFirstAdmin = onCall(async req => {
-  if (!req.auth) {
-    throw new HttpsError("unauthenticated", "Sign in");
-  }
-
+  const uid = signedIn(req);
   const email = (req.auth.token.email || "").toLowerCase();
-
-  if (
-    email !==
-    (BOOTSTRAP_ADMIN_EMAIL.value() || "").toLowerCase()
-  ) {
-    throw new HttpsError("permission-denied", "Email not configured");
-  }
-
-  const s = await db.collection("roles")
-    .where("role", "in", ["admin", "superadmin"])
-    .limit(1)
-    .get();
-
-  if (!s.empty) {
-    throw new HttpsError("already-exists", "Admin already bootstrapped");
-  }
-
-  await db.doc("roles/" + req.auth.uid).set({
-    role: "superadmin",
-    email
+  const allowed = (BOOTSTRAP_ADMIN_EMAIL.value() || "").trim().toLowerCase();
+  if (!allowed || email !== allowed) throw new HttpsError("permission-denied", "यह ईमेल First Super Admin के लिए configured नहीं है।");
+  const lockRef = db.doc("system/bootstrap");
+  const roleRef = db.doc("roles/" + uid);
+  await db.runTransaction(async tx => {
+    const lock = await tx.get(lockRef);
+    if (lock.exists && lock.data().completed) throw new HttpsError("already-exists", "First Admin setup पहले ही हो चुका है।");
+    tx.set(lockRef, { completed: true, uid, email, createdAt: FieldValue.serverTimestamp() });
+    tx.set(roleRef, { role: "superadmin", email, displayName: req.auth.token.name || "", createdAt: FieldValue.serverTimestamp() }, { merge: true });
   });
-
-  await getAuth().setCustomUserClaims(req.auth.uid, {
-    role: "superadmin"
-  });
-
-  return { ok: true };
+  const user = await auth.getUser(uid);
+  await auth.setCustomUserClaims(uid, { ...(user.customClaims || {}), role: "superadmin" });
+  return { ok: true, role: "superadmin" };
 });
 
-// ADD ADMIN
 exports.addAdmin = onCall(async req => {
-  await admin(req, true);
-
-  const email = String(req.data.email || "")
-    .toLowerCase()
-    .trim();
-
-  let u;
-
-  try {
-    u = await getAuth().getUserByEmail(email);
-  } catch (e) {
-    throw new HttpsError(
-      "not-found",
-      "Admin must sign in once first"
-    );
-  }
-
-  await db.doc("roles/" + u.uid).set({
-    role: "admin",
-    email,
-    addedBy: req.auth.uid
-  });
-
-  await getAuth().setCustomUserClaims(u.uid, {
-    role: "admin"
-  });
-
+  const actor = await requireAdmin(req, true);
+  const email = String(req.data?.email || "").trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpsError("invalid-argument", "सही ईमेल लिखें।");
+  let target;
+  try { target = await auth.getUserByEmail(email); }
+  catch { throw new HttpsError("not-found", "इस ईमेल से पहले एक बार account बनाकर login करना होगा।"); }
+  if (target.uid === actor) throw new HttpsError("invalid-argument", "अपने account की role बदलने के लिए यह विकल्प उपयोग न करें।");
+  await setRole(target.uid, "admin", { addedBy: actor });
   return { ok: true };
 });
 
-// SAVE QUIZ
+exports.removeAdmin = onCall(async req => {
+  const actor = await requireAdmin(req, true);
+  const uid = String(req.data?.uid || "");
+  if (!uid || uid === actor) throw new HttpsError("invalid-argument", "किसी दूसरे Admin को चुनें।");
+  const targetRole = await roleOf(uid);
+  if (targetRole !== "admin") throw new HttpsError("failed-precondition", "यह account Admin नहीं है या Super Admin है।");
+  await setRole(uid, "student", { removedBy: actor, removedAt: FieldValue.serverTimestamp() });
+  return { ok: true };
+});
+
+exports.listAdmins = onCall(async req => {
+  await requireAdmin(req, true);
+  const snap = await db.collection("roles").where("role", "in", ["admin", "superadmin"]).get();
+  return { admins: snap.docs.map(d => ({ uid: d.id, ...d.data() })) };
+});
+
 exports.saveQuiz = onCall(async req => {
-  await admin(req);
-
-  const d = req.data;
-  const qs = d.questions || [];
-
-  if (!d.title || !Array.isArray(qs) || !qs.length) {
-    throw new HttpsError(
-      "invalid-argument",
-      "Title and questions required"
-    );
-  }
-
-  if (qs.length > 249) {
-    throw new HttpsError(
-      "invalid-argument",
-      "Maximum 249 questions allowed per quiz"
-    );
-  }
-
-  for (const q of qs) {
-    if (
-      !q.text ||
-      !Array.isArray(q.options) ||
-      q.options.length < 2 ||
-      !Number.isInteger(q.answer) ||
-      q.answer < 0 ||
-      q.answer >= q.options.length
-    ) {
-      throw new HttpsError(
-        "invalid-argument",
-        "Invalid question"
-      );
+  await requireAdmin(req);
+  const d = req.data || {};
+  const questions = Array.isArray(d.questions) ? d.questions : [];
+  const title = String(d.title || "").trim();
+  if (!title || !questions.length || questions.length > 249) throw new HttpsError("invalid-argument", "Quiz title और 1 से 249 questions जरूरी हैं।");
+  questions.forEach((q, i) => {
+    if (!String(q.text || "").trim() || !Array.isArray(q.options) || q.options.length < 2 || q.options.length > 6 ||
+        q.options.some(x => !String(x || "").trim()) || !Number.isInteger(q.answer) || q.answer < 0 || q.answer >= q.options.length) {
+      throw new HttpsError("invalid-argument", "Question " + (i + 1) + " में text, options या सही answer जाँचें।");
     }
-  }
-
-  const r = db.collection("quizzes").doc();
-  const b = db.batch();
-
-  b.set(r, {
-    title: d.title,
-    subject: d.subject || "General",
-    duration: Math.min(
-      240,
-      Math.max(1, +d.duration || 30)
-    ),
-    questionCount: qs.length,
-    status: d.publish ? "published" : "draft",
-    createdAt: FieldValue.serverTimestamp(),
-    resultsReleased: false
   });
-
-  qs.forEach((q, i) => {
-    b.set(
-      r.collection("publicQuestions").doc(String(i)),
-      {
-        text: q.text,
-        options: q.options,
-        index: i
-      }
-    );
-
-    b.set(
-      r.collection("privateAnswers").doc(String(i)),
-      {
-        answer: q.answer,
-        explanation: q.explanation || ""
-      }
-    );
+  const quizRef = db.collection("quizzes").doc();
+  const batch = db.batch();
+  batch.set(quizRef, {
+    title, subject: String(d.subject || "General"), duration: Math.min(240, Math.max(1, Number(d.duration) || 30)),
+    questionCount: questions.length, status: d.publish === false ? "draft" : "published",
+    createdBy: req.auth.uid, createdAt: FieldValue.serverTimestamp()
   });
-
-  await b.commit();
-
-  return { id: r.id };
+  questions.forEach((q, i) => {
+    batch.set(quizRef.collection("publicQuestions").doc(String(i)), { text: String(q.text).trim(), options: q.options.map(String), index: i });
+    batch.set(quizRef.collection("privateAnswers").doc(String(i)), { answer: q.answer, explanation: String(q.explanation || "") });
+  });
+  await batch.commit();
+  return { id: quizRef.id };
 });
 
-// START QUIZ
 exports.startQuiz = onCall(async req => {
-  if (!req.auth) {
-    throw new HttpsError("unauthenticated", "Sign in");
-  }
-
-  const r = db.doc("quizzes/" + req.data.id);
-  const s = await r.get();
-
-  if (!s.exists || s.data().status !== "published") {
-    throw new HttpsError("not-found", "Quiz unavailable");
-  }
-
-  const prev = await r.collection("attempts")
-    .where("uid", "==", req.auth.uid)
-    .limit(1)
-    .get();
-
-  if (!prev.empty) {
-    throw new HttpsError(
-      "already-exists",
-      "Already attempted"
-    );
-  }
-
-  const qs = await r.collection("publicQuestions")
-    .orderBy("index")
-    .get();
-
-  const a = r.collection("attempts").doc();
-
-  const exp = Timestamp.fromMillis(
-    Date.now() + s.data().duration * 60000
-  );
-
-  await a.set({
-    uid: req.auth.uid,
-    expiresAt: exp,
-    status: "started"
+  const uid = signedIn(req);
+  const quizId = String(req.data?.id || "");
+  if (!quizId) throw new HttpsError("invalid-argument", "Quiz ID missing.");
+  const quizRef = db.doc("quizzes/" + quizId);
+  const quizSnap = await quizRef.get();
+  if (!quizSnap.exists || quizSnap.data().status !== "published") throw new HttpsError("not-found", "Quiz उपलब्ध नहीं है।");
+  const data = quizSnap.data();
+  const attemptRef = quizRef.collection("attempts").doc(uid);
+  const old = await quizRef.collection("attempts").where("uid", "==", uid).limit(1).get();
+  if (!old.empty && old.docs[0].id !== uid) throw new HttpsError("already-exists", "आप यह Quiz पहले दे चुके हैं।");
+  await db.runTransaction(async tx => {
+    const existing = await tx.get(attemptRef);
+    if (existing.exists) throw new HttpsError("already-exists", "आप यह Quiz पहले शुरू कर चुके हैं।");
+    tx.create(attemptRef, { uid, status: "started", startedAt: FieldValue.serverTimestamp(), expiresAt: Timestamp.fromMillis(Date.now() + data.duration * 60000) });
   });
-
-  return {
-    attemptId: a.id,
-    title: s.data().title,
-    duration: s.data().duration,
-    questions: qs.docs.map(x => ({
-      id: x.id,
-      ...x.data()
-    }))
-  };
+  const qs = await quizRef.collection("publicQuestions").orderBy("index").get();
+  return { attemptId: uid, title: data.title, duration: data.duration, questions: qs.docs.map(x => ({ id: x.id, ...x.data() })) };
 });
 
-// SUBMIT QUIZ
 exports.submitQuiz = onCall(async req => {
-  if (!req.auth) {
-    throw new HttpsError("unauthenticated", "Sign in");
-  }
-
-  const r = db.doc("quizzes/" + req.data.id);
-  const a = r.collection("attempts").doc(req.data.attemptId);
-
-  const s = await a.get();
-
-  if (
-    !s.exists ||
-    s.data().uid !== req.auth.uid ||
-    s.data().status !== "started"
-  ) {
-    throw new HttpsError(
-      "permission-denied",
-      "Invalid attempt"
-    );
-  }
-
-  if (
-    Date.now() >
-    s.data().expiresAt.toMillis() + 30000
-  ) {
-    throw new HttpsError(
-      "deadline-exceeded",
-      "Time expired"
-    );
-  }
-
-  const keys = await r.collection("privateAnswers").get();
-
-  const answers =
-    req.data.answers &&
-    typeof req.data.answers === "object"
-      ? req.data.answers
-      : {};
-
+  const uid = signedIn(req);
+  const quizId = String(req.data?.id || "");
+  const attemptId = String(req.data?.attemptId || "");
+  const answers = req.data?.answers && typeof req.data.answers === "object" && !Array.isArray(req.data.answers) ? req.data.answers : {};
+  const quizRef = db.doc("quizzes/" + quizId);
+  const attemptRef = quizRef.collection("attempts").doc(attemptId);
+  const attemptSnap = await attemptRef.get();
+  if (!attemptSnap.exists || attemptSnap.data().uid !== uid || attemptSnap.data().status !== "started") throw new HttpsError("permission-denied", "Quiz attempt मान्य नहीं है।");
+  if (Date.now() > attemptSnap.data().expiresAt.toMillis() + 30000) throw new HttpsError("deadline-exceeded", "Quiz का समय समाप्त हो गया।");
+  const answerSnap = await quizRef.collection("privateAnswers").get();
+  const validIds = new Set(answerSnap.docs.map(d => d.id));
+  if (Object.keys(answers).some(k => !validIds.has(k))) throw new HttpsError("invalid-argument", "Invalid answer key.");
   let score = 0;
-
-  keys.forEach(k => {
-    if (
-      Number(answers[k.id]) ===
-      k.data().answer
-    ) {
-      score++;
-    }
-  });
-
-  const release = Timestamp.fromMillis(
-    Date.now() + 48 * 3600000
-  );
-
-  await a.update({
-    status: "submitted",
-    score,
-    total: keys.size,
-    answers,
-    releaseAt: release,
-    submittedAt: FieldValue.serverTimestamp()
-  });
-
-  await r.collection("leaderboard")
-    .doc(req.auth.uid)
-    .set({
-      uid: req.auth.uid,
-      score,
-      total: keys.size,
-      releaseAt: release
+  answerSnap.forEach(d => { if (Number.isInteger(answers[d.id]) && answers[d.id] === d.data().answer) score++; });
+  const releaseAt = Timestamp.fromMillis(Date.now() + 48 * 60 * 60 * 1000);
+  const user = await auth.getUser(uid);
+  await db.runTransaction(async tx => {
+    const current = await tx.get(attemptRef);
+    if (!current.exists || current.data().status !== "started" || current.data().uid !== uid) throw new HttpsError("already-exists", "यह Quiz पहले submit हो चुका है।");
+    tx.update(attemptRef, { status: "submitted", score, total: answerSnap.size, answers, releaseAt, submittedAt: FieldValue.serverTimestamp() });
+    tx.set(quizRef.collection("leaderboard").doc(uid), {
+      uid, email: (user.email || "").toLowerCase(), displayName: user.displayName || "",
+      score, total: answerSnap.size, releaseAt, submittedAt: FieldValue.serverTimestamp()
     });
-
-  return {
-    score,
-    total: keys.size,
-    releaseAt: release.toDate().toISOString()
-  };
+  });
+  return { score, total: answerSnap.size, releaseAt: releaseAt.toDate().toISOString() };
 });
 
-// GET LEADERBOARD
 exports.getLeaderboard = onCall(async req => {
-  if (!req.auth) {
-    throw new HttpsError("unauthenticated", "Sign in");
-  }
-
-  const quizRef = db.doc("quizzes/" + req.data.id);
+  const uid = signedIn(req);
+  const quizRef = db.doc("quizzes/" + String(req.data?.id || ""));
   const quiz = await quizRef.get();
-
-  if (!quiz.exists) {
-    throw new HttpsError("not-found", "Quiz not found");
-  }
-
-  const roleDoc = await db.doc("roles/" + req.auth.uid).get();
-
-  const userRole = roleDoc.exists
-    ? roleDoc.data().role
-    : "student";
-
-  const isAdmin = ["admin", "superadmin"].includes(userRole);
-
-  const snapshot = await quizRef
-    .collection("leaderboard")
-    .orderBy("score", "desc")
-    .get();
-
+  if (!quiz.exists) throw new HttpsError("not-found", "Quiz नहीं मिला।");
+  const isAdmin = ["admin", "superadmin"].includes(await roleOf(uid));
+  const snap = await quizRef.collection("leaderboard").orderBy("score", "desc").get();
   const now = Date.now();
-
-  const releasedRows = snapshot.docs
-    .filter(doc => {
-      const data = doc.data();
-
-      return (
-        isAdmin ||
-        (
-          data.releaseAt &&
-          now >= data.releaseAt.toMillis()
-        )
-      );
-    })
-    .map(doc => doc.data());
-
-  const pendingRows = snapshot.docs
-    .map(doc => doc.data())
-    .filter(data =>
-      data.releaseAt &&
-      now < data.releaseAt.toMillis()
-    );
-
-  if (releasedRows.length === 0 && !isAdmin) {
-    const nextRelease = pendingRows.length
-      ? Math.min(
-          ...pendingRows.map(x =>
-            x.releaseAt.toMillis()
-          )
-        )
-      : null;
-
-    return {
-      released: false,
-      releaseAt: nextRelease
-        ? new Date(nextRelease).toISOString()
-        : null,
-      rows: []
-    };
+  const rows = snap.docs.map(d => d.data()).filter(x => isAdmin || (x.releaseAt && now >= x.releaseAt.toMillis()));
+  if (!isAdmin && rows.length === 0) {
+    const future = snap.docs.map(d => d.data().releaseAt?.toMillis()).filter(t => t && t > now);
+    return { released: false, releaseAt: future.length ? new Date(Math.min(...future)).toISOString() : null, rows: [] };
   }
-
-  return {
-    released: true,
-    rows: releasedRows.map((data, index) => ({
-      uid: data.uid,
-      score: data.score,
-      total: data.total,
-      rank: index + 1
-    }))
-  };
+  rows.sort((a, b) => b.score - a.score || (a.submittedAt?.toMillis() || 0) - (b.submittedAt?.toMillis() || 0));
+  return { released: true, rows: rows.map((x, i) => ({ uid: x.uid, name: x.displayName || "Student", score: x.score, total: x.total, rank: i + 1 })) };
 });
-    })
-    .map(doc => doc.data());
 
-  const pendingRows = snapshot.docs
-    .map(doc => doc.data())
-    .filter(data =>
-      data.releaseAt &&
-      now < data.releaseAt.toMillis()
-    );
-
-  if (releasedRows.length === 0 && !isAdmin) {
-    const nextRelease = pendingRows.length
-      ? Math.min(
-          ...pendingRows.map(x =>
-            x.releaseAt.toMillis()
-          )
-        )
-      : null;
-
-    return {
-      released: false,
-      releaseAt: nextRelease
-        ? new Date(nextRelease).toISOString()
-        : null,
-      rows: []
-    };
+exports.getMyResults = onCall(async req => {
+  const uid = signedIn(req);
+  const quizzes = await db.collection("quizzes").get();
+  const now = Date.now();
+  const results = [];
+  for (const q of quizzes.docs) {
+    const snap = await q.ref.collection("leaderboard").doc(uid).get();
+    if (!snap.exists) continue;
+    const d = snap.data();
+    results.push({ quizId: q.id, title: q.data().title, score: d.score, total: d.total,
+      released: !!d.releaseAt && now >= d.releaseAt.toMillis(),
+      releaseAt: d.releaseAt?.toDate().toISOString() || null });
   }
+  return { results };
+});
 
-  return {
-    released: true,
-    rows: releasedRows.map((data, index) => ({
-      uid: data.uid,
-      score: data.score,
-      total: data.total,
-      rank: index + 1
-    }))
-  };
+exports.addContent = onCall(async req => {
+  await requireAdmin(req);
+  const d = req.data || {};
+  if (!String(d.title || "").trim() || !/^https?:\/\//i.test(String(d.url || ""))) throw new HttpsError("invalid-argument", "Title और valid https/http file link जरूरी है।");
+  const ref = await db.collection("content").add({
+    title: String(d.title).trim(), subject: String(d.subject || "General"),
+    type: String(d.type || "note"), description: String(d.description || ""),
+    url: String(d.url), published: d.published !== false,
+    createdBy: req.auth.uid, createdAt: FieldValue.serverTimestamp()
+  });
+  return { id: ref.id };
+});
+
+exports.listStudents = onCall(async req => {
+  await requireAdmin(req);
+  const snap = await db.collection("roles").where("role", "==", "student").limit(500).get();
+  return { students: snap.docs.map(d => ({ uid: d.id, email: d.data().email || "", displayName: d.data().displayName || "" })) };
 });
