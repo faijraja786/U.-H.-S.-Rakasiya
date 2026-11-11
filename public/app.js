@@ -28,7 +28,13 @@ onAuthStateChanged(auth,async u=>{
   try{
     await call("ensureStudentRole");
     const s=await getDoc(doc(db,"roles",u.uid));role=s.exists()?s.data().role:"student";
-    if($("loginRole").value!==role){await signOut(auth);openLogin();msg("इस account की सत्यापित भूमिका "+role.toUpperCase()+" है। सही Login विकल्प चुनें।");return}
+    // पहली बार Super Admin setup केवल चुने हुए Super Admin login से शुरू होगा।
+    if(role==="student" && $("loginRole").value==="superadmin"){
+      const boot=await call("bootstrapFirstAdmin");
+      role=boot.role;
+    }
+    // Login selector केवल UI है; असली role हमेशा server के roles document से आता है।
+    $("loginRole").value=role;
     openApp();$("identity").textContent=(u.displayName||u.email)+" • "+role.toUpperCase();
     $("roleBadge").textContent=role==="superadmin"?"✓ SUPER ADMIN":role==="admin"?"✓ ADMIN":"✓ STUDENT";tab="home";render();
   }catch(e){openLogin();msg("Role verification नहीं हो सकी: "+e.message)}
