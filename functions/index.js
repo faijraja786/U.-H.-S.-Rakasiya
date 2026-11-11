@@ -165,7 +165,7 @@ exports.submitQuiz = onCall(async req => {
   await db.runTransaction(async tx => {
     const current = await tx.get(attemptRef);
     if (!current.exists || current.data().status !== "started" || current.data().uid !== uid) throw new HttpsError("already-exists", "यह Quiz पहले submit हो चुका है।");
-    tx.update(attemptRef, { status: "submitted", score, total: answerSnap.size, answers, releaseAt, submittedAt: FieldValue.serverTimestamp() });
+    tx.update(attemptRef, { status: "submitted", answers, releaseAt, submittedAt: FieldValue.serverTimestamp() });
     tx.set(quizRef.collection("leaderboard").doc(uid), {
       uid, email: (user.email || "").toLowerCase(), displayName: user.displayName || "",
       score, total: answerSnap.size, releaseAt, submittedAt: FieldValue.serverTimestamp()
