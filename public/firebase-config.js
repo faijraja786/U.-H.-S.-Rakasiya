@@ -7,3 +7,6 @@ export const firebaseConfig = {
   appId: "1:551153142653:web:ebe9c769bc7e8c874f9a14",
   measurementId: "G-E498Q64F3Q"
 };
+
+// Set this to the Render service URL after creating the free backend.
+export const API_BASE = "https://YOUR-RENDER-SERVICE.onrender.com";
