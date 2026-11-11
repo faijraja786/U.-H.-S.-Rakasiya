@@ -1,18 +1,115 @@
-import{initializeApp}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";import{getAuth,onAuthStateChanged,createUserWithEmailAndPassword,signInWithEmailAndPassword,GoogleAuthProvider,signInWithPopup,sendPasswordResetEmail,signOut,browserLocalPersistence,setPersistence,updateProfile}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";import{getFirestore,doc,getDoc,setDoc,collection,addDoc,getDocs,query,where,serverTimestamp,deleteDoc}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";import{getStorage,ref,uploadBytes,getDownloadURL}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-storage.js";import{getFunctions,httpsCallable}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-functions.js";import{firebaseConfig}from"./firebase-config.js";
-const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),storage=getStorage(app),fn=getFunctions(app),$=x=>document.getElementById(x),call=(n,d)=>httpsCallable(fn,n)(d).then(x=>x.data);await setPersistence(auth,browserLocalPersistence);let user,role="student",tab="home",quiz=null,answers={},timer;const esc=s=>String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-function say(s){$("message").textContent=s} $("signup").onclick=async()=>{try{let c=await createUserWithEmailAndPassword(auth,$("email").value,$("password").value);if($("name").value)await updateProfile(c.user,{displayName:$("name").value})}catch(e){say(e.message)}};$("login").onclick=async()=>{try{await signInWithEmailAndPassword(auth,$("email").value,$("password").value)}catch(e){say(e.message)}};$("google").onclick=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){say(e.message)}};$("reset").onclick=async()=>{try{await sendPasswordResetEmail(auth,$("email").value);say("Reset link email पर भेज दिया।")}catch(e){say(e.message)}};$("logout").onclick=()=>signOut(auth);
-onAuthStateChanged(auth,async u=>{user=u;$("auth").hidden=!!u;$("app").hidden=!u;$("logout").hidden=!u;if(u){$("identity").textContent=u.displayName||u.email;let r=await getDoc(doc(db,"roles",u.uid));role=r.exists()?r.data().role:"student";if(!r.exists())await setDoc(doc(db,"roles",u.uid),{role:"student",email:u.email});render()}});
-const names={home:"Home",quiz:"Quiz & PYQ",notes:"Notes",planner:"Aim & Routine",tasks:"Daily Target",cards:"Flashcards",progress:"Progress",admin:"Admin"};
-function render(){ $("nav").innerHTML=Object.entries(names).filter(([k])=>k!=="admin"||role!=="student").map(([k,v])=>`<button data-tab="${k}" class="${k===tab?"active":""}">${v}</button>`).join("");$("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render()});({home,quiz:quizList,notes,planner,tasks,cards,progress,admin:adminPage}[tab]||home)()}
-function box(t,h){$("view").innerHTML=`<section class="panel"><h2>${t}</h2>${h}</section>`}
-async function home(){let q=await getDocs(query(collection(db,"quizzes"),where("status","==","published")));box("Welcome, "+esc(user.displayName||"Student"),`${role==="student"?`<div class="item"><b>पहला Admin setup?</b><p>केवल Firebase में configured first-admin email वाला account इस button से Superadmin बन सकता है।</p><button id="bootstrap">Initialize first admin</button></div>`:""}<div class="grid"><div class="item"><h2>${q.size}</h2>Available quizzes</div><div class="item"><h2>Daily</h2>Small steps, big progress</div></div><p>अपना aim लिखें, routine बनाएं और रोज़ अभ्यास करें।</p>`);if(role==="student" && $("bootstrap"))$("bootstrap").onclick=async()=>{try{await call("bootstrapFirstAdmin",{});alert("Superadmin setup complete. Page reload हो रहा है।");location.reload()}catch(e){alert(e.message)}}}
-async function quizList(){let s=await getDocs(query(collection(db,"quizzes"),where("status","==","published")));$("view").innerHTML=`<section class="panel"><h2>Quiz & PYQ</h2><p>Result और rank submission के 48 घंटे बाद खुलेंगे।</p>${s.docs.map(d=>`<div class="item"><b>${esc(d.data().title)}</b> • ${d.data().duration} min • ${d.data().questionCount} Q <button data-start="${d.id}">Start</button><button data-rank="${d.id}">Rank</button></div>`).join("")}</section>`;$("view").querySelectorAll("[data-start]").forEach(b=>b.onclick=()=>start(b.dataset.start));$("view").querySelectorAll("[data-rank]").forEach(b=>b.onclick=()=>rank(b.dataset.rank))}
-async function start(id){try{quiz={id,...await call("startQuiz",{id})};answers={};let end=Date.now()+quiz.duration*60000;function draw(){let left=Math.max(0,Math.ceil((end-Date.now())/1000));$("view").innerHTML=`<section class="panel"><h2>${esc(quiz.title)}</h2><h3 id="clock">${Math.floor(left/60)}:${String(left%60).padStart(2,"0")}</h3>${quiz.questions.map((q,i)=>`<div class="question"><b>${i+1}. ${esc(q.text)}</b>${q.options.map((o,j)=>`<label class="option"><input type="radio" name="q${i}" value="${j}" ${answers[q.id]===j?"checked":""}> ${esc(o)}</label>`).join("")}</div>`).join("")}<button id="send">Submit</button></section>`;$("view").querySelectorAll("input[type=radio]").forEach(x=>x.onchange=()=>answers[quiz.questions[+x.name.slice(1)].id]=+x.value);$("send").onclick=submit}draw();timer=setInterval(()=>{let l=Math.max(0,Math.ceil((end-Date.now())/1000));if($("clock"))$("clock").textContent=`${Math.floor(l/60)}:${String(l%60).padStart(2,"0")}`;if(!l)submit()},1000)}catch(e){alert(e.message)}}
-async function submit(){if(!quiz)return;clearInterval(timer);let q=quiz;quiz=null;try{let r=await call("submitQuiz",{id:q.id,attemptId:q.attemptId,answers});box("Quiz submitted",`<h3>आपका attempt सुरक्षित है।</h3><p>Rank और result 48 घंटे बाद खुलेंगे।</p><p>Unlock: ${new Date(r.releaseAt).toLocaleString()}</p>`)}catch(e){alert(e.message)}}
-async function rank(id){let r=await call("getLeaderboard",{id});box("Leaderboard",r.released?`<ol>${r.rows.map(x=>`<li>${esc(x.email)} — ${x.score}/${x.total}</li>`).join("")}</ol>`:`Rank अभी locked है। ${r.releaseAt?new Date(r.releaseAt).toLocaleString():"पहले quiz attempt submit होने दें।"}`)}
-async function notes(){let s=await getDocs(query(collection(db,"content"),where("published","==",true)));box("Notes & PYQ Library",s.docs.map(d=>d.data()).map(x=>`<div class="item"><b>${esc(x.title)}</b><p>${esc(x.subject)} • ${esc(x.type)}</p><p>${esc(x.description)}</p><a href="${esc(x.url)}" target="_blank">Open / Download file</a></div>`).join("")||"अभी कोई file नहीं है।")}
-async function planner(){let r=doc(db,"users",user.uid,"private","planner"),s=await getDoc(r),d=s.exists()?s.data():{};box("मेरा Aim & Study Routine",`<label>मेरा बड़ा Aim</label><textarea id="aim">${esc(d.aim)}</textarea><label>आज का Target</label><textarea id="target">${esc(d.target)}</textarea><label>Daily Routine</label><textarea id="routine">${esc(d.routine)}</textarea><button id="save">Save</button>`);$("save").onclick=async()=>{await setDoc(r,{aim:$("aim").value,target:$("target").value,routine:$("routine").value,updatedAt:serverTimestamp()});alert("Saved")}}
-async function tasks(){let r=collection(db,"users",user.uid,"tasks"),s=await getDocs(r);box("आज का Target",`<input id="task" placeholder="आज क्या पढ़ना है?"><button id="add">Add target</button>${s.docs.map(d=>`<div class="item"><label><input type="checkbox" data-id="${d.id}" ${d.data().done?"checked":""}> ${esc(d.data().text)}</label></div>`).join("")}`);$("add").onclick=async()=>{await addDoc(r,{text:$("task").value,done:false});tasks()};$("view").querySelectorAll("[data-id]").forEach(x=>x.onchange=()=>setDoc(doc(r,x.dataset.id),{done:x.checked},{merge:true}))}
-async function cards(){let r=collection(db,"users",user.uid,"flashcards"),s=await getDocs(r);box("Flashcards",`<input id="front" placeholder="Question"><textarea id="back" placeholder="Answer"></textarea><button id="add">Save card</button>${s.docs.map(d=>`<div class="item"><b>${esc(d.data().front)}</b><details><summary>Answer</summary>${esc(d.data().back)}</details></div>`).join("")}`);$("add").onclick=async()=>{await addDoc(r,{front:$("front").value,back:$("back").value});cards()}}
-async function progress(){let s=await getDocs(collection(db,"quizzes")),n=0;for(let d of s.docs){let a=await getDocs(query(collection(db,"quizzes",d.id,"attempts"),where("uid","==",user.uid)));n+=a.size}box("My Progress",`<h1>${n}</h1>Quiz attempts`)}
-async function adminPage(){if(role==="student")return;box("Admin Panel",`<div class="grid"><div class="item"><h3>Quiz Builder</h3><input id="title" placeholder="Quiz title"><input id="subject" placeholder="Subject"><input id="duration" type="number" value="30"><div id="qs"></div><button id="addq">+ Add Question</button><button id="publish">Publish quiz</button></div><div class="item"><h3>Notes / PYQ Upload</h3><input id="ct" placeholder="Title"><input id="cs" placeholder="Subject"><select id="type"><option value="note">Notes</option><option value="pyq">PYQ</option><option value="resource">Resource</option></select><textarea id="desc" placeholder="Description"></textarea><input id="file" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.png"><button id="upload">Upload file</button></div><div class="item"><h3>Admin controls</h3><input id="newadmin" placeholder="Admin email (must sign in once)"><button id="addadmin">Add admin (superadmin)</button><button id="pass">Change my password by email</button><p>First admin setup instructions README में हैं।</p></div></div>`);let count=0;function addq(){let i=count++;$("qs").insertAdjacentHTML("beforeend",`<div class="question" data-q="${i}"><b>Q${i+1}</b><textarea class="text" placeholder="Question"></textarea>${[0,1,2,3].map(j=>`<input class="opt" placeholder="Option ${j+1}">`).join("")}<select class="ans"><option value="0">Correct A</option><option value="1">Correct B</option><option value="2">Correct C</option><option value="3">Correct D</option></select></div>`)}addq();$("addq").onclick=addq;$("publish").onclick=async()=>{let questions=[...$("qs").querySelectorAll("[data-q]")].map(x=>({text:x.querySelector(".text").value,options:[...x.querySelectorAll(".opt")].map(y=>y.value),answer:+x.querySelector(".ans").value}));try{await call("saveQuiz",{title:$("title").value,subject:$("subject").value,duration:+$("duration").value,questions,publish:true});alert("Quiz published")}catch(e){alert(e.message)}};$("upload").onclick=async()=>{try{let f=$("file").files[0];if(!f)throw Error("Select file");let p=`learning/${user.uid}/${Date.now()}_${f.name}`,r=ref(storage,p);await uploadBytes(r,f);let url=await getDownloadURL(r);await addDoc(collection(db,"content"),{title:$("ct").value,subject:$("cs").value,type:$("type").value,description:$("desc").value,url,published:true});alert("Uploaded")}catch(e){alert(e.message)}};$("addadmin").onclick=async()=>{try{await call("addAdmin",{email:$("newadmin").value});alert("Admin added")}catch(e){alert(e.message)}};$("pass").onclick=async()=>{await sendPasswordResetEmail(auth,user.email);alert("Password reset email भेजा गया")}}
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, signOut, updateProfile, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc, getDocs, query, where, serverTimestamp, updateDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-functions.js";
+import { firebaseConfig } from "./firebase-config.js";
+
+const app = initializeApp(firebaseConfig), auth = getAuth(app), db = getFirestore(app), functions = getFunctions(app);
+const $ = id => document.getElementById(id), call = (n,d={}) => httpsCallable(functions,n)(d).then(r=>r.data);
+const esc = v => String(v ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+await setPersistence(auth,browserLocalPersistence);
+let user=null, role="student", tab="home", activeQuiz=null, answers={}, timer=null;
+
+function msg(t,ok=false){$("authMessage").textContent=t;$("authMessage").className=ok?"success":"error"}
+function alertMsg(t){window.alert(t)}
+function panel(title,body){$("view").innerHTML='<section class="panel"><h2>'+esc(title)+'</h2>'+body+'</section>'}
+function dateText(v){if(!v)return "—";const d=new Date(v);return Number.isNaN(d.getTime())?"—":d.toLocaleString("hi-IN")}
+function openApp(){ $("auth").hidden=true;$("app").hidden=false }
+function openLogin(){ $("auth").hidden=false;$("app").hidden=true }
+
+$("signup").onclick=async()=>{try{if($("loginRole").value!=="student")throw Error("नया account केवल Student बना सकता है। Admin account Super Admin बनाएगा।");const name=$("name").value.trim(),email=$("email").value.trim(),password=$("password").value;if(!name||!email||password.length<6)throw Error("नाम, ईमेल और कम-से-कम 6 अक्षर का password भरें।");const c=await createUserWithEmailAndPassword(auth,email,password);await updateProfile(c.user,{displayName:name})}catch(e){msg(e.message)}};
+$("login").onclick=async()=>{try{await signInWithEmailAndPassword(auth,$("email").value.trim(),$("password").value)}catch(e){msg(e.message)}};
+$("google").onclick=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){msg(e.message)}};
+$("reset").onclick=async()=>{try{const email=$("email").value.trim();if(!email)throw Error("पहले ईमेल लिखें।");await sendPasswordResetEmail(auth,email);msg("Password reset link ईमेल पर भेज दिया गया है।",true)}catch(e){msg(e.message)}};
+$("logout").onclick=()=>signOut(auth);
+
+onAuthStateChanged(auth,async u=>{
+  user=u;if(!u){openLogin();return}
+  try{
+    await call("ensureStudentRole");
+    const s=await getDoc(doc(db,"roles",u.uid));role=s.exists()?s.data().role:"student";
+    if($("loginRole").value!==role){await signOut(auth);openLogin();msg("इस account की सत्यापित भूमिका "+role.toUpperCase()+" है। सही Login विकल्प चुनें।");return}
+    openApp();$("identity").textContent=(u.displayName||u.email)+" • "+role.toUpperCase();
+    $("roleBadge").textContent=role==="superadmin"?"✓ SUPER ADMIN":role==="admin"?"✓ ADMIN":"✓ STUDENT";tab="home";render();
+  }catch(e){openLogin();msg("Role verification नहीं हो सकी: "+e.message)}
+});
+
+const studentTabs=[["home","Home"],["quiz","Available Quizzes"],["notes","Notes & PYQ"],["leaderboard","Leaderboard"],["results","My Results"],["tasks","Daily Targets"],["planner","Study Routine"],["cards","Flashcards"]];
+function render(){
+  const tabs=role==="superadmin"?studentTabs.concat([["admin","Admin Dashboard"],["super","Super Admin"]]):role==="admin"?studentTabs.concat([["admin","Admin Dashboard"]]):studentTabs;
+  $("nav").innerHTML=tabs.map(x=>'<button data-tab="'+x[0]+'" class="'+(tab===x[0]?"active":"")+'">'+x[1]+"</button>").join("");
+  $("nav").querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render()});
+  const pages={home:homePage,quiz:quizPage,notes:notesPage,leaderboard:leaderboardPage,results:resultsPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,admin:adminPage,super:superPage};
+  (pages[tab]||homePage)().catch(e=>panel("त्रुटि",'<p class="error">'+esc(e.message)+"</p>"));
+}
+async function homePage(){
+  const s=await getDocs(query(collection(db,"quizzes"),where("status","==","published")));
+  panel("स्वागत है, "+(user.displayName||"Student"),'<p>EduFuture — U.H.S. Rakasiya Smart Learning Portal</p><div class="grid"><div class="stat"><strong>'+s.size+'</strong><span>Available Quizzes</span></div><div class="stat"><strong>48 घंटे</strong><span>Result auto-release</span></div><div class="stat"><strong>'+role.toUpperCase()+'</strong><span>Verified role</span></div></div><p>Quiz हल करें, Notes पढ़ें और Daily Targets पूरे करें।');
+}
+async function quizPage(){
+  const s=await getDocs(query(collection(db,"quizzes"),where("status","==","published")));
+  panel("Available Quizzes",'<p class="hint">हर quiz का एक attempt मिलेगा। Result और rank submit करने के 48 घंटे बाद अपने-आप खुलेंगे।</p>'+(s.empty?"<p>अभी कोई quiz प्रकाशित नहीं है।</p>":s.docs.map(d=>'<article class="item"><h3>'+esc(d.data().title)+'</h3><p>'+esc(d.data().subject)+' • '+d.data().duration+' मिनट • '+d.data().questionCount+' प्रश्न</p><button data-start="'+d.id+'">Start Quiz</button></article>').join("")));
+  $("view").querySelectorAll("[data-start]").forEach(b=>b.onclick=()=>startQuiz(b.dataset.start));
+}
+async function startQuiz(id){
+  try{
+    const d=await call("startQuiz",{id});activeQuiz={id:id,...d};answers={};const deadline=Date.now()+d.duration*60000;
+    function draw(){
+      const left=Math.max(0,Math.ceil((deadline-Date.now())/1000));
+      $("view").innerHTML='<section class="panel"><h2>'+esc(activeQuiz.title)+'</h2><div class="timer" id="quizClock">'+Math.floor(left/60)+':'+String(left%60).padStart(2,"0")+'</div>'+
+      activeQuiz.questions.map((q,i)=>'<article class="question"><h3>'+(i+1)+'. '+esc(q.text)+'</h3>'+q.options.map((o,j)=>'<label class="option"><input type="radio" name="q'+i+'" value="'+j+'" '+(answers[q.id]===j?"checked":"")+'> '+esc(o)+'</label>').join("")+'</article>').join("")+'<button id="submitQuiz">Submit Quiz</button></section>';
+      $("view").querySelectorAll('input[type="radio"]').forEach(x=>x.onchange=()=>{const i=Number(x.name.slice(1));answers[activeQuiz.questions[i].id]=Number(x.value)});
+      $("submitQuiz").onclick=submitQuiz;
+    }
+    draw();clearInterval(timer);timer=setInterval(()=>{const n=Math.max(0,Math.ceil((deadline-Date.now())/1000));if($("quizClock"))$("quizClock").textContent=Math.floor(n/60)+":"+String(n%60).padStart(2,"0");if(!n)submitQuiz()},1000);
+  }catch(e){alertMsg(e.message)}
+}
+async function submitQuiz(){
+  if(!activeQuiz)return;clearInterval(timer);const q=activeQuiz;activeQuiz=null;
+  try{const r=await call("submitQuiz",{id:q.id,attemptId:q.attemptId,answers:answers});panel("Quiz Submitted",'<div class="success-box"><h3>आपका attempt सुरक्षित है।</h3><p>Result और rank 48 घंटे बाद अपने-आप खुलेंगे।</p><p>खुलने का समय: <b>'+dateText(r.releaseAt)+'</b></p></div>')}catch(e){alertMsg(e.message)}
+}
+async function leaderboardPage(){
+  const s=await getDocs(query(collection(db,"quizzes"),where("status","==","published")));
+  panel("Leaderboard",s.empty?"<p>अभी कोई quiz नहीं है।</p>":s.docs.map(d=>'<article class="item"><h3>'+esc(d.data().title)+'</h3><button data-rank="'+d.id+'">View Rank</button><div id="rank-'+d.id+'"></div></article>').join(""));
+  $("view").querySelectorAll("[data-rank]").forEach(b=>b.onclick=async()=>{const out=$("rank-"+b.dataset.rank);out.textContent="Loading…";try{const r=await call("getLeaderboard",{id:b.dataset.rank});out.innerHTML=r.released?"<ol>"+r.rows.map(x=>"<li>"+esc(x.name)+" — "+x.score+"/"+x.total+"</li>").join("")+"</ol>":"<p>Leaderboard locked है। "+(r.releaseAt?dateText(r.releaseAt):"अभी कोई submitted attempt नहीं है।")+"</p>"}catch(e){out.textContent=e.message}});
+}
+async function resultsPage(){
+  const r=await call("getMyResults");
+  panel("My Results",r.results.length?r.results.map(x=>'<article class="item"><h3>'+esc(x.title)+'</h3><p>'+(x.released?"Score: "+x.score+"/"+x.total:"Result locked — "+dateText(x.releaseAt))+"</p></article>").join(""):"<p>अभी कोई quiz attempt नहीं है।</p>");
+}
+async function notesPage(){
+  const s=await getDocs(query(collection(db,"content"),where("published","==",true)));
+  panel("Notes & PYQ",s.empty?"<p>अभी Notes/PYQ उपलब्ध नहीं हैं।</p>":s.docs.map(d=>{const x=d.data();return '<article class="item"><h3>'+esc(x.title)+'</h3><p>'+esc(x.subject)+' • '+esc(x.type)+'</p><p>'+esc(x.description)+'</p><a href="'+esc(x.url)+'" target="_blank" rel="noopener">Open / Download</a></article>'}).join(""));
+}
+async function plannerPage(){
+  const ref=doc(db,"users",user.uid,"private","planner"),s=await getDoc(ref),d=s.exists()?s.data():{};
+  panel("Study Routine",'<label>मेरा Aim</label><textarea id="aim">'+esc(d.aim)+'</textarea><label>Study Routine</label><textarea id="routine">'+esc(d.routine)+'</textarea><label>आज का मुख्य लक्ष्य</label><textarea id="mainTarget">'+esc(d.target)+'</textarea><button id="saveRoutine">Save Routine</button>');
+  $("saveRoutine").onclick=async()=>{await setDoc(ref,{aim:$("aim").value,routine:$("routine").value,target:$("mainTarget").value,updatedAt:serverTimestamp()});alertMsg("Study Routine save हो गई।")};
+}
+async function tasksPage(){
+  const ref=collection(db,"users",user.uid,"tasks"),s=await getDocs(ref);
+  panel("Daily Targets",'<div class="inline-form"><input id="newTask" placeholder="आज का target"><button id="addTask">Add</button></div>'+(s.empty?"<p>अभी कोई target नहीं है।</p>":s.docs.map(d=>'<label class="task-row"><input type="checkbox" data-task="'+d.id+'" '+(d.data().done?"checked":"")+'> <span class="'+(d.data().done?"done":"")+'">'+esc(d.data().text)+'</span></label>').join("")));
+  $("addTask").onclick=async()=>{const t=$("newTask").value.trim();if(!t)return alertMsg("पहले target लिखें।");await addDoc(ref,{text:t,done:false,createdAt:serverTimestamp()});tasksPage()};
+  $("view").querySelectorAll("[data-task]").forEach(x=>x.onchange=async()=>{await updateDoc(doc(ref,x.dataset.task),{done:x.checked});x.nextElementSibling.classList.toggle("done",x.checked)});
+}
+async function cardsPage(){
+  const ref=collection(db,"users",user.uid,"flashcards"),s=await getDocs(ref);
+  panel("Flashcards",'<label>Question</label><input id="front" placeholder="Question / Front"><label>Answer</label><textarea id="back" placeholder="Answer / Back"></textarea><button id="saveCard">Save Flashcard</button>'+(s.empty?"<p>अभी कोई flashcard नहीं है।</p>":s.docs.map(d=>'<article class="item"><b>'+esc(d.data().front)+'</b><details><summary>Answer देखें</summary><p>'+esc(d.data().back)+'</p></details></article>').join("")));
+  $("saveCard").onclick=async()=>{const f=$("front").value.trim(),b=$("back").value.trim();if(!f||!b)return alertMsg("Question और Answer दोनों भरें।");await addDoc(ref,{front:f,back:b,createdAt:serverTimestamp()});cardsPage()};
+}
+async function adminPage(){
+  if(role!=="admin"&&role!=="superadmin")return;
+  panel("Admin Dashboard",'<div class="grid"><div class="item"><h3>Create Quiz</h3><label>Title</label><input id="quizTitle"><label>Subject</label><input id="quizSubject"><label>Duration (minutes)</label><input id="quizDuration" type="number" value="30"><div id="questionEditor"></div><button id="addQuestion">+ Add Question</button><button id="publishQuiz">Publish Quiz</button></div><div class="item"><h3>Notes / PYQ</h3><label>Title</label><input id="contentTitle"><label>Subject</label><input id="contentSubject"><label>Type</label><select id="contentType"><option value="note">Notes</option><option value="pyq">PYQ</option><option value="resource">Resource</option></select><label>Description</label><textarea id="contentDescription"></textarea><label>Hosted file URL</label><input id="contentUrl" type="url" placeholder="https://..."><button id="saveContent">Publish Content</button><p class="hint">यहाँ पहले से hosted PDF/file का link दें। Firebase Storage upload billing/setup पर निर्भर है।</p></div><div class="item"><h3>Student Management</h3><button id="loadStudents">View Students</button><div id="studentList"></div></div></div>');
+  let n=0;function addQ(){const i=n++;$("questionEditor").insertAdjacentHTML("beforeend",'<article class="question" data-q="'+i+'"><h4>Question '+(i+1)+'</h4><textarea class="qtext" placeholder="Question"></textarea>'+[0,1,2,3].map(j=>'<input class="qopt" placeholder="Option '+(j+1)+'">').join("")+'<label>Correct option</label><select class="qans"><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select></article>')}
+  addQ();$("addQuestion").onclick=addQ;
+  $("publishQuiz").onclick=async()=>{try{const qs=[...$("questionEditor").querySelectorAll("[data-q]")].map(x=>({text:x.querySelector(".qtext").value.trim(),options:[...x.querySelectorAll(".qopt")].map(y=>y.value.trim()),answer:Number(x.querySelector(".qans").value)}));const r=await call("saveQuiz",{title:$("quizTitle").value.trim(),subject:$("quizSubject").value.trim(),duration:Number($("quizDuration").value),questions:qs,publish:true});alertMsg("Quiz publish हो गया। ID: "+r.id);tab="quiz";render()}catch(e){alertMsg(e.message)}};
+  $("saveContent").onclick=async()=>{try{await call("addContent",{title:$("contentTitle").value.trim(),subject:$("contentSubject").value.trim(),type:$("contentType").value,description:$("contentDescription").value,url:$("contentUrl").value.trim(),published:true});alertMsg("Content publish हो गया।");$("contentTitle").value="";$("contentUrl").value=""}catch(e){alertMsg(e.message)}};
+  $("loadStudents").onclick=async()=>{try{const r=await call("listStudents");$("studentList").innerHTML=r.students.length?r.students.map(x=>"<p>"+esc(x.displayName||x.email||x.uid)+"</p>").join(""):"<p>कोई student record नहीं मिला।</p>"}catch(e){$("studentList").textContent=e.message}};
+}
+async function superPage(){
+  if(role!=="superadmin")return;
+  panel("Super Admin Controls",'<div class="item"><h3>Create Admin</h3><p class="hint">Admin का account पहले से बना होना चाहिए।</p><input id="adminEmail" type="email" placeholder="Registered admin email"><button id="createAdmin">Create Admin</button></div><div class="item"><h3>Manage All Admins</h3><button id="refreshAdmins">Refresh List</button><div id="adminList"></div></div>');
+  async function load(){try{const r=await call("listAdmins");$("adminList").innerHTML=r.admins.map(a=>'<div class="admin-row"><span>'+esc(a.displayName||a.email||a.uid)+' — '+esc(a.role)+'</span>'+(a.role==="admin"?'<button class="danger" data-remove="'+a.uid+'">Remove Admin</button>':"")+"</div>").join("")||"<p>कोई Admin नहीं है।</p>";$("adminList").querySelectorAll("[data-remove]").forEach(b=>b.onclick=async()=>{if(!confirm("क्या इस Admin की भूमिका Student करनी है?"))return;try{await call("removeAdmin",{uid:b.dataset.remove});alertMsg("Admin role हटा दी गई।");load()}catch(e){alertMsg(e.message)}})}catch(e){$("adminList").textContent=e.message}}
+  $("createAdmin").onclick=async()=>{try{await call("addAdmin",{email:$("adminEmail").value.trim()});alertMsg("Admin बना दिया गया।");$("adminEmail").value="";load()}catch(e){alertMsg(e.message)}};
+  $("refreshAdmins").onclick=load;load();
+}
