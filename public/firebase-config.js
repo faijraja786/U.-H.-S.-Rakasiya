@@ -1,5 +1,5 @@
 export const firebaseConfig = {
-  apiKey: "AIzaSyDRMZV_3Auq34ZrMIw4MY4e5Y9JDhTlF3E", 
+  apiKey: "AIzaSyDRMZV_3Auq34ZrMIw4MY4e5Y9JDhTlF3E",
   authDomain: "edufuture-1c3dd.firebaseapp.com",
   projectId: "edufuture-1c3dd",
   storageBucket: "edufuture-1c3dd.firebasestorage.app",
@@ -8,5 +8,5 @@ export const firebaseConfig = {
   measurementId: "G-E498Q64F3Q"
 };
 
-// Set this to the Render service URL after creating the free backend.
-export const API_BASE = "https://YOUR-RENDER-SERVICE.onrender.com";
+// Render backend API
+export const API_BASE = "https://edufuture-api-zqon.onrender.com";
