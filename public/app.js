@@ -1,11 +1,23 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, signOut, updateProfile, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, collection, addDoc, getDocs, query, where, serverTimestamp, updateDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-functions.js";
-import { firebaseConfig } from "./firebase-config.js";
+import { firebaseConfig, API_BASE } from "./firebase-config.js";
 
-const app = initializeApp(firebaseConfig), auth = getAuth(app), db = getFirestore(app), functions = getFunctions(app);
-const $ = id => document.getElementById(id), call = (n,d={}) => httpsCallable(functions,n)(d).then(r=>r.data);
+const app = initializeApp(firebaseConfig), auth = getAuth(app), db = getFirestore(app);
+const $ = id => document.getElementById(id);
+const call = async (name, data = {}) => {
+  const current = auth.currentUser;
+  if (!current) throw new Error("कृपया पहले login करें।");
+  const token = await current.getIdToken();
+  const response = await fetch(API_BASE.replace(/\\/$/, "") + "/api/" + encodeURIComponent(name), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+    body: JSON.stringify({ data })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error?.message || "Server से संपर्क नहीं हो सका।");
+  return result.data;
+};
 const esc = v => String(v ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 await setPersistence(auth,browserLocalPersistence);
 let user=null, role="student", tab="home", activeQuiz=null, answers={}, timer=null, requestedLoginRole=null;
