@@ -25,16 +25,22 @@ $("logout").onclick=()=>signOut(auth);
 
 onAuthStateChanged(auth,async u=>{
   user=u;if(!u){openLogin();return}
+  const requestedRole=$("loginRole").value;
   try{
     await call("ensureStudentRole");
     const s=await getDoc(doc(db,"roles",u.uid));role=s.exists()?s.data().role:"student";
-    // पहली बार Super Admin setup केवल चुने हुए Super Admin login से शुरू होगा।
-    if(role==="student" && $("loginRole").value==="superadmin"){
+    // First Super Admin setup only works for the email configured on the server.
+    if(role==="student" && requestedRole==="superadmin"){
       const boot=await call("bootstrapFirstAdmin");
       role=boot.role;
     }
-    // Login selector केवल UI है; असली role हमेशा server के roles document से आता है।
-    $("loginRole").value=role;
+    // Login type is checked against the server-side role; it never grants privileges.
+    if(requestedRole!==role){
+      await signOut(u);
+      openLogin();
+      msg("इस account की role "+role.toUpperCase()+" है। कृपया सही Login Type चुनें।");
+      return;
+    }
     openApp();$("identity").textContent=(u.displayName||u.email)+" • "+role.toUpperCase();
     $("roleBadge").textContent=role==="superadmin"?"✓ SUPER ADMIN":role==="admin"?"✓ ADMIN":"✓ STUDENT";tab="home";render();
   }catch(e){await signOut(u).catch(()=>{});openLogin();msg("Role verification नहीं हो सकी: "+e.message)}
