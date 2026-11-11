@@ -202,9 +202,34 @@ exports.getMyResults = onCall(async req => {
     if (!snap.exists) continue;
     const d = snap.data();
     const released = !!d.releaseAt && now >= d.releaseAt.toMillis();
+    let review = [];
+    if (released) {
+      const [attemptSnap, questionSnap, answerSnap] = await Promise.all([
+        q.ref.collection("attempts").doc(uid).get(),
+        q.ref.collection("publicQuestions").orderBy("index").get(),
+        q.ref.collection("privateAnswers").get()
+      ]);
+      const chosen = attemptSnap.exists ? (attemptSnap.data().answers || {}) : {};
+      const correctById = new Map(answerSnap.docs.map(a => [a.id, a.data()]));
+      review = questionSnap.docs.map(questionDoc => {
+        const question = questionDoc.data();
+        const answer = correctById.get(questionDoc.id) || {};
+        const selectedAnswer = Number.isInteger(chosen[questionDoc.id]) ? chosen[questionDoc.id] : null;
+        const correctAnswer = Number.isInteger(answer.answer) ? answer.answer : null;
+        return {
+          questionId: questionDoc.id,
+          question: question.text || "",
+          options: question.options || [],
+          selectedAnswer,
+          correctAnswer,
+          isCorrect: selectedAnswer !== null && selectedAnswer === correctAnswer,
+          explanation: answer.explanation || ""
+        };
+      });
+    }
     results.push({
       quizId: q.id, title: q.data().title, released,
-      ...(released ? { score: d.score, total: d.total } : {}),
+      ...(released ? { score: d.score, total: d.total, review } : {}),
       releaseAt: d.releaseAt?.toDate().toISOString() || null
     });
   }
