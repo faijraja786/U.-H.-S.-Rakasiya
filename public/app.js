@@ -9,7 +9,7 @@ const call = async (name, data = {}) => {
   const current = auth.currentUser;
   if (!current) throw new Error("कृपया पहले login करें।");
   const token = await current.getIdToken();
-  const response = await fetch(API_BASE.replace(/\\/$/, "") + "/api/" + encodeURIComponent(name), {
+  const response = await fetch(API_BASE.replace(/\/+$/, "") + "/api/" + encodeURIComponent(name), {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
     body: JSON.stringify({ data })
