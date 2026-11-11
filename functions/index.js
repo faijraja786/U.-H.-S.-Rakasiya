@@ -76,6 +76,8 @@ exports.addAdmin = onCall(async req => {
   try { target = await auth.getUserByEmail(email); }
   catch { throw new HttpsError("not-found", "इस ईमेल से पहले एक बार account बनाकर login करना होगा।"); }
   if (target.uid === actor) throw new HttpsError("invalid-argument", "अपने account की role बदलने के लिए यह विकल्प उपयोग न करें।");
+  const currentRole = await roleOf(target.uid);
+  if (currentRole === "superadmin") throw new HttpsError("failed-precondition", "किसी दूसरे Super Admin को Admin में नहीं बदला जा सकता।");
   await setRole(target.uid, "admin", { addedBy: actor });
   return { ok: true };
 });
