@@ -171,7 +171,8 @@ exports.submitQuiz = onCall(async req => {
       score, total: answerSnap.size, releaseAt, submittedAt: FieldValue.serverTimestamp()
     });
   });
-  return { score, total: answerSnap.size, releaseAt: releaseAt.toDate().toISOString() };
+  // Score is deliberately withheld from the submit response until the 48-hour release window ends.
+  return { submitted: true, releaseAt: releaseAt.toDate().toISOString() };
 });
 
 exports.getLeaderboard = onCall(async req => {
@@ -200,9 +201,12 @@ exports.getMyResults = onCall(async req => {
     const snap = await q.ref.collection("leaderboard").doc(uid).get();
     if (!snap.exists) continue;
     const d = snap.data();
-    results.push({ quizId: q.id, title: q.data().title, score: d.score, total: d.total,
-      released: !!d.releaseAt && now >= d.releaseAt.toMillis(),
-      releaseAt: d.releaseAt?.toDate().toISOString() || null });
+    const released = !!d.releaseAt && now >= d.releaseAt.toMillis();
+    results.push({
+      quizId: q.id, title: q.data().title, released,
+      ...(released ? { score: d.score, total: d.total } : {}),
+      releaseAt: d.releaseAt?.toDate().toISOString() || null
+    });
   }
   return { results };
 });
