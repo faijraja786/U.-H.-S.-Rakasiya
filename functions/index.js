@@ -118,7 +118,11 @@ exports.saveQuiz = onCall(async req => {
     createdBy: req.auth.uid, createdAt: FieldValue.serverTimestamp()
   });
   questions.forEach((q, i) => {
-    batch.set(quizRef.collection("publicQuestions").doc(String(i)), { text: String(q.text).trim(), options: q.options.map(String), index: i });
+    batch.set(quizRef.collection("publicQuestions").doc(String(i)), {
+      text: String(q.text).trim(), options: q.options.map(String), index: i,
+      topic: String(q.topic || d.subject || "General").trim(),
+      difficulty: ["easy", "medium", "hard"].includes(q.difficulty) ? q.difficulty : "medium"
+    });
     batch.set(quizRef.collection("privateAnswers").doc(String(i)), { answer: q.answer, explanation: String(q.explanation || "") });
   });
   await batch.commit();
@@ -220,6 +224,8 @@ exports.getMyResults = onCall(async req => {
           questionId: questionDoc.id,
           question: question.text || "",
           options: question.options || [],
+          topic: question.topic || q.data().subject || "General",
+          difficulty: question.difficulty || "medium",
           selectedAnswer,
           correctAnswer,
           isCorrect: selectedAnswer !== null && selectedAnswer === correctAnswer,
