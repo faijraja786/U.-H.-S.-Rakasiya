@@ -85,12 +85,25 @@ async function submitQuiz(){
 }
 async function leaderboardPage(){
   const s=await getDocs(query(collection(db,"quizzes"),where("status","==","published")));
-  panel("Leaderboard",s.empty?"<p>अभी कोई quiz नहीं है।</p>":s.docs.map(d=>'<article class="item"><h3>'+esc(d.data().title)+'</h3><button data-rank="'+d.id+'">View Rank</button><div id="rank-'+d.id+'"></div></article>').join(""));
-  $("view").querySelectorAll("[data-rank]").forEach(b=>b.onclick=async()=>{const out=$("rank-"+b.dataset.rank);out.textContent="Loading…";try{const r=await call("getLeaderboard",{id:b.dataset.rank});out.innerHTML=r.released?"<ol>"+r.rows.map(x=>"<li>"+esc(x.name)+" — "+x.score+"/"+x.total+"</li>").join("")+"</ol>":"<p>Leaderboard locked है। "+(r.releaseAt?dateText(r.releaseAt):"अभी कोई submitted attempt नहीं है।")+"</p>"}catch(e){out.textContent=e.message}});
+  panel("U.H.S. RAKASIYA KE TUFANO",'<div class="leaderboard-banner"><span class="eyebrow">EDUFUTURE • HALL OF FAME</span><h2>U.H.S. Rakasiya Ke Tufano 🌪️</h2><p>मेहनत से पहचान, प्रदर्शन से सम्मान।</p></div>'+(s.empty?"<p>अभी कोई quiz नहीं है।</p>":s.docs.map(d=>'<article class="leaderboard-quiz"><div><h3>'+esc(d.data().title)+'</h3><p class="hint">48 घंटे बाद जारी होने वाली आधिकारिक रैंकिंग</p></div><button data-rank="'+d.id+'">रैंकिंग देखें</button><div class="leaderboard-output" id="rank-'+d.id+'"></div></article>').join("")));
+  $("view").querySelectorAll("[data-rank]").forEach(b=>b.onclick=async()=>{
+    const out=$("rank-"+b.dataset.rank);out.innerHTML='<p class="hint">रैंकिंग लोड हो रही है…</p>';
+    try{
+      const r=await call("getLeaderboard",{id:b.dataset.rank});
+      if(!r.released){out.innerHTML='<div class="locked-note">🔒 Ranking अभी बंद है। '+(r.releaseAt?'खुलने का समय: '+dateText(r.releaseAt):'अभी कोई attempt submit नहीं हुआ।')+'</div>';return}
+      if(!r.rows.length){out.innerHTML='<p>अभी कोई result उपलब्ध नहीं है।</p>';return}
+      const medals=["🥇","🥈","🥉"];
+      out.innerHTML='<div class="podium">'+r.rows.slice(0,3).map((x,i)=>'<div class="podium-card podium-'+(i+1)+'"><span class="medal">'+medals[i]+'</span><strong>#'+x.rank+'</strong><b>'+esc(x.name)+'</b><small>'+x.score+'/'+x.total+' अंक</small></div>').join("")+'</div><div class="rank-table">'+r.rows.map(x=>'<div class="rank-row '+(x.uid===user.uid?'my-rank':'')+'><b class="rank-number">#'+x.rank+'</b><span class="rank-name">'+esc(x.name)+(x.uid===user.uid?' <em>YOU</em>':'')+'</span><strong>'+x.score+'/'+x.total+'</strong><span class="rank-percent">'+Math.round(x.total?x.score/x.total*100:0)+'%</span></div>').join("")+'</div><p class="leaderboard-motto">“हम तूफान हैं — रुकना हमारी फितरत नहीं!”</p>';
+    }catch(e){out.textContent=e.message}
+  });
 }
 async function resultsPage(){
   const r=await call("getMyResults");
-  panel("My Results",r.results.length?r.results.map(x=>'<article class="item"><h3>'+esc(x.title)+'</h3><p>'+(x.released?"Score: "+x.score+"/"+x.total:"Result locked — "+dateText(x.releaseAt))+"</p></article>").join(""):"<p>अभी कोई quiz attempt नहीं है।</p>");
+  panel("My Results",r.results.length?r.results.map(x=>{
+    if(!x.released)return '<article class="item"><h3>'+esc(x.title)+'</h3><p class="locked-note">🔒 Result 48 घंटे बाद खुलेगा — '+dateText(x.releaseAt)+'</p></article>';
+    const correct=x.review.filter(q=>q.isCorrect).length, wrong=x.review.filter(q=>q.selectedAnswer!==null&&!q.isCorrect).length, skipped=x.review.filter(q=>q.selectedAnswer===null).length;
+    return '<article class="result-card"><div class="result-head"><div><span class="eyebrow">EDUFUTURE PERFORMANCE REPORT</span><h3>'+esc(x.title)+'</h3></div><div class="score-ring"><strong>'+x.score+'/'+x.total+'</strong><small>Score</small></div></div><div class="result-stats"><div><b>'+correct+'</b><span>सही</span></div><div><b>'+wrong+'</b><span>गलत</span></div><div><b>'+skipped+'</b><span>छूटे</span></div><div><b>'+Math.round(x.total?correct/x.total*100:0)+'%</b><span>Accuracy</span></div></div><details class="review-details"><summary>हर प्रश्न का Answer Analysis देखें</summary>'+x.review.map((q,i)=>'<section class="review-question '+(q.isCorrect?'review-correct':q.selectedAnswer===null?'review-skipped':'review-wrong')+'"><h4>Q'+(i+1)+'. '+esc(q.question)+'</h4><p><b>आपका उत्तर:</b> '+(q.selectedAnswer===null?'<span class="answer-skipped">उत्तर नहीं दिया</span>':esc(q.options[q.selectedAnswer]??"Invalid option"))+'</p><p><b>सही उत्तर:</b> '+(q.correctAnswer===null?'—':esc(q.options[q.correctAnswer]??"—"))+'</p><p><b>स्थिति:</b> '+(q.isCorrect?'<span class="answer-correct">सही ✓</span>':q.selectedAnswer===null?'<span class="answer-skipped">छूटा</span>':'<span class="answer-wrong">गलत ✕</span>')+'</p>'+(q.explanation?'<p><b>समझें:</b> '+esc(q.explanation)+'</p>':'')+'</section>').join("")+'</details></article>';
+  }).join(""):"<p>अभी कोई quiz attempt नहीं है।</p>");
 }
 async function notesPage(){
   const s=await getDocs(query(collection(db,"content"),where("published","==",true)));
