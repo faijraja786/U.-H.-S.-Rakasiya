@@ -199,17 +199,22 @@ async function run(name, req) {
       const closesAtMs = quiz.closesAt?.toMillis?.() || (quiz.publishedAt?.toMillis?.() || 0) + 48 * 60 * 60 * 1000;
       if (!closesAtMs || Date.now() >= closesAtMs) fail("failed-precondition", "यह Quiz उपलब्ध नहीं है। Attempt करने की 48 घंटे की अवधि समाप्त हो गई है।");
       const attemptRef = quizRef.collection("attempts").doc(uid);
+      let attemptData = null;
       await db.runTransaction(async tx => {
         const existing = await tx.get(attemptRef);
-        if (existing.exists) fail("already-exists", "आप यह Quiz पहले शुरू कर चुके हैं।");
-        tx.create(attemptRef, {
-          uid, status: "started", startedAt: FieldValue.serverTimestamp(),
-          expiresAt: Timestamp.fromMillis(Date.now() + quiz.duration * 60000),
-          closesAt: Timestamp.fromMillis(closesAtMs)
-        });
+        if (existing.exists) {
+          if (existing.data().status !== "started") fail("already-exists", "आप यह Quiz पहले submit कर चुके हैं। Result 72 घंटे बाद खुलेगा।");
+          attemptData = existing.data();
+          return;
+        }
+        const expiresAt = Timestamp.fromMillis(Date.now() + quiz.duration * 60000);
+        attemptData = { uid, status: "started", expiresAt, closesAt: Timestamp.fromMillis(closesAtMs) };
+        tx.create(attemptRef, { ...attemptData, startedAt: FieldValue.serverTimestamp() });
       });
       const questions = await quizRef.collection("publicQuestions").orderBy("index").get();
-      return { attemptId: uid, title: quiz.title, duration: quiz.duration, questions: questions.docs.map(x => ({ id: x.id, ...x.data() })) };
+      return { attemptId: uid, title: quiz.title, duration: quiz.duration,
+        expiresAt: attemptData.expiresAt.toDate().toISOString(),
+        questions: questions.docs.map(x => ({ id: x.id, ...x.data() })) };
     }
     case "submitQuiz": {
       const quizId = String(d.id || "");
