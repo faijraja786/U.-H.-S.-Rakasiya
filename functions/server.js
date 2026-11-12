@@ -357,6 +357,11 @@ async function run(name, req) {
       await ref.update({ reply, repliedBy: uid, repliedAt: FieldValue.serverTimestamp(), status: "answered" });
       return { ok: true };
     }
+    case "listTeacherStudents": {
+      await requireTeacher(req);
+      const snap = await db.collection("roles").where("role","==","student").limit(500).get();
+      return { students: snap.docs.map(x=>({uid:x.id,email:x.data().email||"",displayName:x.data().displayName||""})) };
+    }
     case "listSubjectiveSubmissions": {
       const role = await roleOf(uid);
       if (!["teacher","admin","superadmin"].includes(role)) fail("permission-denied", "केवल Teacher या Admin उपयोग कर सकता है।");
