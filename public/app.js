@@ -72,7 +72,7 @@ function render(){
 }
 async function homePage(){
   const [quizSnap,resultData]=await Promise.all([getDocs(query(collection(db,"quizzes"),where("status","==","published"))),call("getMyResults")]);
-  const released=resultData.results.filter(x=>x.released), tests=resultData.results.length;
+  const released=resultData.results.filter(x=>x.released).sort((a,b)=>new Date(b.releaseAt||0)-new Date(a.releaseAt||0)), tests=resultData.results.length;
   const marks=released.reduce((n,x)=>n+Number(x.score||0),0), total=released.reduce((n,x)=>n+Number(x.total||0),0);
   const accuracy=total?Math.round(marks/total*100):0;
   let rankText="—";
