@@ -17,13 +17,7 @@
     <div class="brand-mark">EF</div>
     <h1>EduFuture</h1>
     <p class="muted center">U.H.S. Rakasiya • Smart Learning Portal</p>
-    <label for="loginRole">Login Type</label>
-    <select id="loginRole">
-      <option value="student">Student Login</option>
-      <option value="teacher">Teacher Login</option>
-      <option value="admin">Admin Login</option>
-      <option value="superadmin">Super Admin Login</option>
-    </select>
+    <div class="login-mode-note"><b>एक ही Login • सही Dashboard अपने-आप</b><span>आपके account की सुरक्षित role के अनुसार Student, Teacher या Admin workspace खुलेगा।</span></div>
     <label for="name">Full Name (नए Student account के लिए)</label>
     <input id="name" type="text" autocomplete="name" placeholder="अपना पूरा नाम">
     <label for="email">Email Address</label>
@@ -38,21 +32,31 @@
     <p class="muted center small">Learn Today • Lead Tomorrow</p>
   </section>
 
-  <div id="app" hidden>
-    <header class="topbar">
-      <div>
-        <div class="brand-title">EduFuture <span class="brand-dot">●</span></div>
-        <div class="muted-light">U.H.S. Rakasiya</div>
-      </div>
-      <div class="account">
-        <span id="roleBadge" class="role-badge"></span>
-        <span id="identity"></span>
-        <button id="logout" class="danger">Logout</button>
-      </div>
-    </header>
-    <nav id="nav" class="nav"></nav>
-    <main id="view" class="content"></main>
-    <footer>© 2026 EduFuture • U.H.S. Rakasiya</footer>
+  <div id="app" class="app-shell" hidden>
+    <aside class="sidebar">
+      <a class="sidebar-brand" href="./"><span class="sidebar-logo">EF</span><span><b>EduFuture</b><small>U.H.S. Rakasiya</small></span></a>
+      <nav id="nav" class="nav"></nav>
+      <div class="sidebar-foot"><span class="online-dot"></span> Learning Portal <small>Secure Workspace</small></div>
+    </aside>
+    <section class="app-main">
+      <header class="topbar">
+        <div class="topbar-title"><span class="topbar-kicker">U.H.S. RAKASIYA</span><strong>Learning Workspace</strong></div>
+        <div class="account">
+          <span id="roleBadge" class="role-badge"></span>
+          <div class="profile-wrap">
+            <button id="profileToggle" class="profile-trigger" aria-expanded="false" aria-label="Profile menu">
+              <span id="avatarInitial" class="avatar-initial">U</span><span id="identity" class="profile-identity">User</span><span class="profile-chevron">⌄</span>
+            </button>
+            <div id="profileMenu" class="profile-menu" hidden>
+              <div class="profile-menu-head"><b id="profileName">User</b><small id="profileEmail"></small><span id="profileRole"></span></div>
+              <button id="logout" class="logout-action">↪ &nbsp; Logout</button>
+            </div>
+          </div>
+        </div>
+      </header>
+      <main id="view" class="content"></main>
+      <footer>© 2026 EduFuture • U.H.S. Rakasiya</footer>
+    </section>
   </div>
   <script type="module" src="./app.js"></script>
 </body>
