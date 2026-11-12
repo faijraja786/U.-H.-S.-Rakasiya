@@ -177,8 +177,17 @@ async function run(name, req) {
         });
       });
       await writer.close();
-      if (d.publish !== false) await quizRef.update({ status: "published", publishedAt: FieldValue.serverTimestamp() });
-      return { id: quizRef.id, questionCount: questions.length, totalMarks };
+      let publishedAt = null, closesAt = null, resultsAt = null;
+      if (d.publish !== false) {
+        const publishedMs = Date.now();
+        publishedAt = Timestamp.fromMillis(publishedMs);
+        closesAt = Timestamp.fromMillis(publishedMs + 48 * 60 * 60 * 1000);
+        resultsAt = Timestamp.fromMillis(publishedMs + 72 * 60 * 60 * 1000);
+        await quizRef.update({ status: "published", publishedAt, closesAt, resultsAt });
+      }
+      return { id: quizRef.id, questionCount: questions.length, totalMarks,
+        closesAt: closesAt?.toDate().toISOString() || null,
+        resultsAt: resultsAt?.toDate().toISOString() || null };
     }
     case "startQuiz": {
       const quizId = String(d.id || "");
@@ -187,13 +196,16 @@ async function run(name, req) {
       const quizSnap = await quizRef.get();
       if (!quizSnap.exists || quizSnap.data().status !== "published") fail("not-found", "Quiz उपलब्ध नहीं है।");
       const quiz = quizSnap.data();
+      const closesAtMs = quiz.closesAt?.toMillis?.() || (quiz.publishedAt?.toMillis?.() || 0) + 48 * 60 * 60 * 1000;
+      if (!closesAtMs || Date.now() >= closesAtMs) fail("failed-precondition", "यह Quiz उपलब्ध नहीं है। Attempt करने की 48 घंटे की अवधि समाप्त हो गई है।");
       const attemptRef = quizRef.collection("attempts").doc(uid);
       await db.runTransaction(async tx => {
         const existing = await tx.get(attemptRef);
         if (existing.exists) fail("already-exists", "आप यह Quiz पहले शुरू कर चुके हैं।");
         tx.create(attemptRef, {
           uid, status: "started", startedAt: FieldValue.serverTimestamp(),
-          expiresAt: Timestamp.fromMillis(Date.now() + quiz.duration * 60000)
+          expiresAt: Timestamp.fromMillis(Date.now() + quiz.duration * 60000),
+          closesAt: Timestamp.fromMillis(closesAtMs)
         });
       });
       const questions = await quizRef.collection("publicQuestions").orderBy("index").get();
@@ -224,8 +236,9 @@ async function run(name, req) {
         }
       });
       const userRecord = await auth.getUser(uid);
-      const releaseAt = Timestamp.fromMillis(Date.now() + 48 * 60 * 60 * 1000);
-      const totalMarks = Number((await quizRef.get()).data().totalMarks || questionSnap.docs.reduce((n,x)=>n+Number(x.data().marks||1),0));
+      const quizData = (await quizRef.get()).data();
+      const releaseAt = quizData.resultsAt || Timestamp.fromMillis((quizData.publishedAt?.toMillis?.() || Date.now()) + 72 * 60 * 60 * 1000);
+      const totalMarks = Number(quizData.totalMarks || questionSnap.docs.reduce((n,x)=>n+Number(x.data().marks||1),0));
       await db.runTransaction(async tx => {
         const current = await tx.get(attemptRef);
         if (!current.exists || current.data().status !== "started" || current.data().uid !== uid) fail("already-exists", "यह Quiz पहले submit हो चुका है।");
@@ -243,13 +256,13 @@ async function run(name, req) {
       const quiz = await quizRef.get();
       if (!quiz.exists) fail("not-found", "Quiz नहीं मिला।");
       const isAdmin = ["admin", "superadmin"].includes(await roleOf(uid));
-      const snap = await quizRef.collection("leaderboard").orderBy("score", "desc").get();
-      const now = Date.now();
-      const rows = snap.docs.map(x => x.data()).filter(x => isAdmin || (x.releaseAt && now >= x.releaseAt.toMillis()));
-      if (!isAdmin && rows.length === 0) {
-        const future = snap.docs.map(x => x.data().releaseAt?.toMillis()).filter(t => t && t > now);
-        return { released: false, releaseAt: future.length ? new Date(Math.min(...future)).toISOString() : null, rows: [] };
+      const quizData = quiz.data();
+      const releaseAt = quizData.resultsAt || Timestamp.fromMillis((quizData.publishedAt?.toMillis?.() || Date.now()) + 72 * 60 * 60 * 1000);
+      if (!isAdmin && Date.now() < releaseAt.toMillis()) {
+        return { released: false, releaseAt: releaseAt.toDate().toISOString(), rows: [] };
       }
+      const snap = await quizRef.collection("leaderboard").orderBy("score", "desc").get();
+      const rows = snap.docs.map(x => x.data());
       rows.sort((a, b) => b.score - a.score || (a.submittedAt?.toMillis() || 0) - (b.submittedAt?.toMillis() || 0));
       return { released: isAdmin || rows.length > 0, rows: rows.map((x, i) => ({ uid: x.uid, name: x.displayName || "Student", score: x.score, total: x.total, pendingReview: x.pendingReview || 0, rank: i + 1 })) };
     }
@@ -259,7 +272,10 @@ async function run(name, req) {
       for (const q of quizzes.docs) {
         const snap = await q.ref.collection("leaderboard").doc(uid).get();
         if (!snap.exists) continue;
-        const data = snap.data(), released = !!data.releaseAt && now >= data.releaseAt.toMillis();
+        const data = snap.data();
+        const quizData = q.data();
+        const resultRelease = quizData.resultsAt || Timestamp.fromMillis((quizData.publishedAt?.toMillis?.() || Date.now()) + 72 * 60 * 60 * 1000);
+        const released = now >= resultRelease.toMillis();
         let review = [];
         if (released) {
           const [attemptSnap, questionSnap, answerSnap] = await Promise.all([
@@ -290,7 +306,7 @@ async function run(name, req) {
         results.push({
           quizId: q.id, title: q.data().title, released,
           ...(released ? { score: data.score, total: data.total, pendingReview: data.pendingReview || 0, review } : {}),
-          releaseAt: data.releaseAt?.toDate().toISOString() || null
+          releaseAt: resultRelease.toDate().toISOString()
         });
       }
       return { results };
