@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
-const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
+const { getFirestore, FieldValue, Timestamp, FieldPath } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
 
 const rawServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
@@ -331,10 +331,13 @@ async function run(name, req) {
     case "addContent": {
       await requireAdmin(req);
       if (!String(d.title || "").trim() || !/^https?:\/\//i.test(String(d.url || ""))) fail("invalid-argument", "Title और valid https/http file link जरूरी है।");
-      const ref = await db.collection("content").add({
+      const contentId = String(d.id || "").trim();
+      if (d.storagePath && (!contentId || !String(d.storagePath).startsWith("learning/" + contentId + "/"))) fail("invalid-argument", "Storage path मान्य नहीं है।");
+      const ref = contentId ? db.collection("content").doc(contentId) : db.collection("content").doc();
+      await ref.set({
         title: String(d.title).trim(), subject: String(d.subject || "General"),
         type: String(d.type || "note"), description: String(d.description || ""),
-        url: String(d.url), published: d.published !== false,
+        url: String(d.url), storagePath: String(d.storagePath || ""), published: d.published !== false,
         createdBy: uid, createdAt: FieldValue.serverTimestamp()
       });
       return { id: ref.id };
@@ -418,30 +421,59 @@ async function run(name, req) {
         const assigned = await db.doc("teacherAssignments/" + uid).get();
         subjects = assigned.exists ? (assigned.data().subjects || []) : [];
       }
-      const quizzes = await db.collection("quizzes").limit(200).get(), items = [];
-      for (const quizDoc of quizzes.docs) {
+      const pageSize = Math.min(25, Math.max(5, Number(d.limit) || 20));
+      const quizDocs = [];
+      let quizCursor = null, hasMoreQuizzes = false;
+      if (d.quizId) {
+        const q = await db.doc("quizzes/" + String(d.quizId)).get();
+        if (q.exists) quizDocs.push(q);
+      } else {
+        let q = db.collection("quizzes").orderBy(FieldPath.documentId()).limit(pageSize + 1);
+        if (d.cursor) {
+          const cursorDoc = await db.doc("quizzes/" + String(d.cursor)).get();
+          if (cursorDoc.exists) q = q.startAfter(cursorDoc);
+        }
+        const snap = await q.get();
+        hasMoreQuizzes = snap.docs.length > pageSize;
+        quizDocs.push(...snap.docs.slice(0, pageSize));
+        if (quizDocs.length) quizCursor = quizDocs[quizDocs.length - 1].id;
+      }
+      const items = [];
+      for (const quizDoc of quizDocs) {
         const quiz = quizDoc.data();
-        if (role === "teacher" && !subjects.some(v => String(v).toLowerCase() === String(quiz.subject).toLowerCase())) continue;
-        const [attempts, questions, answers] = await Promise.all([
-          quizDoc.ref.collection("attempts").where("status","==","submitted").limit(100).get(),
+        if (role === "teacher" && !subjects.some(v => String(v).toLowerCase() === String(quiz.subject || "").toLowerCase())) continue;
+        const pageAttempts = Math.min(50, Math.max(5, Number(d.attemptLimit) || 25));
+        let attemptsQuery = quizDoc.ref.collection("attempts").where("status","==","submitted").orderBy(FieldPath.documentId()).limit(pageAttempts + 1);
+        if (d.quizId && d.attemptCursor) {
+          const cursorAttempt = await quizDoc.ref.collection("attempts").doc(String(d.attemptCursor)).get();
+          if (cursorAttempt.exists) attemptsQuery = attemptsQuery.startAfter(cursorAttempt);
+        }
+        const attemptsSnap = await attemptsQuery.get();
+        const hasMoreAttempts = attemptsSnap.docs.length > pageAttempts;
+        const attemptDocs = attemptsSnap.docs.slice(0, pageAttempts);
+        const [questions, answers] = await Promise.all([
           quizDoc.ref.collection("publicQuestions").orderBy("index").get(),
           quizDoc.ref.collection("privateAnswers").get()
         ]);
         const answerMap = new Map(answers.docs.map(x=>[x.id,x.data()]));
-        for (const attemptDoc of attempts.docs) {
+        for (const attemptDoc of attemptDocs) {
           const attempt = attemptDoc.data(), grades = attempt.grades || {};
-          const pending = questions.docs.filter(x=>{
+          const reviewed = questions.docs.filter(x=>{
             const a=answerMap.get(x.id)||{};
-            return (x.data().type==="subjective"||a.type==="subjective") && String((attempt.answers||{})[x.id]||"").trim() && !grades[x.id];
-          }).map(x=>({questionId:x.id,question:x.data().text,studentAnswer:String((attempt.answers||{})[x.id]||""),maxMarks:Number(x.data().marks||1),modelAnswer:(answerMap.get(x.id)||{}).modelAnswer||""}));
-          if (pending.length) {
+            return (x.data().type==="subjective"||a.type==="subjective") && String((attempt.answers||{})[x.id]||"").trim();
+          }).map(x=>{
+            const grade=grades[x.id]||null, a=answerMap.get(x.id)||{};
+            return {questionId:x.id,question:x.data().text,studentAnswer:String((attempt.answers||{})[x.id]||""),maxMarks:Number(x.data().marks||1),modelAnswer:a.modelAnswer||"",graded:Boolean(grade),awardedMarks:grade?Number(grade.marks||0):null,feedback:grade?.feedback||""};
+          });
+          if (reviewed.length) {
             let studentName="Student";
             try { const u=await auth.getUser(attempt.uid); studentName=u.displayName||u.email||studentName; } catch {}
-            items.push({quizId:quizDoc.id,quizTitle:quiz.title,subject:quiz.subject,uid:attempt.uid,studentName,questions:pending});
+            items.push({quizId:quizDoc.id,quizTitle:quiz.title,subject:quiz.subject,topic:quiz.topic||"",uid:attempt.uid,studentName,questions:reviewed});
           }
         }
+        if (d.quizId) return { submissions: items, hasMoreAttempts, attemptCursor: attemptDocs.length ? attemptDocs[attemptDocs.length-1].id : null, quizCursor: null, hasMoreQuizzes: false };
       }
-      return { submissions: items };
+      return { submissions: items, quizCursor, hasMoreQuizzes };
     }
     case "gradeSubjective": {
       const quizId = String(d.quizId || ""), attemptUid = String(d.uid || ""), questionId = String(d.questionId || "");
@@ -458,7 +490,11 @@ async function run(name, req) {
       const attemptData = attemptSnap.data();
       if (!String((attemptData.answers || {})[questionId] || "").trim()) fail("failed-precondition", "इस प्रश्न का कोई उत्तर जमा नहीं हुआ है।");
       const grades = attemptData.grades || {};
-      grades[questionId] = { marks, gradedBy: uid, gradedAt: new Date().toISOString() };
+      const previousGrade = grades[questionId] || null;
+      const feedback = String(d.feedback || "").trim().slice(0, 2000);
+      const history = Array.isArray(attemptData.gradeHistory) ? attemptData.gradeHistory : [];
+      if (previousGrade) history.push({ questionId, previousMarks: Number(previousGrade.marks || 0), newMarks: marks, changedBy: uid, changedAt: new Date().toISOString() });
+      grades[questionId] = { marks, feedback, gradedBy: uid, gradedAt: new Date().toISOString() };
       const allAnswers = await quizRef.collection("privateAnswers").get();
       let pendingReview = 0;
       allAnswers.forEach(x => {
@@ -467,9 +503,9 @@ async function run(name, req) {
       let subjectiveScore = 0;
       Object.values(grades).forEach(x => { subjectiveScore += Number(x.marks || 0); });
       const finalScore = Number(attemptData.objectiveScore || 0) + subjectiveScore;
-      await attemptRef.update({ grades, pendingReview, subjectiveScore, finalScore });
+      await attemptRef.update({ grades, gradeHistory: history.slice(-100), pendingReview, subjectiveScore, finalScore });
       await quizRef.collection("leaderboard").doc(attemptUid).update({ score: finalScore, subjectiveScore, pendingReview });
-      return { ok: true, pendingReview, score: finalScore, subjectiveScore };
+      return { ok: true, updated: Boolean(previousGrade), pendingReview, score: finalScore, subjectiveScore };
     }
     default:
       fail("not-found", "Unknown API action.");
