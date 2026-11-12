@@ -304,6 +304,17 @@ async function run(name, req) {
       });
       return { id: ref.id };
     }
+    case "setContentPublished": {
+      await requireAdmin(req);
+      const id = String(d.id || "");
+      if (!id) fail("invalid-argument", "Content ID missing.");
+      const published = d.published === true;
+      const ref = db.doc("content/" + id);
+      const snap = await ref.get();
+      if (!snap.exists) fail("not-found", "Content नहीं मिला।");
+      await ref.update({ published, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid });
+      return { ok: true, published };
+    }
     case "listStudents": {
       await requireAdmin(req);
       const snap = await db.collection("roles").where("role", "==", "student").limit(500).get();
