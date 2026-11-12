@@ -3,7 +3,7 @@ import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWith
 import { getFirestore, doc, getDoc, setDoc, collection, addDoc, getDocs, query, where, serverTimestamp, updateDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { firebaseConfig, API_BASE } from "./firebase-config.js";
 
-const app = initializeApp(firebaseConfig), auth = getAuth(app), db = getFirestore(app);
+const app = initializeApp(firebaseConfig), auth = getAuth(app), db = getFirestore(app);\nif ("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
 const $ = id => document.getElementById(id);
 const call = async (name, data = {}) => {
   const current = auth.currentUser;
