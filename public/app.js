@@ -1,10 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, signOut, updateProfile, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, collection, addDoc, getDocs, query, where, serverTimestamp, updateDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { getStorage, ref as storageRef, uploadBytes, getBlob, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-storage.js";
 import { firebaseConfig, API_BASE } from "./firebase-config.js";
 
-const app = initializeApp(firebaseConfig), auth = getAuth(app), db = getFirestore(app), storage = getStorage(app);
+const app = initializeApp(firebaseConfig), auth = getAuth(app), db = getFirestore(app);
 if ("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
 const $ = id => document.getElementById(id);
 const call = async (name, data = {}) => {
@@ -20,6 +19,24 @@ const call = async (name, data = {}) => {
   if (!response.ok) throw new Error(result.error?.message || "Server से संपर्क नहीं हो सका।");
   return result.data;
 };
+async function uploadContentFile(contentId, file) {
+  const current = auth.currentUser;
+  if (!current) throw new Error("कृपया पहले login करें।");
+  const token = await current.getIdToken();
+  const response = await fetch(API_BASE.replace(/\\/+$/, "") + "/api/content-upload/" + encodeURIComponent(contentId), {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer " + token,
+      "Content-Type": "application/octet-stream",
+      "X-File-Name": encodeURIComponent(file.name),
+      "X-File-Type": file.type || ""
+    },
+    body: file
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error?.message || "फ़ाइल upload नहीं हो सकी।");
+  return result.data;
+}
 const esc = v => String(v ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 await setPersistence(auth,browserLocalPersistence);
 let user=null, role="student", tab="home", activeQuiz=null, answers={}, timer=null;
@@ -198,7 +215,7 @@ async function contentLibraryPage(kind,title){
   const s=await getDocs(query(collection(db,"content"),where("published","==",true)));
   const docs=s.docs.filter(d=>(d.data().type||"note")===kind);
   panel(title,docs.length?docs.map(d=>{const x=d.data();return '<article class="item"><div class="question-meta"><span>'+esc(x.subject||"General")+'</span><span>'+(kind==="pyq"?"PREVIOUS YEAR QUESTION":"STUDY NOTES")+'</span></div><h3>'+esc(x.title)+'</h3><p>'+esc(x.description)+'</p>'+(x.storagePath?'<button class="secondary" data-secure-download="'+esc(d.id)+'">Open / Download</button>':'<a href="'+esc(x.url||"")+'" target="_blank" rel="noopener">Open / Download</a>')+'</article>'}).join(""):'<div class="empty-state"><b>अभी कोई '+(kind==="pyq"?"PYQ":"Study Notes")+' उपलब्ध नहीं है।</b><p>नई सामग्री publish होने पर यहाँ दिखाई देगी।</p></div>');
-  $("view").querySelectorAll("[data-secure-download]").forEach(b=>b.onclick=async()=>{try{b.disabled=true;const snap=await getDoc(doc(db,"content",b.dataset.secureDownload));if(!snap.exists()||snap.data().published!==true||!snap.data().storagePath)throw Error("यह फ़ाइल अभी उपलब्ध नहीं है।");const blob=await getBlob(storageRef(storage,snap.data().storagePath));const objectUrl=URL.createObjectURL(blob),a=document.createElement("a");a.href=objectUrl;a.download=(snap.data().title||"EduFuture-File").replace(/[^a-zA-Z0-9._-]/g,"_");document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(objectUrl)}catch(e){alertMsg("फ़ाइल नहीं खुल सकी: "+e.message)}finally{b.disabled=false}});
+  $("view").querySelectorAll("[data-secure-download]").forEach(b=>b.onclick=async()=>{try{b.disabled=true;const result=await call("getContentDownload",{id:b.dataset.secureDownload});window.location.assign(result.url)}catch(e){alertMsg("फ़ाइल नहीं खुल सकी: "+e.message)}finally{b.disabled=false}});
 }
 async function notesPage(){return contentLibraryPage("note","Study Notes")}
 async function pyqPage(){return contentLibraryPage("pyq","Previous Year Questions")}
@@ -323,8 +340,7 @@ async function contentUploadPage(kind){
   $(prefix+"Save").onclick=async()=>{
     const button=$(prefix+"Save"),file=$(prefix+"File").files[0];button.disabled=true;
     try{const name=$(prefix+"Title").value.trim(),subject=$(prefix+"Subject").value.trim();if(!name||!subject)throw Error("Title और Subject भरना जरूरी है।");let url=$(prefix+"Url").value.trim();const contentId=doc(collection(db,"content")).id;let storagePath="";
-      if(file){if(file.size>30*1024*1024)throw Error("फ़ाइल 30 MB से छोटी होनी चाहिए।");if(!/\.(pdf|doc|docx|ppt|pptx|png|jpe?g|webp)$/i.test(file.name))throw Error("यह file type supported नहीं है।");$(prefix+"Status").textContent="फ़ाइल upload हो रही है…";const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_"),targetPath="learning/"+contentId+"/"+safe,target=storageRef(storage,targetPath),uploaded=await uploadBytes(target,file,{contentType:file.type||"application/octet-stream"});storagePath=targetPath;url=""}
-      if(!url&&!storagePath)throw Error("फ़ाइल चुनें या Hosted URL डालें।");await call("addContent",{id:contentId,storagePath,title:name,subject,type:kind,description:$(prefix+"Description").value,url,published:true});alertMsg(title+" upload और publish हो गया।");$(prefix+"Title").value="";$(prefix+"Subject").value="";$(prefix+"Description").value="";$(prefix+"Url").value="";$(prefix+"File").value="";$(prefix+"Status").textContent="अगली फ़ाइल चुन सकते हैं।";refresh();
+      if(file){if(file.size>30*1024*1024)throw Error("फ़ाइल 30 MB से छोटी होनी चाहिए।");if(!/\.(pdf|doc|docx|ppt|pptx|png|jpe?g|webp)$/i.test(file.name))throw Error("यह file type supported नहीं है।");$(prefix+"Status").textContent="फ़ाइल upload हो रही है…";const uploaded=await uploadContentFile(contentId,file);storagePath=uploaded.storagePath;      if(!url&&!storagePath)throw Error("फ़ाइल चुनें या Hosted URL डालें।");await call("addContent",{id:contentId,storagePath,title:name,subject,type:kind,description:$(prefix+"Description").value,url,published:true});alertMsg(title+" upload और publish हो गया।");$(prefix+"Title").value="";$(prefix+"Subject").value="";$(prefix+"Description").value="";$(prefix+"Url").value="";$(prefix+"File").value="";$(prefix+"Status").textContent="अगली फ़ाइल चुन सकते हैं।";refresh();
     }catch(err){$(prefix+"Status").textContent=err.message;alertMsg(err.message)}finally{button.disabled=false}
   };refresh();
 }
