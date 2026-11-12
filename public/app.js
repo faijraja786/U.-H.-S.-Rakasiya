@@ -55,7 +55,7 @@ onAuthStateChanged(auth,async u=>{
     $("avatarInitial").textContent=(displayName.trim().charAt(0)||"U").toLocaleUpperCase("hi-IN");
     $("profileName").textContent=displayName;
     $("profileEmail").textContent=u.email||"";
-    $("profileRole").textContent=role==="superadmin"?"Super Admin":role==="admin"?"Admin":role==="teacher"?"Teacher":"Student";
+    $("profileRole").textContent=role==="superadmin"?"Teacher Super":role==="admin"?"Teacher":role==="teacher"?"Teacher":"Student";
     $("roleBadge").textContent="✓ "+$("profileRole").textContent.toUpperCase();
     $("profileMenu").hidden=true;
     openApp();
