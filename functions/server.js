@@ -249,7 +249,7 @@ async function run(name, req) {
         return { released: false, releaseAt: future.length ? new Date(Math.min(...future)).toISOString() : null, rows: [] };
       }
       rows.sort((a, b) => b.score - a.score || (a.submittedAt?.toMillis() || 0) - (b.submittedAt?.toMillis() || 0));
-      return { released: isAdmin || rows.length > 0, rows: rows.map((x, i) => ({ uid: x.uid, name: x.displayName || "Student", score: x.score, total: x.total, rank: i + 1 })) };
+      return { released: isAdmin || rows.length > 0, rows: rows.map((x, i) => ({ uid: x.uid, name: x.displayName || "Student", score: x.score, total: x.total, pendingReview: x.pendingReview || 0, rank: i + 1 })) };
     }
     case "getMyResults": {
       const quizzes = await db.collection("quizzes").get();
