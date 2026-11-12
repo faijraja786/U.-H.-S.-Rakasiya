@@ -250,7 +250,7 @@ async function createQuizPage(){
 async function quizBuilderPage(mode){
   if(role!=="admin"&&role!=="superadmin")return;
   const isObjective=mode==="objective",kind=isObjective?"Objective":"Subjective";
-  panel(kind+" Quiz Builder",'<button class="text-button" id="backQuizChoice">← Quiz Type चुनें</button><div class="builder-heading"><span class="eyebrow">EDUFUTURE • '+kind.toUpperCase()+' BUILDER</span><h2>'+kind+' Quiz बनाएं</h2><p>केवल Topic और Timer भरें। प्रश्न नीचे जोड़ें या CSV से import करें।</p></div><div class="builder-meta-grid"><div><label for="builderTopic">Topic / Chapter</label><input id="builderTopic" placeholder="जैसे: प्रकाश और परावर्तन"></div><div><label for="builderDuration">Time Limit (minutes)</label><input id="builderDuration" type="number" min="1" max="600" value="30"></div></div><section class="bulk-import-box"><b>Bulk Question Import</b><p class="hint">CSV से 2000 तक प्रश्न import करें। Objective columns: question, optionA, optionB, optionC, optionD, answer, marks.</p><input id="builderCsvFile" type="file" accept=".csv,text/csv"><textarea id="builderCsvText" rows="3" placeholder="या CSV content यहाँ paste करें…"></textarea><button id="builderImport" class="secondary">Import CSV</button> <span id="builderImportStatus" class="hint"></span></section><div class="question-toolbar"><div><b>Questions</b><span id="questionCount" class="question-count"></span></div><button id="builderAddQuestion">＋ Add Question</button></div><div id="builderQuestions"></div><div class="question-pagination"><button id="questionPrev" class="secondary">← Previous</button><span id="questionPageLabel">Page 1</span><button id="questionNext" class="secondary">Next →</button></div><div class="publish-row"><button id="publishQuiz" class="success-action">Publish '+kind+' Quiz</button></div>');
+  panel(kind+" Quiz Builder",'<button class="text-button" id="backQuizChoice">← Quiz Type चुनें</button><div class="builder-heading"><span class="eyebrow">EDUFUTURE • '+kind.toUpperCase()+' BUILDER</span><h2>'+kind+' Quiz बनाएं</h2><p>Subject, Topic और Timer भरें। प्रश्न नीचे जोड़ें या CSV से import करें।</p></div><div class="builder-meta-grid"><div><label for="builderSubject">Subject</label><input id="builderSubject" placeholder="जैसे: Science"></div><div><label for="builderTopic">Topic / Chapter</label><input id="builderTopic" placeholder="जैसे: प्रकाश और परावर्तन"></div><div><label for="builderDuration">Time Limit (minutes)</label><input id="builderDuration" type="number" min="1" max="600" value="30"></div></div><section class="bulk-import-box"><b>Bulk Question Import</b><p class="hint">CSV से 2000 तक प्रश्न import करें। Objective columns: question, optionA, optionB, optionC, optionD, answer, marks.</p><input id="builderCsvFile" type="file" accept=".csv,text/csv"><textarea id="builderCsvText" rows="3" placeholder="या CSV content यहाँ paste करें…"></textarea><button id="builderImport" class="secondary">Import CSV</button> <span id="builderImportStatus" class="hint"></span></section><div class="question-toolbar"><div><b>Questions</b><span id="questionCount" class="question-count"></span></div><button id="builderAddQuestion">＋ Add Question</button></div><div id="builderQuestions"></div><div class="question-pagination"><button id="questionPrev" class="secondary">← Previous</button><span id="questionPageLabel">Page 1</span><button id="questionNext" class="secondary">Next →</button></div><div class="publish-row"><button id="publishQuiz" class="success-action">Publish '+kind+' Quiz</button></div>');
   $("backQuizChoice").onclick=()=>{tab="createquiz";render()};
   let questions=[blank()],page=0;const perPage=10;
   function blank(){return {text:"",type:mode,options:["","","",""],answer:null,marks:1,modelAnswer:"",topic:"",difficulty:"medium",explanation:""}}
@@ -285,8 +285,8 @@ async function quizBuilderPage(mode){
   $("publishQuiz").onclick=async()=>{
     const button=$("publishQuiz");button.disabled=true;
     try{
-      const topic=$("builderTopic").value.trim(),duration=Number($("builderDuration").value);
-      if(!topic)throw Error("Topic लिखना जरूरी है।");if(!Number.isInteger(duration)||duration<1||duration>600)throw Error("Timer 1 से 600 मिनट के बीच रखें।");
+      const subject=$("builderSubject").value.trim(),topic=$("builderTopic").value.trim(),duration=Number($("builderDuration").value);
+      if(!subject)throw Error("Subject लिखना जरूरी है।");if(!topic)throw Error("Topic लिखना जरूरी है।");if(!Number.isInteger(duration)||duration<1||duration>600)throw Error("Timer 1 से 600 मिनट के बीच रखें।");
       if(!questions.length||questions.length>2000)throw Error("1 से 2000 प्रश्न रखें।");
       const cleaned=questions.map((q,i)=>{
         if(!q.text.trim())throw Error("Question "+(i+1)+" का प्रश्न खाली है।");
@@ -295,7 +295,7 @@ async function quizBuilderPage(mode){
         if(isObjective&&(!Number.isInteger(q.answer)||q.answer<0||q.answer>3))throw Error("Question "+(i+1)+" का सही उत्तर चुनें।");
         return {...q,type:mode,options:isObjective?q.options:[],answer:isObjective?q.answer:null,marks:Number(q.marks)};
       });
-      const r=await call("saveQuiz",{title:topic+" - "+kind+" Quiz",subject:topic,topic,duration,questions:cleaned,quizType:mode,publish:true});
+      const r=await call("saveQuiz",{title:topic+" - "+kind+" Quiz",subject,topic,duration,questions:cleaned,quizType:mode,publish:true});
       alertMsg(kind+" Quiz publish हो गया। "+r.questionCount+" प्रश्न • कुल "+r.totalMarks+" अंक");tab="admin";render();
     }catch(err){alertMsg(err.message)}finally{button.disabled=false}
   };
@@ -314,9 +314,9 @@ async function contentUploadPage(kind){
   }
   $(prefix+"Save").onclick=async()=>{
     const button=$(prefix+"Save"),file=$(prefix+"File").files[0];button.disabled=true;
-    try{const name=$(prefix+"Title").value.trim(),subject=$(prefix+"Subject").value.trim();if(!name||!subject)throw Error("Title और Subject भरना जरूरी है।");let url=$(prefix+"Url").value.trim();
-      if(file){if(file.size>30*1024*1024)throw Error("फ़ाइल 30 MB से छोटी होनी चाहिए।");if(!/\.(pdf|doc|docx|ppt|pptx|png|jpe?g|webp)$/i.test(file.name))throw Error("यह file type supported नहीं है।");$(prefix+"Status").textContent="फ़ाइल upload हो रही है…";const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_"),target=storageRef(storage,"learning/"+user.uid+"/"+kind+"/"+Date.now()+"-"+safe),uploaded=await uploadBytes(target,file,{contentType:file.type||"application/octet-stream"});url=await getDownloadURL(uploaded.ref)}
-      if(!url)throw Error("फ़ाइल चुनें या Hosted URL डालें।");await call("addContent",{title:name,subject,type:kind,description:$(prefix+"Description").value,url,published:true});alertMsg(title+" upload और publish हो गया।");$(prefix+"Title").value="";$(prefix+"Subject").value="";$(prefix+"Description").value="";$(prefix+"Url").value="";$(prefix+"File").value="";$(prefix+"Status").textContent="अगली फ़ाइल चुन सकते हैं।";refresh();
+    try{const name=$(prefix+"Title").value.trim(),subject=$(prefix+"Subject").value.trim();if(!name||!subject)throw Error("Title और Subject भरना जरूरी है।");let url=$(prefix+"Url").value.trim();const contentId=doc(collection(db,"content")).id;let storagePath="";
+      if(file){if(file.size>30*1024*1024)throw Error("फ़ाइल 30 MB से छोटी होनी चाहिए।");if(!/\.(pdf|doc|docx|ppt|pptx|png|jpe?g|webp)$/i.test(file.name))throw Error("यह file type supported नहीं है।");$(prefix+"Status").textContent="फ़ाइल upload हो रही है…";const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_"),targetPath="learning/"+contentId+"/"+safe,target=storageRef(storage,targetPath),uploaded=await uploadBytes(target,file,{contentType:file.type||"application/octet-stream"});storagePath=targetPath;url=await getDownloadURL(uploaded.ref)}
+      if(!url)throw Error("फ़ाइल चुनें या Hosted URL डालें।");await call("addContent",{id:contentId,storagePath,title:name,subject,type:kind,description:$(prefix+"Description").value,url,published:true});alertMsg(title+" upload और publish हो गया।");$(prefix+"Title").value="";$(prefix+"Subject").value="";$(prefix+"Description").value="";$(prefix+"Url").value="";$(prefix+"File").value="";$(prefix+"Status").textContent="अगली फ़ाइल चुन सकते हैं।";refresh();
     }catch(err){$(prefix+"Status").textContent=err.message;alertMsg(err.message)}finally{button.disabled=false}
   };refresh();
 }
