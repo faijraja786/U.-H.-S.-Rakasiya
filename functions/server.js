@@ -45,7 +45,7 @@ async function supabaseStorageRequest(endpoint, options = {}) {
     ...options,
     headers: {
       apikey: secret,
-      Authorization: "Bearer " + secret,
+      ...(!secret.startsWith("sb_secret_") ? { Authorization: "Bearer " + secret } : {}),
       ...(options.headers || {})
     }
   });
