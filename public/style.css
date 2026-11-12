@@ -266,3 +266,26 @@ input,textarea,select{color:#111827;background:#fff}
 .rank-actions{grid-column:1/-1}
 .rank-actions button{flex:1}
 @media(max-width:560px){.overview-actions,.rank-actions{flex-direction:column}.overview-actions button,.rank-actions button{width:100%}}
+
+/* EduFuture light theme and quiz builder */
+.auth-card{border:1px solid #dbeafe;box-shadow:0 18px 50px #0f4c8110}.auth-card h1{color:#075985}.brand-mark{background:linear-gradient(135deg,#38bdf8,#0284c7)}
+.password-field{display:flex;align-items:stretch;gap:8px}.password-field input{min-width:0;flex:1}.password-toggle{flex:0 0 72px;margin:6px 0 14px;padding:8px;background:#eff8ff;color:#0369a1;border:1px solid #bae6fd}
+.admin-action-grid,.quiz-choice-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin:20px 0}
+.admin-action-card,.quiz-choice-card{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-height:142px;padding:20px;text-align:left;background:#fff;color:#12324f;border:1px solid #dbeafe;border-radius:17px;box-shadow:0 8px 24px #0f4c810a}
+.admin-action-card:hover,.quiz-choice-card:hover{border-color:#7dd3fc;background:#f7fcff;filter:none;transform:translateY(-1px)}
+.admin-action-card>span,.choice-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:#e0f2fe;color:#0369a1;font-size:22px;font-weight:900}
+.admin-action-card b,.quiz-choice-card b{font-size:17px;color:#12324f}.admin-action-card small,.quiz-choice-card small{font-size:12px;line-height:1.5;color:#64748b;font-weight:500}
+.quiz-choice-intro,.builder-heading{padding:18px 0 8px}.quiz-choice-intro h2,.builder-heading h2{margin:7px 0;color:#0f3557}.quiz-choice-intro p,.builder-heading p{color:#64748b;line-height:1.6}
+.quiz-choice-card{min-height:205px}.subjective-choice .choice-icon{background:#dcfce7;color:#15803d}.choice-link{margin-top:auto;color:#0284c7;font-weight:800;font-size:13px}
+.builder-meta-grid{display:grid;grid-template-columns:2fr 1fr;gap:14px;padding:16px;background:#f5faff;border:1px solid #dbeafe;border-radius:15px}
+.bulk-import-box{margin:16px 0;padding:16px;border:1px dashed #93c5fd;border-radius:15px;background:#f8fcff}.bulk-import-box p{margin:6px 0}
+.question-toolbar,.question-pagination,.publish-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0}.question-count{margin-left:9px;color:#64748b;font-size:12px}
+.builder-question{background:#fff;border-color:#dbeafe}.builder-question .question-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.builder-question .question-head h3{margin:0 0 12px}
+.mcq-option-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:12px 0}.mcq-option{display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid #dbeafe;border-radius:12px;background:#f8fbff}
+.mcq-option input[data-opt]{margin:0;min-width:0;flex:1}.mcq-option .correct-radio{width:18px;height:18px;accent-color:#16a34a;flex:0 0 auto;margin:0}
+.option-letter{display:grid;place-items:center;width:26px;height:26px;flex:0 0 26px;border-radius:8px;background:#e0f2fe;color:#075985;font-weight:850}
+.builder-marks{max-width:160px}.builder-marks input{margin-bottom:0}.question-pagination{justify-content:center}.question-pagination button{min-width:120px}
+.publish-row{justify-content:flex-end;padding-top:10px;border-top:1px solid #e2e8f0}.publish-row button{min-width:210px}
+.leaderboard-banner{background:radial-gradient(circle at 90% 0%,#dbeafe 0,transparent 36%),linear-gradient(120deg,#eff8ff,#dff3ff 55%,#f0fdf4);color:#12324f;border:1px solid #dbeafe}
+.leaderboard-banner h2{color:#12324f}.leaderboard-banner p{color:#52657d}.leaderboard-banner .eyebrow{color:#0284c7}
+@media(max-width:620px){.builder-meta-grid{grid-template-columns:1fr}.mcq-option-grid{grid-template-columns:1fr}.question-toolbar{align-items:flex-start;flex-direction:column}.question-toolbar button,.publish-row button{width:100%}.question-pagination{flex-wrap:wrap}.question-pagination button{min-width:0;flex:1}.admin-action-grid,.quiz-choice-grid{grid-template-columns:1fr}}
