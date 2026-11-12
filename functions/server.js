@@ -327,6 +327,8 @@ async function run(name, req) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !subjects.length) fail("invalid-argument", "Teacher का registered email और कम-से-कम एक subject दें।");
       let target;
       try { target = await auth.getUserByEmail(email); } catch { fail("not-found", "पहले इस email से Teacher account बनवाएँ।"); }
+      const targetRole = await roleOf(target.uid);
+      if (["admin", "superadmin"].includes(targetRole)) fail("failed-precondition", "Admin या Super Admin को Teacher में नहीं बदला जा सकता।");
       await setRole(target.uid, "teacher", { assignedBy: uid });
       await db.doc("teacherAssignments/" + target.uid).set({ subjects, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid }, { merge: true });
       return { ok: true, uid: target.uid, subjects };
@@ -418,17 +420,20 @@ async function run(name, req) {
       const attemptRef = quizRef.collection("attempts").doc(attemptUid);
       const attemptSnap = await attemptRef.get();
       if (!attemptSnap.exists || attemptSnap.data().status !== "submitted") fail("not-found", "Submitted attempt नहीं मिला।");
-      const grades = attemptSnap.data().grades || {};
+      const attemptData = attemptSnap.data();
+      if (!String((attemptData.answers || {})[questionId] || "").trim()) fail("failed-precondition", "इस प्रश्न का कोई उत्तर जमा नहीं हुआ है।");
+      const grades = attemptData.grades || {};
       grades[questionId] = { marks, gradedBy: uid, gradedAt: new Date().toISOString() };
       const allAnswers = await quizRef.collection("privateAnswers").get();
-      let subjectiveCount = 0;
-      allAnswers.forEach(x => { if (x.data().type === "subjective") subjectiveCount++; });
-      const gradedCount = Object.keys(grades).length;
-      let finalScore = Number(attemptSnap.data().objectiveScore || 0);
+      let pendingReview = 0;
+      allAnswers.forEach(x => {
+        if (x.data().type === "subjective" && String((attemptData.answers || {})[x.id] || "").trim() && !grades[x.id]) pendingReview++;
+      });
+      let finalScore = Number(attemptData.objectiveScore || 0);
       Object.values(grades).forEach(x => { finalScore += Number(x.marks || 0); });
-      await attemptRef.update({ grades, pendingReview: Math.max(0, subjectiveCount - gradedCount), finalScore });
-      await quizRef.collection("leaderboard").doc(attemptUid).update({ score: finalScore, pendingReview: Math.max(0, subjectiveCount - gradedCount) });
-      return { ok: true, pendingReview: Math.max(0, subjectiveCount - gradedCount), score: finalScore };
+      await attemptRef.update({ grades, pendingReview, finalScore });
+      await quizRef.collection("leaderboard").doc(attemptUid).update({ score: finalScore, pendingReview });
+      return { ok: true, pendingReview, score: finalScore };
     }
     default:
       fail("not-found", "Unknown API action.");
