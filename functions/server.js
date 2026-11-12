@@ -61,7 +61,7 @@ async function requireTeacher(req, subject) {
   if (["admin", "superadmin"].includes(role)) return true;
   const snap = await db.doc("teacherAssignments/" + req.user.uid).get();
   const subjects = snap.exists ? (snap.data().subjects || []) : [];
-  if (subject && !subjects.includes(subject)) fail("permission-denied", "यह विषय आपको assign नहीं किया गया है।");
+  if (subject && !subjects.some(x => String(x).toLowerCase() === String(subject).toLowerCase())) fail("permission-denied", "यह विषय आपको assign नहीं किया गया है।");
   return true;
 }
 
@@ -343,7 +343,7 @@ async function run(name, req) {
           if (!subjects.length) return { doubts: [] };
         }
         snap = await db.collection("doubts").limit(300).get();
-        if (role === "teacher") snap = { docs: snap.docs.filter(x => subjects.includes(x.data().subject)) };
+        if (role === "teacher") snap = { docs: snap.docs.filter(x => subjects.some(v => String(v).toLowerCase() === String(x.data().subject).toLowerCase())) };
       } else fail("permission-denied", "Access denied.");
       return { doubts: snap.docs.map(x => ({ id:x.id, ...x.data(), createdAt:x.data().createdAt?.toDate().toISOString() || null })) };
     }
@@ -373,7 +373,7 @@ async function run(name, req) {
       const quizzes = await db.collection("quizzes").limit(200).get(), items = [];
       for (const quizDoc of quizzes.docs) {
         const quiz = quizDoc.data();
-        if (role === "teacher" && !subjects.includes(quiz.subject)) continue;
+        if (role === "teacher" && !subjects.some(v => String(v).toLowerCase() === String(quiz.subject).toLowerCase())) continue;
         const [attempts, questions, answers] = await Promise.all([
           quizDoc.ref.collection("attempts").where("status","==","submitted").limit(100).get(),
           quizDoc.ref.collection("publicQuestions").orderBy("index").get(),
