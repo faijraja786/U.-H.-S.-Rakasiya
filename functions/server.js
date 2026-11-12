@@ -156,7 +156,7 @@ async function run(name, req) {
         title, subject: String(d.subject || "General").trim(),
         topic: String(d.topic || "").trim(), className: String(d.className || "").trim(),
         duration, questionCount: questions.length, totalMarks,
-        status: d.publish === false ? "draft" : "published",
+        status: "draft",
         createdBy: uid, createdAt: FieldValue.serverTimestamp()
       });
       const writer = db.bulkWriter();
@@ -177,6 +177,7 @@ async function run(name, req) {
         });
       });
       await writer.close();
+      if (d.publish !== false) await quizRef.update({ status: "published", publishedAt: FieldValue.serverTimestamp() });
       return { id: quizRef.id, questionCount: questions.length, totalMarks };
     }
     case "startQuiz": {
@@ -211,6 +212,7 @@ async function run(name, req) {
       ]);
       const validIds = new Set(answerSnap.docs.map(x => x.id));
       if (Object.keys(answers).some(k => !validIds.has(k))) fail("invalid-argument", "Invalid answer key.");
+      if (Buffer.byteLength(JSON.stringify(answers), "utf8") > 700 * 1024) fail("invalid-argument", "उत्तर बहुत बड़े हैं। कृपया उत्तर छोटा करके फिर submit करें।");
       const questionById = new Map(questionSnap.docs.map(x => [x.id, x.data()]));
       let score = 0, pendingReview = 0;
       answerSnap.forEach(x => {
