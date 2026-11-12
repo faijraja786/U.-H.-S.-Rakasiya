@@ -22,7 +22,7 @@ const call = async (name, data = {}) => {
 };
 const esc = v => String(v ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 await setPersistence(auth,browserLocalPersistence);
-let user=null, role="student", tab="home", activeQuiz=null, answers={}, timer=null, requestedLoginRole=null;
+let user=null, role="student", tab="home", activeQuiz=null, answers={}, timer=null;
 
 function msg(t,ok=false){$("authMessage").textContent=t;$("authMessage").className=ok?"success":"error"}
 function alertMsg(t){window.alert(t)}
@@ -31,45 +31,60 @@ function dateText(v){if(!v)return "—";const d=new Date(v);return Number.isNaN(
 function openApp(){ $("auth").hidden=true;$("app").hidden=false }
 function openLogin(){ $("auth").hidden=false;$("app").hidden=true }
 
-$("signup").onclick=async()=>{try{requestedLoginRole="student";if($("loginRole").value!=="student")throw Error("नया account केवल Student बना सकता है। Admin account Super Admin बनाएगा।");const name=$("name").value.trim(),email=$("email").value.trim(),password=$("password").value;if(!name||!email||password.length<6)throw Error("नाम, ईमेल और कम-से-कम 6 अक्षर का password भरें।");const c=await createUserWithEmailAndPassword(auth,email,password);await updateProfile(c.user,{displayName:name})}catch(e){msg(e.message)}};
-$("login").onclick=async()=>{try{requestedLoginRole=$("loginRole").value;await signInWithEmailAndPassword(auth,$("email").value.trim(),$("password").value)}catch(e){msg(e.message)}};
-$("google").onclick=async()=>{try{requestedLoginRole=$("loginRole").value;await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){msg(e.message)}};
+$("signup").onclick=async()=>{try{const name=$("name").value.trim(),email=$("email").value.trim(),password=$("password").value;if(!name||!email||password.length<6)throw Error("नाम, ईमेल और कम-से-कम 6 अक्षर का password भरें।");const c=await createUserWithEmailAndPassword(auth,email,password);await updateProfile(c.user,{displayName:name})}catch(e){msg(e.message)}};
+$("login").onclick=async()=>{try{await signInWithEmailAndPassword(auth,$("email").value.trim(),$("password").value)}catch(e){msg(e.message)}};
+$("google").onclick=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){msg(e.message)}};
 $("reset").onclick=async()=>{try{const email=$("email").value.trim();if(!email)throw Error("पहले ईमेल लिखें।");await sendPasswordResetEmail(auth,email);msg("Password reset link ईमेल पर भेज दिया गया है।",true)}catch(e){msg(e.message)}};
+$("profileToggle").onclick=()=>{const menu=$("profileMenu"),open=menu.hidden;menu.hidden=!open;$("profileToggle").setAttribute("aria-expanded",String(open))};
+document.addEventListener("click",e=>{if(!e.target.closest(".profile-wrap")){$("profileMenu").hidden=true;$("profileToggle").setAttribute("aria-expanded","false")}});
 $("logout").onclick=()=>signOut(auth);
 
 onAuthStateChanged(auth,async u=>{
   user=u;if(!u){openLogin();return}
-  const requestedRole=requestedLoginRole;
   try{
     await call("ensureStudentRole");
-    const s=await getDoc(doc(db,"roles",u.uid));role=s.exists()?s.data().role:"student";
-    // First Super Admin setup only works for the email configured on the server.
-    if(role==="student" && requestedRole==="superadmin"){
-      const boot=await call("bootstrapFirstAdmin");
-      role=boot.role;
+    let s=await getDoc(doc(db,"roles",u.uid));
+    role=s.exists()?s.data().role:"student";
+    // The first configured bootstrap email is promoted automatically; all other students remain students.
+    if(role==="student"){
+      try{await call("bootstrapFirstAdmin");s=await getDoc(doc(db,"roles",u.uid));role=s.exists()?s.data().role:"student"}catch{}
     }
-    // Login type is checked against the server-side role; it never grants privileges.
-    if(requestedRole && requestedRole!==role){
-      requestedLoginRole=null;
-      await signOut(u);
-      openLogin();
-      msg("इस account की role "+role.toUpperCase()+" है। कृपया सही Login Type चुनें।");
-      return;
-    }
-    requestedLoginRole=null;
-    $("loginRole").value=role;
-    openApp();$("identity").textContent=(u.displayName||u.email)+" • "+role.toUpperCase();
-    $("roleBadge").textContent=role==="superadmin"?"✓ SUPER ADMIN":role==="admin"?"✓ ADMIN":"✓ STUDENT";tab="home";render();
+    if(!["student","teacher","admin","superadmin"].includes(role))role="student";
+    const displayName=u.displayName||u.email||"User";
+    $("identity").textContent=displayName;
+    $("avatarInitial").textContent=(displayName.trim().charAt(0)||"U").toLocaleUpperCase("hi-IN");
+    $("profileName").textContent=displayName;
+    $("profileEmail").textContent=u.email||"";
+    $("profileRole").textContent=role==="superadmin"?"Super Admin":role==="admin"?"Admin":role==="teacher"?"Teacher":"Student";
+    $("roleBadge").textContent="✓ "+$("profileRole").textContent.toUpperCase();
+    $("profileMenu").hidden=true;
+    openApp();
+    tab=role==="superadmin"?"overview":role==="admin"?"admin":role==="teacher"?"teacher":"home";
+    render();
   }catch(e){await signOut(u).catch(()=>{});openLogin();msg("Role verification नहीं हो सकी: "+e.message)}
 });
 
 const studentTabs=[["home","Dashboard"],["quiz","Available Quizzes"],["notes","Notes & PYQ"],["leaderboard","Leaderboard"],["results","My Results"],["doubts","Doubt Solving"],["tasks","Daily Targets"],["planner","Study Routine"],["cards","Flashcards"]];
 function render(){
-  const tabs=role==="superadmin"?studentTabs.concat([["admin","Admin Dashboard"],["super","Super Admin"]]):role==="admin"?studentTabs.concat([["admin","Admin Dashboard"]]):role==="teacher"?studentTabs.concat([["teacher","Teacher Dashboard"]]):studentTabs;
-  $("nav").innerHTML=tabs.map(x=>'<button data-tab="'+x[0]+'" class="'+(tab===x[0]?"active":"")+'">'+x[1]+"</button>").join("");
+  let tabs=studentTabs;
+  if(role==="teacher")tabs=[["teacher","Teacher Workspace"]];
+  if(role==="admin")tabs=[["admin","Admin Dashboard"]];
+  if(role==="superadmin")tabs=[["overview","Overview"],["admin","Admin Dashboard"],["super","Super Admin"]];
+  if(!tabs.some(x=>x[0]===tab))tab=tabs[0][0];
+  $("nav").innerHTML='<div class="nav-section-label">WORKSPACE</div>'+tabs.map(x=>'<button data-tab="'+x[0]+'" class="nav-link '+(tab===x[0]?"active":"")+'"><span class="nav-icon">'+({overview:"◈",home:"⌂",quiz:"▤",notes:"▧",leaderboard:"♛",results:"◷",doubts:"✉",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜"}[x[0]]||"•")+'</span><span>'+x[1]+"</span></button>").join("");
   $("nav").querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render()});
-  const pages={home:homePage,quiz:quizPage,notes:notesPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,admin:adminPage,super:superPage};
+  const pages={overview:superOverviewPage,home:homePage,quiz:quizPage,notes:notesPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,admin:adminPage,super:superPage};
   (pages[tab]||homePage)().catch(e=>panel("त्रुटि",'<p class="error">'+esc(e.message)+"</p>"));
+}
+async function superOverviewPage(){
+  const [quizSnap,admins,students]=await Promise.all([
+    getDocs(collection(db,"quizzes")),
+    call("listAdmins").catch(()=>({admins:[]})),
+    call("listStudents").catch(()=>({students:[]}))
+  ]);
+  panel("Super Admin Overview",'<div class="admin-welcome"><span class="eyebrow">EDUFUTURE • SYSTEM CONTROL</span><h2>पूरा संस्थान, एक ही Control Center</h2><p>Users, teachers, quizzes और learning operations पर नज़र रखें।</p><div class="overview-actions"><button data-super-admin>Admin Management</button><button data-super-tools>Open Admin Dashboard</button></div></div><div class="grid"><div class="stat"><strong>'+Number(students.students?.length||0)+'</strong><span>Registered Students</span></div><div class="stat"><strong>'+Number(admins.admins?.length||0)+'</strong><span>Admins & Super Admins</span></div><div class="stat"><strong>'+quizSnap.size+'</strong><span>Total Quizzes</span></div></div><div class="super-welcome-note"><b>Super Admin Access</b><p>यह workspace केवल संस्थान के मुख्य नियंत्रण के लिए है। Student dashboard अलग account role में ही उपलब्ध होगा।</p></div>');
+  $("view").querySelector("[data-super-admin]").onclick=()=>{tab="super";render()};
+  $("view").querySelector("[data-super-tools]").onclick=()=>{tab="admin";render()};
 }
 async function homePage(){
   const [quizSnap,resultData]=await Promise.all([getDocs(query(collection(db,"quizzes"),where("status","==","published"))),call("getMyResults")]);
