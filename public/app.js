@@ -67,23 +67,23 @@ onAuthStateChanged(auth,async u=>{
     $("roleBadge").textContent="✓ "+$("profileRole").textContent.toUpperCase();
     $("profileMenu").hidden=true;
     openApp();
-    tab=role==="superadmin"?"overview":role==="admin"?"admin":role==="teacher"?"teacher":"home";
+    tab="home";
     render();
   }catch(e){await signOut(u).catch(()=>{});openLogin();msg("Role verification नहीं हो सकी: "+e.message)}
 });
 
-const studentTabs=[["home","Dashboard"],["quiz","Available Quizzes"],["notes","Notes & PYQ"],["leaderboard","Leaderboard"],["results","My Results"],["doubts","Doubt Solving"],["tasks","Daily Targets"],["planner","Study Routine"],["cards","Flashcards"]];
+const studentTabs=[["home","Home"],["quiz","Available Quizzes"],["notes","Notes & PYQ"],["leaderboard","Leaderboard"],["results","My Results"],["doubts","Doubt Solving"],["tasks","Daily Targets"],["planner","Study Routine"],["cards","Flashcards"]];
 function closeWorkspaceMenu(){
   $("app").classList.remove("menu-open");
   $("menuToggle").setAttribute("aria-expanded","false");
 }
 function render(){
   let tabs=studentTabs;
-  if(role==="teacher")tabs=[["teacher","Teacher Workspace"]];
-  if(role==="admin")tabs=[["teacher","Teacher Workspace"],["admin","Admin Dashboard"]];
-  if(role==="superadmin")tabs=[["overview","Overview"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"],["super","Super Admin"]];
+  if(role==="teacher")tabs=[["home","Home"],["teacher","Teacher Workspace"]];
+  if(role==="admin")tabs=[["home","Home"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"]];
+  if(role==="superadmin")tabs=[["home","Home"],["overview","Overview"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"],["super","Super Admin"]];
   if(!tabs.some(x=>x[0]===tab))tab=tabs[0][0];
-  $("nav").innerHTML='<div class="nav-section-label">WORKSPACE</div>'+tabs.map(x=>'<button data-tab="'+x[0]+'" class="nav-link '+(tab===x[0]?"active":"")+'"><span class="nav-icon">'+({overview:"◈",home:"⌂",quiz:"▤",notes:"▧",leaderboard:"♛",results:"◷",doubts:"✉",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜"}[x[0]]||"•")+'</span><span>'+x[1]+"</span></button>").join("");
+  $("nav").innerHTML='<div class="nav-section-label">MENU</div>'+tabs.map(x=>'<button data-tab="'+x[0]+'" class="nav-link '+(tab===x[0]?"active":"")+'"><span class="nav-icon">'+({overview:"◈",home:"⌂",quiz:"▤",notes:"▧",leaderboard:"♛",results:"◷",doubts:"✉",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜"}[x[0]]||"•")+'</span><span>'+x[1]+"</span></button>").join("");
   $("nav").querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render();closeWorkspaceMenu()});
   const pages={overview:superOverviewPage,home:homePage,quiz:quizPage,notes:notesPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,admin:adminPage,super:superPage};
   (pages[tab]||homePage)().catch(e=>panel("त्रुटि",'<p class="error">'+esc(e.message)+"</p>"));
@@ -99,13 +99,14 @@ async function superOverviewPage(){
   $("view").querySelector("[data-super-tools]").onclick=()=>{tab="admin";render()};
 }
 async function homePage(){
-  const [quizSnap,resultData]=await Promise.all([getDocs(query(collection(db,"quizzes"),where("status","==","published"))),call("getMyResults")]);
-  const released=resultData.results.filter(x=>x.released).sort((a,b)=>new Date(b.releaseAt||0)-new Date(a.releaseAt||0)), tests=resultData.results.length;
+  const [quizSnap,resultData]=await Promise.all([getDocs(query(collection(db,"quizzes"),where("status","==","published"))),call("getMyResults").catch(()=>({results:[]}))]);
+  const myResults=resultData.results||[];
+  const released=myResults.filter(x=>x.released).sort((a,b)=>new Date(b.releaseAt||0)-new Date(a.releaseAt||0)), tests=myResults.length;
   const marks=released.reduce((n,x)=>n+Number(x.score||0),0), total=released.reduce((n,x)=>n+Number(x.total||0),0);
   const accuracy=total?Math.round(marks/total*100):0;
   let rankText="—";
   if(released.length){try{const board=await call("getLeaderboard",{id:released[0].quizId});const mine=board.rows.find(x=>x.uid===user.uid);if(mine)rankText="#"+mine.rank}catch{}}
-  panel("स्वागत है, "+(user.displayName||"Student"),'<div class="dashboard-hero"><span class="eyebrow">EDUFUTURE • YOUR LEARNING SPACE</span><h2>आज सीखें, कल आगे बढ़ें।</h2><p>अपनी तैयारी, टेस्ट और प्रगति एक ही जगह देखें।</p><button data-goquiz>नया टेस्ट शुरू करें</button></div><div class="grid"><div class="stat"><strong>'+quizSnap.size+'</strong><span>Available Quizzes</span></div><div class="stat"><strong>'+tests+'</strong><span>Tests Attempted</span></div><div class="stat"><strong>'+marks+'/'+total+'</strong><span>Marks Earned</span></div><div class="stat"><strong>'+accuracy+'%</strong><span>Accuracy</span></div><div class="stat"><strong>'+rankText+'</strong><span>Latest Quiz Rank</span></div></div><div class="dashboard-shortcuts"><button data-godoubts>Ask a Doubt</button><button data-goresults>Test History</button><button data-gonotes>Study Notes</button></div>');
+  panel("स्वागत है, "+(user.displayName||"EduFuture User"),'<div class="dashboard-hero"><span class="eyebrow">EDUFUTURE • YOUR WORKSPACE</span><h2>आज सीखें, कल आगे बढ़ें।</h2><p>अपनी पढ़ाई और स्कूल के सभी उपलब्ध काम एक ही जगह से शुरू करें।</p><button data-goquiz>नया टेस्ट शुरू करें</button></div><div class="grid"><div class="stat"><strong>'+quizSnap.size+'</strong><span>Available Quizzes</span></div><div class="stat"><strong>'+tests+'</strong><span>Tests Attempted</span></div><div class="stat"><strong>'+marks+'/'+total+'</strong><span>Marks Earned</span></div><div class="stat"><strong>'+accuracy+'%</strong><span>Accuracy</span></div><div class="stat"><strong>'+rankText+'</strong><span>Latest Quiz Rank</span></div></div><div class="dashboard-shortcuts"><button data-godoubts>Ask a Doubt</button><button data-goresults>Test History</button><button data-gonotes>Study Notes</button></div>');
   $("view").querySelector("[data-goquiz]").onclick=()=>{tab="quiz";render()};
   $("view").querySelector("[data-godoubts]").onclick=()=>{tab="doubts";render()};
   $("view").querySelector("[data-goresults]").onclick=()=>{tab="results";render()};
