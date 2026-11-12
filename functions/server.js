@@ -468,7 +468,7 @@ async function run(name, req) {
           if (reviewed.length) {
             let studentName="Student";
             try { const u=await auth.getUser(attempt.uid); studentName=u.displayName||u.email||studentName; } catch {}
-            items.push({quizId:quizDoc.id,quizTitle:quiz.title,subject:quiz.subject,topic:quiz.topic||"",uid:attempt.uid,studentName,questions:reviewed});
+            items.push({quizId:quizDoc.id,quizTitle:quiz.title,subject:quiz.subject,topic:quiz.topic||"",uid:attempt.uid,studentName,questions:reviewed,hasMoreAttempts,attemptCursor:attemptDocs.length?attemptDocs[attemptDocs.length-1].id:null});
           }
         }
         if (d.quizId) return { submissions: items, hasMoreAttempts, attemptCursor: attemptDocs.length ? attemptDocs[attemptDocs.length-1].id : null, quizCursor: null, hasMoreQuizzes: false };
