@@ -256,3 +256,13 @@ input,textarea,select{color:#111827;background:#fff}
  .sidebar .nav-link{color:#334155}
  .sidebar .nav-link.active{color:#082f49}
 }
+
+/* Super Admin control center and separated content workflows */
+.overview-actions,.rank-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.overview-actions button,.rank-actions button{min-width:145px}
+.admin-content-card{min-width:0;align-self:stretch}
+.admin-content-card .eyebrow{display:block;margin-bottom:7px;color:#0284c7}
+.admin-content-card h3{font-size:19px}
+.rank-actions{grid-column:1/-1}
+.rank-actions button{flex:1}
+@media(max-width:560px){.overview-actions,.rank-actions{flex-direction:column}.overview-actions button,.rank-actions button{width:100%}}
