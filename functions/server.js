@@ -253,13 +253,11 @@ async function run(name, req) {
     }
     case "getMyResults": {
       const quizzes = await db.collection("quizzes").get();
-      const now = Date.now();
-      const results = [];
+      const now = Date.now(), results = [];
       for (const q of quizzes.docs) {
         const snap = await q.ref.collection("leaderboard").doc(uid).get();
         if (!snap.exists) continue;
-        const data = snap.data();
-        const released = !!data.releaseAt && now >= data.releaseAt.toMillis();
+        const data = snap.data(), released = !!data.releaseAt && now >= data.releaseAt.toMillis();
         let review = [];
         if (released) {
           const [attemptSnap, questionSnap, answerSnap] = await Promise.all([
@@ -267,23 +265,29 @@ async function run(name, req) {
             q.ref.collection("publicQuestions").orderBy("index").get(),
             q.ref.collection("privateAnswers").get()
           ]);
-          const chosen = attemptSnap.exists ? (attemptSnap.data().answers || {}) : {};
+          const attempt = attemptSnap.exists ? attemptSnap.data() : {};
+          const chosen = attempt.answers || {}, grades = attempt.grades || {};
           const correctById = new Map(answerSnap.docs.map(x => [x.id, x.data()]));
           review = questionSnap.docs.map(questionDoc => {
             const question = questionDoc.data(), answer = correctById.get(questionDoc.id) || {};
-            const selectedAnswer = Number.isInteger(chosen[questionDoc.id]) ? chosen[questionDoc.id] : null;
+            const subjective = question.type === "subjective" || answer.type === "subjective";
+            const selectedAnswer = subjective ? String(chosen[questionDoc.id] || "") : (Number.isInteger(chosen[questionDoc.id]) ? chosen[questionDoc.id] : null);
             const correctAnswer = Number.isInteger(answer.answer) ? answer.answer : null;
+            const grade = grades[questionDoc.id] || null;
             return {
               questionId: questionDoc.id, question: question.text || "", options: question.options || [],
-              topic: question.topic || q.data().subject || "General", difficulty: question.difficulty || "medium",
-              selectedAnswer, correctAnswer, isCorrect: selectedAnswer !== null && selectedAnswer === correctAnswer,
+              type: subjective ? "subjective" : "objective", marks: Number(question.marks || answer.marks || 1),
+              awardedMarks: grade ? Number(grade.marks || 0) : (subjective ? null : (selectedAnswer !== null && selectedAnswer === correctAnswer ? Number(answer.marks || 1) : 0)),
+              modelAnswer: answer.modelAnswer || "", topic: question.topic || q.data().subject || "General",
+              difficulty: question.difficulty || "medium", selectedAnswer, correctAnswer,
+              isCorrect: subjective ? null : selectedAnswer !== null && selectedAnswer === correctAnswer,
               explanation: answer.explanation || ""
             };
           });
         }
         results.push({
           quizId: q.id, title: q.data().title, released,
-          ...(released ? { score: data.score, total: data.total, review } : {}),
+          ...(released ? { score: data.score, total: data.total, pendingReview: data.pendingReview || 0, review } : {}),
           releaseAt: data.releaseAt?.toDate().toISOString() || null
         });
       }
@@ -352,6 +356,39 @@ async function run(name, req) {
       if (!reply || reply.length > 5000) fail("invalid-argument", "Reply 1 से 5000 अक्षर का होना चाहिए।");
       await ref.update({ reply, repliedBy: uid, repliedAt: FieldValue.serverTimestamp(), status: "answered" });
       return { ok: true };
+    }
+    case "listSubjectiveSubmissions": {
+      const role = await roleOf(uid);
+      if (!["teacher","admin","superadmin"].includes(role)) fail("permission-denied", "केवल Teacher या Admin उपयोग कर सकता है।");
+      let subjects = [];
+      if (role === "teacher") {
+        const assigned = await db.doc("teacherAssignments/" + uid).get();
+        subjects = assigned.exists ? (assigned.data().subjects || []) : [];
+      }
+      const quizzes = await db.collection("quizzes").limit(200).get(), items = [];
+      for (const quizDoc of quizzes.docs) {
+        const quiz = quizDoc.data();
+        if (role === "teacher" && !subjects.includes(quiz.subject)) continue;
+        const [attempts, questions, answers] = await Promise.all([
+          quizDoc.ref.collection("attempts").where("status","==","submitted").limit(100).get(),
+          quizDoc.ref.collection("publicQuestions").orderBy("index").get(),
+          quizDoc.ref.collection("privateAnswers").get()
+        ]);
+        const answerMap = new Map(answers.docs.map(x=>[x.id,x.data()]));
+        for (const attemptDoc of attempts.docs) {
+          const attempt = attemptDoc.data(), grades = attempt.grades || {};
+          const pending = questions.docs.filter(x=>{
+            const a=answerMap.get(x.id)||{};
+            return (x.data().type==="subjective"||a.type==="subjective") && String((attempt.answers||{})[x.id]||"").trim() && !grades[x.id];
+          }).map(x=>({questionId:x.id,question:x.data().text,studentAnswer:String((attempt.answers||{})[x.id]||""),maxMarks:Number(x.data().marks||1),modelAnswer:(answerMap.get(x.id)||{}).modelAnswer||""}));
+          if (pending.length) {
+            let studentName="Student";
+            try { const u=await auth.getUser(attempt.uid); studentName=u.displayName||u.email||studentName; } catch {}
+            items.push({quizId:quizDoc.id,quizTitle:quiz.title,subject:quiz.subject,uid:attempt.uid,studentName,questions:pending});
+          }
+        }
+      }
+      return { submissions: items };
     }
     case "gradeSubjective": {
       const quizId = String(d.quizId || ""), attemptUid = String(d.uid || ""), questionId = String(d.questionId || "");
