@@ -26,7 +26,7 @@ app.use(cors({
   methods: ["POST", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "8mb" }));
 
 function fail(code, message) {
   const error = new Error(message);
@@ -55,6 +55,16 @@ async function requireAdmin(req, superOnly = false) {
   }
   return req.user.uid;
 }
+async function requireTeacher(req, subject) {
+  const role = await roleOf(req.user.uid);
+  if (!["teacher", "admin", "superadmin"].includes(role)) fail("permission-denied", "यह सुविधा केवल Teacher या Admin के लिए है।");
+  if (["admin", "superadmin"].includes(role)) return true;
+  const snap = await db.doc("teacherAssignments/" + req.user.uid).get();
+  const subjects = snap.exists ? (snap.data().subjects || []) : [];
+  if (subject && !subjects.includes(subject)) fail("permission-denied", "यह विषय आपको assign नहीं किया गया है।");
+  return true;
+}
+
 async function setRole(uid, role, extra = {}) {
   const user = await auth.getUser(uid);
   await db.doc("roles/" + uid).set({
@@ -127,31 +137,47 @@ async function run(name, req) {
       await requireAdmin(req);
       const questions = Array.isArray(d.questions) ? d.questions : [];
       const title = String(d.title || "").trim();
-      if (!title || !questions.length || questions.length > 249) fail("invalid-argument", "Quiz title और 1 से 249 questions जरूरी हैं।");
+      const duration = Number(d.duration);
+      if (!title || !questions.length || questions.length > 1000) fail("invalid-argument", "Quiz title और 1 से 1000 questions जरूरी हैं।");
+      if (!Number.isFinite(duration) || duration < 1 || duration > 600) fail("invalid-argument", "Timer 1 से 600 मिनट के बीच रखें।");
+      let totalMarks = 0;
       questions.forEach((q, i) => {
-        if (!String(q.text || "").trim() || !Array.isArray(q.options) || q.options.length < 2 || q.options.length > 6 ||
-          q.options.some(x => !String(x || "").trim()) || !Number.isInteger(q.answer) || q.answer < 0 || q.answer >= q.options.length) {
-          fail("invalid-argument", "Question " + (i + 1) + " में text, options या सही answer जाँचें।");
+        const type = q.type === "subjective" ? "subjective" : "objective";
+        const marks = Number(q.marks ?? 1);
+        if (!String(q.text || "").trim() || !Number.isFinite(marks) || marks <= 0 || marks > 100) fail("invalid-argument", "Question " + (i + 1) + " का text और marks जाँचें।");
+        if (type === "objective" && (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 6 ||
+          q.options.some(x => !String(x || "").trim()) || !Number.isInteger(q.answer) || q.answer < 0 || q.answer >= q.options.length)) {
+          fail("invalid-argument", "Objective Question " + (i + 1) + " में options या सही answer जाँचें।");
         }
+        totalMarks += marks;
       });
       const quizRef = db.collection("quizzes").doc();
-      const batch = db.batch();
-      batch.set(quizRef, {
-        title, subject: String(d.subject || "General"),
-        duration: Math.min(240, Math.max(1, Number(d.duration) || 30)),
-        questionCount: questions.length, status: d.publish === false ? "draft" : "published",
+      await quizRef.set({
+        title, subject: String(d.subject || "General").trim(),
+        topic: String(d.topic || "").trim(), className: String(d.className || "").trim(),
+        duration, questionCount: questions.length, totalMarks,
+        status: d.publish === false ? "draft" : "published",
         createdBy: uid, createdAt: FieldValue.serverTimestamp()
       });
+      const writer = db.bulkWriter();
       questions.forEach((q, i) => {
-        batch.set(quizRef.collection("publicQuestions").doc(String(i)), {
-          text: String(q.text).trim(), options: q.options.map(String), index: i,
-          topic: String(q.topic || d.subject || "General").trim(),
+        const type = q.type === "subjective" ? "subjective" : "objective";
+        writer.set(quizRef.collection("publicQuestions").doc(String(i)), {
+          text: String(q.text).trim(), type,
+          options: type === "objective" ? q.options.map(x => String(x).trim()) : [],
+          marks: Number(q.marks ?? 1), index: i,
+          topic: String(q.topic || d.topic || d.subject || "General").trim(),
           difficulty: ["easy", "medium", "hard"].includes(q.difficulty) ? q.difficulty : "medium"
         });
-        batch.set(quizRef.collection("privateAnswers").doc(String(i)), { answer: q.answer, explanation: String(q.explanation || "") });
+        writer.set(quizRef.collection("privateAnswers").doc(String(i)), {
+          answer: type === "objective" ? q.answer : null,
+          modelAnswer: type === "subjective" ? String(q.modelAnswer || "") : "",
+          explanation: String(q.explanation || ""),
+          marks: Number(q.marks ?? 1), type
+        });
       });
-      await batch.commit();
-      return { id: quizRef.id };
+      await writer.close();
+      return { id: quizRef.id, questionCount: questions.length, totalMarks };
     }
     case "startQuiz": {
       const quizId = String(d.id || "");
@@ -179,24 +205,36 @@ async function run(name, req) {
       if (!quizId || attemptId !== uid) fail("invalid-argument", "Quiz attempt मान्य नहीं है।");
       const quizRef = db.doc("quizzes/" + quizId);
       const attemptRef = quizRef.collection("attempts").doc(uid);
-      const answerSnap = await quizRef.collection("privateAnswers").get();
+      const [answerSnap, questionSnap] = await Promise.all([
+        quizRef.collection("privateAnswers").get(),
+        quizRef.collection("publicQuestions").orderBy("index").get()
+      ]);
       const validIds = new Set(answerSnap.docs.map(x => x.id));
-      if (Object.keys(answers).some(k => !validIds.has(k) || !Number.isInteger(answers[k]) || answers[k] < 0 || answers[k] > 5)) fail("invalid-argument", "Invalid answer key.");
-      let score = 0;
-      answerSnap.forEach(x => { if (Number.isInteger(answers[x.id]) && answers[x.id] === x.data().answer) score++; });
-      const user = await auth.getUser(uid);
+      if (Object.keys(answers).some(k => !validIds.has(k))) fail("invalid-argument", "Invalid answer key.");
+      const questionById = new Map(questionSnap.docs.map(x => [x.id, x.data()]));
+      let score = 0, pendingReview = 0;
+      answerSnap.forEach(x => {
+        const a = x.data(), q = questionById.get(x.id) || {};
+        if (a.type === "subjective" || q.type === "subjective") {
+          if (String(answers[x.id] || "").trim()) pendingReview++;
+        } else if (Number.isInteger(answers[x.id]) && answers[x.id] === a.answer) {
+          score += Number(a.marks || q.marks || 1);
+        }
+      });
+      const userRecord = await auth.getUser(uid);
       const releaseAt = Timestamp.fromMillis(Date.now() + 48 * 60 * 60 * 1000);
+      const totalMarks = Number((await quizRef.get()).data().totalMarks || questionSnap.docs.reduce((n,x)=>n+Number(x.data().marks||1),0));
       await db.runTransaction(async tx => {
         const current = await tx.get(attemptRef);
         if (!current.exists || current.data().status !== "started" || current.data().uid !== uid) fail("already-exists", "यह Quiz पहले submit हो चुका है।");
         if (Date.now() > current.data().expiresAt.toMillis() + 30000) fail("deadline-exceeded", "Quiz का समय समाप्त हो गया।");
-        tx.update(attemptRef, { status: "submitted", answers, releaseAt, submittedAt: FieldValue.serverTimestamp() });
+        tx.update(attemptRef, { status: "submitted", answers, objectiveScore: score, pendingReview, releaseAt, submittedAt: FieldValue.serverTimestamp() });
         tx.set(quizRef.collection("leaderboard").doc(uid), {
-          uid, email: (user.email || "").toLowerCase(), displayName: user.displayName || "",
-          score, total: answerSnap.size, releaseAt, submittedAt: FieldValue.serverTimestamp()
+          uid, email: (userRecord.email || "").toLowerCase(), displayName: userRecord.displayName || "",
+          score, total: totalMarks, pendingReview, releaseAt, submittedAt: FieldValue.serverTimestamp()
         });
       });
-      return { submitted: true, releaseAt: releaseAt.toDate().toISOString() };
+      return { submitted: true, objectiveScore: score, pendingReview, releaseAt: releaseAt.toDate().toISOString() };
     }
     case "getLeaderboard": {
       const quizRef = db.doc("quizzes/" + String(d.id || ""));
@@ -266,6 +304,78 @@ async function run(name, req) {
       await requireAdmin(req);
       const snap = await db.collection("roles").where("role", "==", "student").limit(500).get();
       return { students: snap.docs.map(x => ({ uid: x.id, email: x.data().email || "", displayName: x.data().displayName || "" })) };
+    }
+    case "assignTeacher": {
+      await requireAdmin(req);
+      const email = String(d.email || "").trim().toLowerCase();
+      const subjects = Array.isArray(d.subjects) ? [...new Set(d.subjects.map(x => String(x).trim()).filter(Boolean))].slice(0,30) : [];
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !subjects.length) fail("invalid-argument", "Teacher का registered email और कम-से-कम एक subject दें।");
+      let target;
+      try { target = await auth.getUserByEmail(email); } catch { fail("not-found", "पहले इस email से Teacher account बनवाएँ।"); }
+      await setRole(target.uid, "teacher", { assignedBy: uid });
+      await db.doc("teacherAssignments/" + target.uid).set({ subjects, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid }, { merge: true });
+      return { ok: true, uid: target.uid, subjects };
+    }
+    case "createDoubt": {
+      const question = String(d.question || "").trim();
+      const subject = String(d.subject || "").trim();
+      if (!question || question.length > 5000 || !subject) fail("invalid-argument", "Subject और doubt लिखें (अधिकतम 5000 अक्षर)।");
+      const ref = await db.collection("doubts").add({
+        uid, studentName: req.user.name || req.user.email || "Student",
+        subject, topic: String(d.topic || "").trim(), question,
+        status: "open", createdAt: FieldValue.serverTimestamp()
+      });
+      return { id: ref.id };
+    }
+    case "listDoubts": {
+      const role = await roleOf(uid);
+      let snap;
+      if (role === "student") snap = await db.collection("doubts").where("uid", "==", uid).limit(100).get();
+      else if (["teacher","admin","superadmin"].includes(role)) {
+        let subjects = [];
+        if (role === "teacher") {
+          const a = await db.doc("teacherAssignments/" + uid).get();
+          subjects = a.exists ? (a.data().subjects || []) : [];
+          if (!subjects.length) return { doubts: [] };
+        }
+        snap = await db.collection("doubts").limit(300).get();
+        if (role === "teacher") snap = { docs: snap.docs.filter(x => subjects.includes(x.data().subject)) };
+      } else fail("permission-denied", "Access denied.");
+      return { doubts: snap.docs.map(x => ({ id:x.id, ...x.data(), createdAt:x.data().createdAt?.toDate().toISOString() || null })) };
+    }
+    case "replyDoubt": {
+      const ref = db.doc("doubts/" + String(d.id || ""));
+      const snap = await ref.get();
+      if (!snap.exists) fail("not-found", "Doubt नहीं मिला।");
+      await requireTeacher(req, snap.data().subject);
+      const reply = String(d.reply || "").trim();
+      if (!reply || reply.length > 5000) fail("invalid-argument", "Reply 1 से 5000 अक्षर का होना चाहिए।");
+      await ref.update({ reply, repliedBy: uid, repliedAt: FieldValue.serverTimestamp(), status: "answered" });
+      return { ok: true };
+    }
+    case "gradeSubjective": {
+      const quizId = String(d.quizId || ""), attemptUid = String(d.uid || ""), questionId = String(d.questionId || "");
+      const marks = Number(d.marks);
+      const quizRef = db.doc("quizzes/" + quizId), quizSnap = await quizRef.get();
+      if (!quizSnap.exists) fail("not-found", "Quiz नहीं मिला।");
+      await requireTeacher(req, quizSnap.data().subject);
+      const maxSnap = await quizRef.collection("privateAnswers").doc(questionId).get();
+      if (!maxSnap.exists || maxSnap.data().type !== "subjective") fail("invalid-argument", "Subjective question नहीं मिला।");
+      if (!Number.isFinite(marks) || marks < 0 || marks > Number(maxSnap.data().marks || 1)) fail("invalid-argument", "दिए गए अंक प्रश्न के अधिकतम अंकों के भीतर रखें।");
+      const attemptRef = quizRef.collection("attempts").doc(attemptUid);
+      const attemptSnap = await attemptRef.get();
+      if (!attemptSnap.exists || attemptSnap.data().status !== "submitted") fail("not-found", "Submitted attempt नहीं मिला।");
+      const grades = attemptSnap.data().grades || {};
+      grades[questionId] = { marks, gradedBy: uid, gradedAt: new Date().toISOString() };
+      const allAnswers = await quizRef.collection("privateAnswers").get();
+      let subjectiveCount = 0;
+      allAnswers.forEach(x => { if (x.data().type === "subjective") subjectiveCount++; });
+      const gradedCount = Object.keys(grades).length;
+      let finalScore = Number(attemptSnap.data().objectiveScore || 0);
+      Object.values(grades).forEach(x => { finalScore += Number(x.marks || 0); });
+      await attemptRef.update({ grades, pendingReview: Math.max(0, subjectiveCount - gradedCount), finalScore });
+      await quizRef.collection("leaderboard").doc(attemptUid).update({ score: finalScore, pendingReview: Math.max(0, subjectiveCount - gradedCount) });
+      return { ok: true, pendingReview: Math.max(0, subjectiveCount - gradedCount), score: finalScore };
     }
     default:
       fail("not-found", "Unknown API action.");
