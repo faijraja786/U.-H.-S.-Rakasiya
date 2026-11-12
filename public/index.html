@@ -33,13 +33,18 @@
   </section>
 
   <div id="app" class="app-shell" hidden>
+    <button id="sidebarOverlay" class="sidebar-overlay" type="button" aria-label="Close menu"></button>
     <aside class="sidebar">
       <a class="sidebar-brand" href="./"><span class="sidebar-logo">EF</span><span><b>EduFuture</b><small>U.H.S. Rakasiya</small></span></a>
       <nav id="nav" class="nav"></nav>
-      <div class="sidebar-foot"><span class="online-dot"></span> Learning Portal <small>Secure Workspace</small></div>
+      <div class="sidebar-footer">
+        <div class="sidebar-foot"><span class="online-dot"></span> Learning Portal <small>Secure Workspace</small></div>
+        <button id="logout" class="sidebar-logout" type="button">↪ &nbsp; Logout</button>
+      </div>
     </aside>
     <section class="app-main">
       <header class="topbar">
+        <button id="menuToggle" class="menu-toggle" type="button" aria-label="Open navigation menu" aria-expanded="false"><span></span><span></span><span></span></button>
         <div class="topbar-title"><span class="topbar-kicker">U.H.S. RAKASIYA</span><strong>Learning Workspace</strong></div>
         <div class="account">
           <span id="roleBadge" class="role-badge"></span>
@@ -49,7 +54,6 @@
             </button>
             <div id="profileMenu" class="profile-menu" hidden>
               <div class="profile-menu-head"><b id="profileName">User</b><small id="profileEmail"></small><span id="profileRole"></span></div>
-              <button id="logout" class="logout-action">↪ &nbsp; Logout</button>
             </div>
           </div>
         </div>
