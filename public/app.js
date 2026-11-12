@@ -104,8 +104,13 @@ async function startQuiz(id){
   }catch(e){alertMsg(e.message)}
 }
 async function submitQuiz(){
-  if(!activeQuiz)return;clearInterval(timer);const q=activeQuiz;activeQuiz=null;
-  try{const r=await call("submitQuiz",{id:q.id,attemptId:q.attemptId,answers:answers});panel("Quiz Submitted",'<div class="success-box"><h3>आपका attempt सुरक्षित है।</h3><p>Result और rank 48 घंटे बाद अपने-आप खुलेंगे।</p><p>खुलने का समय: <b>'+dateText(r.releaseAt)+'</b></p></div>')}catch(e){alertMsg(e.message)}
+  if(!activeQuiz||activeQuiz.submitting)return;
+  clearInterval(timer);const q=activeQuiz;q.submitting=true;
+  try{
+    const r=await call("submitQuiz",{id:q.id,attemptId:q.attemptId,answers:answers});
+    activeQuiz=null;
+    panel("Quiz Submitted",'<div class="success-box"><h3>आपका attempt सुरक्षित है।</h3><p>Result और rank 48 घंटे बाद अपने-आप खुलेंगे।</p><p>खुलने का समय: <b>'+dateText(r.releaseAt)+'</b></p></div>');
+  }catch(e){q.submitting=false;alertMsg(e.message)}
 }
 async function leaderboardPage(){
   const s=await getDocs(query(collection(db,"quizzes"),where("status","==","published")));
