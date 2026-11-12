@@ -156,6 +156,7 @@ async function run(name, req) {
         title, subject: String(d.subject || "General").trim(),
         topic: String(d.topic || "").trim(), className: String(d.className || "").trim(),
         duration, questionCount: questions.length, totalMarks,
+        quizType: ["objective","subjective","mixed"].includes(d.quizType) ? d.quizType : (questions.every(q=>q.type==="subjective")?"subjective":questions.every(q=>q.type!=="subjective")?"objective":"mixed"),
         status: "draft",
         createdBy: uid, createdAt: FieldValue.serverTimestamp()
       });
@@ -231,13 +232,15 @@ async function run(name, req) {
       if (Object.keys(answers).some(k => !validIds.has(k))) fail("invalid-argument", "Invalid answer key.");
       if (Buffer.byteLength(JSON.stringify(answers), "utf8") > 700 * 1024) fail("invalid-argument", "उत्तर बहुत बड़े हैं। कृपया उत्तर छोटा करके फिर submit करें।");
       const questionById = new Map(questionSnap.docs.map(x => [x.id, x.data()]));
-      let score = 0, pendingReview = 0;
+      let objectiveScore = 0, subjectiveScore = 0, objectiveTotal = 0, subjectiveTotal = 0, pendingReview = 0;
       answerSnap.forEach(x => {
-        const a = x.data(), q = questionById.get(x.id) || {};
+        const a = x.data(), q = questionById.get(x.id) || {}, marks = Number(a.marks || q.marks || 1);
         if (a.type === "subjective" || q.type === "subjective") {
+          subjectiveTotal += marks;
           if (String(answers[x.id] || "").trim()) pendingReview++;
-        } else if (Number.isInteger(answers[x.id]) && answers[x.id] === a.answer) {
-          score += Number(a.marks || q.marks || 1);
+        } else {
+          objectiveTotal += marks;
+          if (Number.isInteger(answers[x.id]) && answers[x.id] === a.answer) objectiveScore += marks;
         }
       });
       const userRecord = await auth.getUser(uid);
@@ -248,28 +251,37 @@ async function run(name, req) {
         const current = await tx.get(attemptRef);
         if (!current.exists || current.data().status !== "started" || current.data().uid !== uid) fail("already-exists", "यह Quiz पहले submit हो चुका है।");
         if (Date.now() > current.data().expiresAt.toMillis() + 30000) fail("deadline-exceeded", "Quiz का समय समाप्त हो गया।");
-        tx.update(attemptRef, { status: "submitted", answers, objectiveScore: score, pendingReview, releaseAt, submittedAt: FieldValue.serverTimestamp() });
+        tx.update(attemptRef, { status: "submitted", answers, objectiveScore, subjectiveScore: 0, pendingReview, releaseAt, submittedAt: FieldValue.serverTimestamp() });
         tx.set(quizRef.collection("leaderboard").doc(uid), {
           uid, email: (userRecord.email || "").toLowerCase(), displayName: userRecord.displayName || "",
-          score, total: totalMarks, pendingReview, releaseAt, submittedAt: FieldValue.serverTimestamp()
+          score: objectiveScore, objectiveScore, subjectiveScore: 0, objectiveTotal, subjectiveTotal,
+          total: totalMarks, pendingReview, releaseAt, submittedAt: FieldValue.serverTimestamp()
         });
       });
-      return { submitted: true, objectiveScore: score, pendingReview, releaseAt: releaseAt.toDate().toISOString() };
+      return { submitted: true, objectiveScore, pendingReview, releaseAt: releaseAt.toDate().toISOString() };
     }
     case "getLeaderboard": {
       const quizRef = db.doc("quizzes/" + String(d.id || ""));
       const quiz = await quizRef.get();
       if (!quiz.exists) fail("not-found", "Quiz नहीं मिला।");
       const isAdmin = ["admin", "superadmin"].includes(await roleOf(uid));
+      const rankingType = d.rankingType === "subjective" ? "subjective" : "objective";
       const quizData = quiz.data();
       const releaseAt = quizData.resultsAt || Timestamp.fromMillis((quizData.publishedAt?.toMillis?.() || Date.now()) + 72 * 60 * 60 * 1000);
+      const snap = await quizRef.collection("leaderboard").get();
+      const allRows = snap.docs.map(x => x.data());
+      const pendingReview = allRows.reduce((n,x)=>n+Number(x.pendingReview||0),0);
       if (!isAdmin && Date.now() < releaseAt.toMillis()) {
-        return { released: false, releaseAt: releaseAt.toDate().toISOString(), rows: [] };
+        return { released: false, rankingType, releaseAt: releaseAt.toDate().toISOString(), pendingReview, rows: [] };
       }
-      const snap = await quizRef.collection("leaderboard").orderBy("score", "desc").get();
-      const rows = snap.docs.map(x => x.data());
-      rows.sort((a, b) => b.score - a.score || (a.submittedAt?.toMillis() || 0) - (b.submittedAt?.toMillis() || 0));
-      return { released: isAdmin || Date.now() >= releaseAt.toMillis(), releaseAt: releaseAt.toDate().toISOString(), rows: rows.map((x, i) => ({ uid: x.uid, name: x.displayName || "Student", score: x.score, total: x.total, pendingReview: x.pendingReview || 0, rank: i + 1 })) };
+      if (!isAdmin && rankingType === "subjective" && pendingReview > 0) {
+        return { released: false, rankingType, releaseAt: releaseAt.toDate().toISOString(), pendingReview, rows: [] };
+      }
+      const scoreOf = x => Number(rankingType === "subjective" ? (x.subjectiveScore||0) : (x.objectiveScore ?? x.score ?? 0));
+      allRows.sort((a,b)=>scoreOf(b)-scoreOf(a)||(a.submittedAt?.toMillis()||0)-(b.submittedAt?.toMillis()||0));
+      let previousScore = null, previousRank = 0;
+      const rows = allRows.map((x,i)=>{const value=scoreOf(x);if(previousScore===null||value!==previousScore)previousRank=i+1;previousScore=value;return {uid:x.uid,name:x.displayName||"Student",score:value,total:Number(rankingType==="subjective"?(x.subjectiveTotal||0):(x.objectiveTotal??x.total??0)),pendingReview:Number(x.pendingReview||0),rank:previousRank};});
+      return { released: isAdmin || (Date.now() >= releaseAt.toMillis() && (rankingType !== "subjective" || pendingReview === 0)), rankingType, releaseAt: releaseAt.toDate().toISOString(), pendingReview, rows };
     }
     case "getMyResults": {
       const quizzes = await db.collection("quizzes").get();
@@ -452,11 +464,12 @@ async function run(name, req) {
       allAnswers.forEach(x => {
         if (x.data().type === "subjective" && String((attemptData.answers || {})[x.id] || "").trim() && !grades[x.id]) pendingReview++;
       });
-      let finalScore = Number(attemptData.objectiveScore || 0);
-      Object.values(grades).forEach(x => { finalScore += Number(x.marks || 0); });
-      await attemptRef.update({ grades, pendingReview, finalScore });
-      await quizRef.collection("leaderboard").doc(attemptUid).update({ score: finalScore, pendingReview });
-      return { ok: true, pendingReview, score: finalScore };
+      let subjectiveScore = 0;
+      Object.values(grades).forEach(x => { subjectiveScore += Number(x.marks || 0); });
+      const finalScore = Number(attemptData.objectiveScore || 0) + subjectiveScore;
+      await attemptRef.update({ grades, pendingReview, subjectiveScore, finalScore });
+      await quizRef.collection("leaderboard").doc(attemptUid).update({ score: finalScore, subjectiveScore, pendingReview });
+      return { ok: true, pendingReview, score: finalScore, subjectiveScore };
     }
     default:
       fail("not-found", "Unknown API action.");
