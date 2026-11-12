@@ -330,7 +330,7 @@ async function run(name, req) {
     }
     case "addContent": {
       await requireAdmin(req);
-      if (!String(d.title || "").trim() || !/^https?:\/\//i.test(String(d.url || ""))) fail("invalid-argument", "Title और valid https/http file link जरूरी है।");
+      if (!String(d.title || "").trim() || (!d.storagePath && !/^https?:\/\//i.test(String(d.url || "")))) fail("invalid-argument", "Title और valid file link जरूरी है।");
       const contentId = String(d.id || "").trim();
       if (d.storagePath && (!contentId || !String(d.storagePath).startsWith("learning/" + contentId + "/"))) fail("invalid-argument", "Storage path मान्य नहीं है।");
       const ref = contentId ? db.collection("content").doc(contentId) : db.collection("content").doc();
