@@ -83,10 +83,11 @@ function render(){
   if(role==="teacher")tabs=[["home","Home"],["teacher","Teacher Workspace"]];
   if(role==="admin")tabs=[["home","Home"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"]];
   if(role==="superadmin")tabs=[["home","Home"],["overview","Overview"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"],["super","Super Admin"]];
-  if(!tabs.some(x=>x[0]===tab))tab=tabs[0][0];
+  const pages={overview:superOverviewPage,home:role==="superadmin"?superHomePage:homePage,quiz:quizPage,notes:notesPage,pyq:pyqPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,admin:adminPage,createquiz:createQuizPage,objectivebuilder:()=>quizBuilderPage("objective"),subjectivebuilder:()=>quizBuilderPage("subjective"),notesupload:()=>contentUploadPage("note"),pyqupload:()=>contentUploadPage("pyq"),super:superPage};
+  // Internal workflow pages are intentionally not sidebar items. Keep them routable.
+  if(!tabs.some(x=>x[0]===tab)&&!pages[tab])tab=tabs[0][0];
   $("nav").innerHTML='<div class="nav-section-label">MENU</div>'+tabs.map(x=>'<button data-tab="'+x[0]+'" class="nav-link '+(tab===x[0]?"active":"")+'"><span class="nav-icon">'+({overview:"◈",home:"⌂",quiz:"▤",notes:"▧",leaderboard:"♛",results:"◷",doubts:"✉",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜"}[x[0]]||"•")+'</span><span>'+x[1]+"</span></button>").join("");
   $("nav").querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render();closeWorkspaceMenu()});
-  const pages={overview:superOverviewPage,home:role==="superadmin"?superHomePage:homePage,quiz:quizPage,notes:notesPage,pyq:pyqPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,admin:adminPage,createquiz:createQuizPage,objectivebuilder:()=>quizBuilderPage("objective"),subjectivebuilder:()=>quizBuilderPage("subjective"),notesupload:()=>contentUploadPage("note"),pyqupload:()=>contentUploadPage("pyq"),super:superPage};
   (pages[tab]||homePage)().catch(e=>panel("त्रुटि",'<p class="error">'+esc(e.message)+"</p>"));
 }
 async function superOverviewPage(){
