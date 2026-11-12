@@ -193,7 +193,7 @@ async function adminPage(){
     return rows.map(cols=>{const o={};headers.forEach((h,i)=>o[h]=(cols[i]||"").trim());const answer=o.answer||"A";return {text:o.question||o.text||"",type:(o.type||"objective").toLowerCase().startsWith("sub")?"subjective":"objective",options:[o.optiona,o.optionb,o.optionc,o.optiond].filter(Boolean),answer:/^[1-4]$/.test(answer)?Number(answer)-1:"ABCD".indexOf(answer.toUpperCase()),topic:o.topic||"",difficulty:(o.difficulty||"medium").toLowerCase(),marks:Number(o.marks||1),explanation:o.explanation||"",modelAnswer:o.modelanswer||""}});
   }
   $("csvFile").onchange=async e=>{const file=e.target.files[0];if(file)$("csvText").value=await file.text()};
-  $("importCsv").onclick=()=>{try{const qs=parseCSV($("csvText").value);if(qs.length>1000)throw Error("एक quiz में अधिकतम 1000 प्रश्न import कर सकते हैं।");qs.forEach(q=>addQ(q));$("importStatus").textContent=qs.length+" questions import हुए। अब Publish Quiz दबाएँ।"}catch(e){alertMsg(e.message)}};
+  $("importCsv").onclick=()=>{try{const qs=parseCSV($("csvText").value);if(!qs.length||qs.length>1000)throw Error("एक quiz में 1 से 1000 प्रश्न import करें।");$("questionEditor").innerHTML="";n=0;qs.forEach(q=>addQ(q));$("importStatus").textContent=qs.length+" questions import हुए। पुराने builder questions replace कर दिए गए हैं। अब Publish Quiz दबाएँ।"}catch(e){alertMsg(e.message)}};
   $("publishQuiz").onclick=async()=>{try{
     const cards=[...$("questionEditor").querySelectorAll("[data-q]")];
     if(!cards.length||cards.length>1000)throw Error("1 से 1000 प्रश्न रखें।");
