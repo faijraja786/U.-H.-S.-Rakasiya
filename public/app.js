@@ -37,25 +37,33 @@ $("google").onclick=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvi
 $("reset").onclick=async()=>{try{const email=$("email").value.trim();if(!email)throw Error("पहले ईमेल लिखें।");await sendPasswordResetEmail(auth,email);msg("Password reset link ईमेल पर भेज दिया गया है।",true)}catch(e){msg(e.message)}};
 $("profileToggle").onclick=()=>{const menu=$("profileMenu"),open=menu.hidden;menu.hidden=!open;$("profileToggle").setAttribute("aria-expanded",String(open))};
 document.addEventListener("click",e=>{if(!e.target.closest(".profile-wrap")){$("profileMenu").hidden=true;$("profileToggle").setAttribute("aria-expanded","false")}});
+$("menuToggle").onclick=()=>{
+  const mobile=window.matchMedia("(max-width: 800px)").matches;
+  if(mobile){const open=!$("app").classList.contains("menu-open");$("app").classList.toggle("menu-open",open);$("menuToggle").setAttribute("aria-expanded",String(open))}
+  else $("app").classList.toggle("sidebar-collapsed");
+};
+$("sidebarOverlay").onclick=closeWorkspaceMenu;
 $("logout").onclick=()=>signOut(auth);
 
 onAuthStateChanged(auth,async u=>{
   user=u;if(!u){openLogin();return}
   try{
-    await call("ensureStudentRole");
-    let s=await getDoc(doc(db,"roles",u.uid));
-    role=s.exists()?s.data().role:"student";
+    const roleInfo=await call("ensureStudentRole");
+    role=roleInfo?.role||"student";
     // The first configured bootstrap email is promoted automatically; all other students remain students.
     if(role==="student"){
-      try{await call("bootstrapFirstAdmin");s=await getDoc(doc(db,"roles",u.uid));role=s.exists()?s.data().role:"student"}catch{}
+      try{const promoted=await call("bootstrapFirstAdmin");role=promoted?.role||"superadmin"}catch{}
     }
+    // Refresh the authoritative role once after bootstrap; never infer access from the visible label.
+    const roleSnap=await getDoc(doc(db,"roles",u.uid));
+    if(roleSnap.exists()&&["student","teacher","admin","superadmin"].includes(roleSnap.data().role))role=roleSnap.data().role;
     if(!["student","teacher","admin","superadmin"].includes(role))role="student";
     const displayName=u.displayName||u.email||"User";
     $("identity").textContent=displayName;
     $("avatarInitial").textContent=(displayName.trim().charAt(0)||"U").toLocaleUpperCase("hi-IN");
     $("profileName").textContent=displayName;
     $("profileEmail").textContent=u.email||"";
-    $("profileRole").textContent=role==="superadmin"?"Teacher Super":role==="admin"?"Teacher":role==="teacher"?"Teacher":"Student";
+    $("profileRole").textContent=role==="superadmin"?"Super Teacher":role==="admin"?"Teacher":role==="teacher"?"Teacher":"Student";
     $("roleBadge").textContent="✓ "+$("profileRole").textContent.toUpperCase();
     $("profileMenu").hidden=true;
     openApp();
@@ -65,14 +73,18 @@ onAuthStateChanged(auth,async u=>{
 });
 
 const studentTabs=[["home","Dashboard"],["quiz","Available Quizzes"],["notes","Notes & PYQ"],["leaderboard","Leaderboard"],["results","My Results"],["doubts","Doubt Solving"],["tasks","Daily Targets"],["planner","Study Routine"],["cards","Flashcards"]];
+function closeWorkspaceMenu(){
+  $("app").classList.remove("menu-open");
+  $("menuToggle").setAttribute("aria-expanded","false");
+}
 function render(){
   let tabs=studentTabs;
   if(role==="teacher")tabs=[["teacher","Teacher Workspace"]];
   if(role==="admin")tabs=[["admin","Admin Dashboard"]];
-  if(role==="superadmin")tabs=[["overview","Overview"],["admin","Admin Dashboard"],["super","Super Admin"]];
+  if(role==="superadmin")tabs=[["overview","Overview"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"],["super","Super Admin"]];
   if(!tabs.some(x=>x[0]===tab))tab=tabs[0][0];
   $("nav").innerHTML='<div class="nav-section-label">WORKSPACE</div>'+tabs.map(x=>'<button data-tab="'+x[0]+'" class="nav-link '+(tab===x[0]?"active":"")+'"><span class="nav-icon">'+({overview:"◈",home:"⌂",quiz:"▤",notes:"▧",leaderboard:"♛",results:"◷",doubts:"✉",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜"}[x[0]]||"•")+'</span><span>'+x[1]+"</span></button>").join("");
-  $("nav").querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render()});
+  $("nav").querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render();closeWorkspaceMenu()});
   const pages={overview:superOverviewPage,home:homePage,quiz:quizPage,notes:notesPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,admin:adminPage,super:superPage};
   (pages[tab]||homePage)().catch(e=>panel("त्रुटि",'<p class="error">'+esc(e.message)+"</p>"));
 }
@@ -181,9 +193,10 @@ async function doubtsPage(){
 }
 async function teacherPage(){
   const [r,graded,students]=await Promise.all([call("listDoubts"),call("listSubjectiveSubmissions"),call("listTeacherStudents")]);
-  const doubtHtml=r.doubts.length?r.doubts.map(x=>'<article class="item"><div class="question-meta"><span>'+esc(x.subject)+'</span><span>'+esc(x.status)+'</span></div><h3>'+esc(x.studentName||"Student")+'</h3><p>'+esc(x.topic||"General")+'</p><p>'+esc(x.question)+'</p><textarea data-reply="'+esc(x.id)+'" placeholder="अपना जवाब लिखें">'+esc(x.reply||"")+'</textarea><button data-sendreply="'+esc(x.id)+'">Send Reply</button></article>').join(""):'<p>अभी कोई assigned doubt नहीं है।</p>';
+  const orderedDoubts=[...r.doubts].sort((a,b)=>(a.status==="open"?0:1)-(b.status==="open"?0:1));
+  const doubtHtml=orderedDoubts.length?orderedDoubts.map(x=>'<article class="item teacher-doubt-card"><div class="question-meta"><span>'+esc(x.subject)+'</span><span class="doubt-status '+(x.status==="open"?"pending":"answered")+'">'+(x.status==="open"?"जवाब बाकी":"जवाब दिया गया")+'</span></div><h3>'+esc(x.studentName||"Student")+'</h3><p><b>विषय:</b> '+esc(x.subject)+' • <b>टॉपिक:</b> '+esc(x.topic||"General")+'</p><div class="student-question"><b>Student का सवाल</b><p>'+esc(x.question)+'</p></div>'+(x.reply?'<div class="teacher-reply"><b>आपका जवाब</b><p>'+esc(x.reply)+'</p></div>':'')+'<label>'+(x.reply?"जवाब अपडेट करें":"Student को जवाब दें")+'</label><textarea data-reply="'+esc(x.id)+'" placeholder="अपना जवाब लिखें">'+esc(x.reply||"")+'</textarea><button data-sendreply="'+esc(x.id)+'">'+(x.reply?"Update Reply":"Send Answer")+'</button></article>').join(""):'<div class="empty-state"><b>अभी कोई Student Doubt नहीं आया।</b><p>जैसे ही Student सवाल भेजेगा, वह यहाँ दिखाई देगा।</p></div>';
   const gradeHtml=graded.submissions.length?graded.submissions.map(x=>'<article class="item"><h3>'+esc(x.studentName)+' • '+esc(x.quizTitle)+'</h3>'+x.questions.map(q=>'<div class="review-question"><b>'+esc(q.question)+'</b><p><b>Student Answer:</b> '+esc(q.studentAnswer)+'</p><p class="hint">Maximum Marks: '+q.maxMarks+'</p>'+(q.modelAnswer?'<details><summary>Model answer देखें</summary><p>'+esc(q.modelAnswer)+'</p></details>':'')+'<label>Award Marks</label><input type="number" min="0" max="'+q.maxMarks+'" step="0.5" data-grade="'+esc(x.quizId)+'|'+esc(x.uid)+'|'+esc(q.questionId)+'|'+q.maxMarks+'"><button data-savegrade="'+esc(x.quizId)+'|'+esc(x.uid)+'|'+esc(q.questionId)+'|'+q.maxMarks+'">Save Grade</button></div>').join("")+'</article>').join(""):'<p>अभी कोई subjective answer जाँचने के लिए नहीं है।</p>';
-  panel("Teacher Dashboard",'<div class="dashboard-hero"><span class="eyebrow">EDUFUTURE • TEACHER WORKSPACE</span><h2>Teaching & Doubt Desk</h2><p>Assigned subjects के doubts का जवाब दें और written answers जाँचें।</p></div><div class="grid"><div class="stat"><strong>'+r.doubts.length+'</strong><span>Assigned Doubts</span></div><div class="stat"><strong>'+r.doubts.filter(x=>x.status==="open").length+'</strong><span>Pending Replies</span></div><div class="stat"><strong>'+graded.submissions.reduce((n,x)=>n+x.questions.length,0)+'</strong><span>Answers to Grade</span></div></div><h3>Student Roster</h3><div class="student-roster">'+(students.students.length?students.students.map(x=>'<div class="admin-row"><span>'+esc(x.displayName||"Student")+'</span><small>'+esc(x.email)+'</small></div>').join(""):'<p>अभी कोई student नहीं है।</p>')+'</div><h3>Student Doubts</h3>'+doubtHtml+'<h3>Subjective Answer Review</h3>'+gradeHtml);
+  panel(role==="superadmin"?"Super Teacher Workspace":"Teacher Dashboard",'<div class="dashboard-hero"><span class="eyebrow">EDUFUTURE • TEACHER WORKSPACE</span><h2>Student Doubt & Answer Desk</h2><p>Student के भेजे हुए सवाल यहाँ आएँगे। सवाल पढ़कर जवाब भेजें और written test answers जाँचें।</p></div><div class="grid"><div class="stat"><strong>'+r.doubts.length+'</strong><span>Student Doubts</span></div><div class="stat"><strong>'+r.doubts.filter(x=>x.status==="open").length+'</strong><span>Pending Replies</span></div><div class="stat"><strong>'+graded.submissions.reduce((n,x)=>n+x.questions.length,0)+'</strong><span>Answers to Grade</span></div></div><h3>Student Roster</h3><div class="student-roster">'+(students.students.length?students.students.map(x=>'<div class="admin-row"><span>'+esc(x.displayName||"Student")+'</span><small>'+esc(x.email)+'</small></div>').join(""):'<p>अभी कोई student नहीं है।</p>')+'</div><h3>Student Doubts — यहाँ जवाब दें</h3>'+doubtHtml+'<h3>Subjective Answer Review</h3>'+gradeHtml);
   $("view").querySelectorAll("[data-sendreply]").forEach(b=>b.onclick=async()=>{try{const id=b.dataset.sendreply;await call("replyDoubt",{id,reply:$("view").querySelector('[data-reply="'+id+'"]').value.trim()});alertMsg("जवाब भेज दिया गया।");teacherPage()}catch(e){alertMsg(e.message)}});
   $("view").querySelectorAll("[data-savegrade]").forEach(b=>b.onclick=async()=>{try{const [quizId,uid,questionId,max]=b.dataset.savegrade.split("|");const marks=Number($("view").querySelector('[data-grade="'+b.dataset.savegrade+'"]').value);if(!Number.isFinite(marks)||marks<0||marks>Number(max))throw Error("Marks सही सीमा में भरें।");await call("gradeSubjective",{quizId,uid,questionId,marks});alertMsg("Marks save हो गए।");teacherPage()}catch(e){alertMsg(e.message)}});
 }
