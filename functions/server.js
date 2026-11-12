@@ -38,7 +38,7 @@ function storagePathUrl(path) {
   return String(path).split("/").map(encodeURIComponent).join("/");
 }
 async function supabaseStorageRequest(endpoint, options = {}) {
-  const base = String(process.env.SUPABASE_URL || "").replace(/\\/+$/, "");
+  const base = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
   const secret = process.env.SUPABASE_SECRET_KEY || "";
   if (!base || !secret) fail("failed-precondition", "Supabase Storage की server key अभी Render में configure नहीं है।");
   const response = await fetch(base + "/storage/v1" + endpoint, {
@@ -364,7 +364,7 @@ async function run(name, req) {
         await requireAdmin(req);
       }
       if (!item.storagePath) {
-        if (/^https?:\\/\\//i.test(String(item.url || ""))) return { url: item.url, external: true };
+        if (/^https?:\/\//i.test(String(item.url || ""))) return { url: item.url, external: true };
         fail("not-found", "इस सामग्री की फ़ाइल उपलब्ध नहीं है।");
       }
       let objectPath = String(item.storagePath);
@@ -377,8 +377,8 @@ async function run(name, req) {
       });
       const relative = signed.signedURL || signed.signedUrl;
       if (!relative) fail("internal", "Secure download link नहीं बन सका।");
-      const base = String(process.env.SUPABASE_URL || "").replace(/\\/+$/, "");
-      const url = /^https?:\\/\\//i.test(relative) ? relative :
+      const base = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
+      const url = /^https?:\/\//i.test(relative) ? relative :
         (relative.startsWith("/storage/v1/") ? base + relative : base + "/storage/v1" + (relative.startsWith("/") ? relative : "/" + relative));
       return { url, expiresIn: 300 };
     }
