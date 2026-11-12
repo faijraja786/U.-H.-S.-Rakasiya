@@ -119,3 +119,52 @@ footer{color:#64748b}
 .quiz-status.unavailable{background:linear-gradient(135deg,#f8fafc,#fff);border-color:#cbd5e1}
 .quiz-status.unavailable b{color:#475569}
 @media(max-width:560px){.quiz-window-banner{border-radius:17px;padding:20px}.quiz-window-card{padding:15px}.quiz-status{padding:12px}}
+
+
+/* ===== Workspace redesign: fixed sidebar, balanced content and profile menu ===== */
+#app[hidden]{display:none!important}
+.app-shell{display:grid;grid-template-columns:258px minmax(0,1fr);min-height:100vh;background:#f3f7fc}
+.sidebar{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;padding:24px 15px 18px;background:linear-gradient(180deg,#07111f,#0d1b31 65%,#102e52);color:#fff;z-index:20}
+.sidebar-brand{display:flex;align-items:center;gap:12px;padding:5px 10px 26px;color:#fff;text-decoration:none}
+.sidebar-logo{width:43px;height:43px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(140deg,#2563eb,#06b6d4);font-weight:950;box-shadow:0 9px 22px #0284c744}
+.sidebar-brand b{display:block;font-size:20px;letter-spacing:-.6px}.sidebar-brand small{display:block;margin-top:3px;color:#9fb6d2;font-size:11px}
+.sidebar .nav{position:static;display:flex;flex-direction:column;gap:7px;overflow-y:auto;overflow-x:hidden;padding:8px 0;background:transparent;border:0;box-shadow:none;backdrop-filter:none}
+.nav-section-label{padding:10px 12px 7px;color:#7892b2;font-size:10px;font-weight:850;letter-spacing:1.7px}
+.sidebar .nav-link{display:flex;align-items:center;gap:12px;width:100%;padding:12px 13px;text-align:left;border:1px solid transparent;border-radius:12px;background:transparent;color:#c7d7ea;box-shadow:none;font-size:13px;font-weight:650;white-space:nowrap}
+.sidebar .nav-link:hover{background:#ffffff10;color:#fff;transform:none;box-shadow:none}
+.sidebar .nav-link.active{background:linear-gradient(100deg,#1d4ed8,#087da8);border-color:#60a5fa55;color:#fff;box-shadow:0 8px 20px #0369a144}
+.nav-icon{width:22px;text-align:center;font-size:17px;color:#8bdcf3}
+.sidebar-foot{margin-top:auto;padding:16px 10px 4px;border-top:1px solid #ffffff18;color:#d4e3f4;font-size:12px}
+.sidebar-foot small{display:block;padding:5px 0 0 15px;color:#7892b2;font-size:10px}.online-dot{display:inline-block;width:7px;height:7px;margin-right:8px;border-radius:50%;background:#34d399;box-shadow:0 0 0 4px #34d39922}
+.app-main{min-width:0;display:flex;flex-direction:column}
+.app-main>.topbar{position:sticky;top:0;z-index:15;min-height:82px;padding:13px clamp(18px,3vw,38px);background:#ffffffed;color:#0b1220;border-bottom:1px solid #dce6f3;box-shadow:0 5px 22px #0b1c3808;backdrop-filter:blur(16px)}
+.topbar-title{display:flex;flex-direction:column;gap:3px}.topbar-kicker{font-size:9px;letter-spacing:1.8px;font-weight:850;color:#2563eb}.topbar-title strong{font-size:19px;letter-spacing:-.4px}
+.account{gap:13px}.role-badge{background:#eaf2ff;color:#1d4ed8;border:1px solid #cfe0ff;padding:7px 11px;font-size:10px;letter-spacing:.5px}
+.profile-wrap{position:relative}.profile-trigger{display:flex;align-items:center;gap:9px;padding:5px 9px 5px 5px;border:1px solid #dce6f3;border-radius:999px;background:#fff;color:#172033;box-shadow:none}
+.profile-trigger:hover{background:#f8fbff;box-shadow:0 5px 15px #0b1c3810;transform:none}
+.avatar-initial{width:36px;height:36px;display:grid;place-items:center;border-radius:50%;background:linear-gradient(140deg,#0b1220,#2563eb 65%,#06b6d4);color:#fff;font-size:16px;font-weight:900}
+.profile-identity{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}.profile-chevron{color:#64748b}
+.profile-menu{position:absolute;right:0;top:calc(100% + 12px);width:min(280px,calc(100vw - 30px));padding:9px;border:1px solid #dce6f3;border-radius:17px;background:#fff;box-shadow:0 20px 55px #0b1c3830;z-index:40}
+.profile-menu-head{padding:12px 12px 14px;border-bottom:1px solid #edf2f8}.profile-menu-head b,.profile-menu-head small,.profile-menu-head span{display:block;overflow-wrap:anywhere}.profile-menu-head small{margin:5px 0;color:#64748b;font-size:11px}.profile-menu-head span{color:#2563eb;font-size:11px;font-weight:800}
+.logout-action{width:100%;margin-top:8px;text-align:left;background:#fff1f2;color:#be123c;box-shadow:none}.logout-action:hover{background:#ffe4e6;box-shadow:none}
+.content{width:100%;max-width:1450px;margin:0 auto;padding:clamp(20px,3vw,38px);flex:1;min-height:calc(100vh - 150px)}
+.app-main>footer{border-top:1px solid #e3ebf5;background:#fff;padding:18px}
+.login-mode-note{display:flex;flex-direction:column;gap:5px;padding:13px 14px;margin:18px 0 14px;border:1px solid #d6e7fb;border-radius:13px;background:linear-gradient(120deg,#eff6ff,#f0fdff);text-align:left}
+.login-mode-note b{font-size:12px;color:#1744a0}.login-mode-note span{font-size:11px;line-height:1.5;color:#52657d}
+.overview-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.overview-actions button{position:relative}
+.super-welcome-note{padding:18px;border:1px solid #cfe4fb;border-radius:17px;background:linear-gradient(130deg,#eff6ff,#fff)}.super-welcome-note b{color:#1744a0}.super-welcome-note p{margin:7px 0 0;color:#52657d;line-height:1.6}
+@media(max-width:800px){
+  .app-shell{grid-template-columns:1fr}
+  .sidebar{position:sticky;top:0;height:auto;padding:10px 12px 8px;background:#091629}
+  .sidebar-brand{padding:2px 5px 10px}.sidebar-logo{width:34px;height:34px;border-radius:11px}.sidebar-brand b{font-size:16px}.sidebar-brand small{font-size:9px}
+  .sidebar .nav{flex-direction:row;gap:6px;padding:3px 0 5px;overflow-x:auto;overflow-y:hidden}
+  .nav-section-label,.sidebar-foot{display:none}
+  .sidebar .nav-link{width:auto;flex:0 0 auto;padding:9px 12px;font-size:11px}
+  .nav-icon{font-size:14px;width:auto}
+  .app-main>.topbar{position:relative;min-height:70px;padding:11px 14px}
+  .topbar-title strong{font-size:15px}.topbar-kicker{font-size:8px}
+  .role-badge{display:none}.profile-identity{max-width:100px;font-size:11px}
+  .avatar-initial{width:33px;height:33px}
+  .content{padding:15px 12px;min-height:65vh}
+}
+@media(max-width:430px){.sidebar-brand{display:none}.sidebar{padding-top:8px}.sidebar .nav-link{padding:8px 10px}.profile-trigger{gap:6px}.profile-identity{max-width:82px}.topbar-title strong{font-size:14px}}
