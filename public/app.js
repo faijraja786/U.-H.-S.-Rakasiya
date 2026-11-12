@@ -80,7 +80,7 @@ function closeWorkspaceMenu(){
 function render(){
   let tabs=studentTabs;
   if(role==="teacher")tabs=[["teacher","Teacher Workspace"]];
-  if(role==="admin")tabs=[["admin","Admin Dashboard"]];
+  if(role==="admin")tabs=[["teacher","Teacher Workspace"],["admin","Admin Dashboard"]];
   if(role==="superadmin")tabs=[["overview","Overview"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"],["super","Super Admin"]];
   if(!tabs.some(x=>x[0]===tab))tab=tabs[0][0];
   $("nav").innerHTML='<div class="nav-section-label">WORKSPACE</div>'+tabs.map(x=>'<button data-tab="'+x[0]+'" class="nav-link '+(tab===x[0]?"active":"")+'"><span class="nav-icon">'+({overview:"◈",home:"⌂",quiz:"▤",notes:"▧",leaderboard:"♛",results:"◷",doubts:"✉",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜"}[x[0]]||"•")+'</span><span>'+x[1]+"</span></button>").join("");
