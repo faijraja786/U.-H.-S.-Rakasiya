@@ -14,12 +14,24 @@ service firebase.storage {
         ).data.role in ['admin', 'superadmin'];
     }
 
-    match /learning/{path=**} {
-      allow read: if signedIn();
+    function contentIsPublished(contentId) {
+      return firestore.get(
+        /databases/(default)/documents/content/$(contentId)
+      ).data.published == true;
+    }
 
+    // Files are now stored as learning/{contentId}/{fileName}.
+    // Students can read only published learning content; admins manage all files.
+    match /learning/{contentId}/{fileName} {
+      allow read: if signedIn() && (isAdmin() || contentIsPublished(contentId));
       allow write: if isAdmin()
         && request.resource != null
         && request.resource.size < 30 * 1024 * 1024;
+    }
+
+    // Legacy paths and every other object remain inaccessible.
+    match /{path=**} {
+      allow read, write: if false;
     }
   }
 }
