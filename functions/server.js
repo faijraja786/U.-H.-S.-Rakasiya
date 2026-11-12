@@ -24,7 +24,7 @@ app.use(cors({
     return callback(new Error("Origin is not allowed by EduFuture API."));
   },
   methods: ["POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  allowedHeaders: ["Content-Type", "Authorization", "X-File-Name", "X-File-Type"]
 }));
 app.use(express.json({ limit: "20mb" }));
 
@@ -32,6 +32,32 @@ function fail(code, message) {
   const error = new Error(message);
   error.code = code;
   throw error;
+}
+const storageBucket = process.env.SUPABASE_BUCKET || "learning";
+function storagePathUrl(path) {
+  return String(path).split("/").map(encodeURIComponent).join("/");
+}
+async function supabaseStorageRequest(endpoint, options = {}) {
+  const base = String(process.env.SUPABASE_URL || "").replace(/\\/+$/, "");
+  const secret = process.env.SUPABASE_SECRET_KEY || "";
+  if (!base || !secret) fail("failed-precondition", "Supabase Storage की server key अभी Render में configure नहीं है।");
+  const response = await fetch(base + "/storage/v1" + endpoint, {
+    ...options,
+    headers: {
+      apikey: secret,
+      Authorization: "Bearer " + secret,
+      ...(options.headers || {})
+    }
+  });
+  const raw = await response.text();
+  let data = {};
+  try { data = raw ? JSON.parse(raw) : {}; } catch { data = { message: raw }; }
+  if (!response.ok) {
+    const error = new Error(data.message || data.error || "Supabase Storage request failed (" + response.status + ").");
+    error.code = response.status === 404 ? "not-found" : "internal";
+    throw error;
+  }
+  return data;
 }
 async function authenticate(req, res, next) {
   try {
@@ -328,11 +354,39 @@ async function run(name, req) {
       }
       return { results };
     }
+    case "getContentDownload": {
+      const id = String(d.id || "").trim();
+      if (!id) fail("invalid-argument", "Content ID missing.");
+      const snap = await db.doc("content/" + id).get();
+      if (!snap.exists) fail("not-found", "Content नहीं मिला।");
+      const item = snap.data();
+      if (item.published !== true) {
+        await requireAdmin(req);
+      }
+      if (!item.storagePath) {
+        if (/^https?:\\/\\//i.test(String(item.url || ""))) return { url: item.url, external: true };
+        fail("not-found", "इस सामग्री की फ़ाइल उपलब्ध नहीं है।");
+      }
+      let objectPath = String(item.storagePath);
+      if (objectPath.startsWith("learning/" + id + "/")) objectPath = objectPath.slice("learning/".length);
+      if (!objectPath.startsWith(id + "/")) fail("invalid-argument", "Storage path मान्य नहीं है।");
+      const signed = await supabaseStorageRequest("/object/sign/" + encodeURIComponent(storageBucket) + "/" + storagePathUrl(objectPath), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expiresIn: 300 })
+      });
+      const relative = signed.signedURL || signed.signedUrl;
+      if (!relative) fail("internal", "Secure download link नहीं बन सका।");
+      const base = String(process.env.SUPABASE_URL || "").replace(/\\/+$/, "");
+      const url = /^https?:\\/\\//i.test(relative) ? relative :
+        (relative.startsWith("/storage/v1/") ? base + relative : base + "/storage/v1" + (relative.startsWith("/") ? relative : "/" + relative));
+      return { url, expiresIn: 300 };
+    }
     case "addContent": {
       await requireAdmin(req);
       if (!String(d.title || "").trim() || (!d.storagePath && !/^https?:\/\//i.test(String(d.url || "")))) fail("invalid-argument", "Title और valid file link जरूरी है।");
       const contentId = String(d.id || "").trim();
-      if (d.storagePath && (!contentId || !String(d.storagePath).startsWith("learning/" + contentId + "/"))) fail("invalid-argument", "Storage path मान्य नहीं है।");
+      if (d.storagePath && (!contentId || !String(d.storagePath).startsWith(contentId + "/"))) fail("invalid-argument", "Storage path मान्य नहीं है।");
       const ref = contentId ? db.collection("content").doc(contentId) : db.collection("content").doc();
       await ref.set({
         title: String(d.title).trim(), subject: String(d.subject || "General"),
@@ -512,7 +566,62 @@ async function run(name, req) {
   }
 }
 
-app.get("/health", (_req, res) => res.json({ ok: true, service: "EduFuture API" }));
+app.get("/health", (_req, res) => res.json({
+  ok: true,
+  service: "EduFuture API",
+  integrations: {
+    firebaseAdmin: true,
+    supabaseStorage: process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY ? "configured" : "needs_server_key"
+  }
+}));
+app.get("/health/storage", async (_req, res) => {
+  try {
+    await supabaseStorageRequest("/bucket/" + encodeURIComponent(storageBucket), { method: "GET" });
+    return res.json({ ok: true, bucket: storageBucket, access: "private server-side" });
+  } catch (error) {
+    return res.status(503).json({ ok: false, bucket: storageBucket, message: error.code === "failed-precondition" ? error.message : "Storage health check failed." });
+  }
+});
+app.post("/api/content-upload/:id",
+  express.raw({ type: "application/octet-stream", limit: "30mb" }),
+  authenticate,
+  async (req, res) => {
+    try {
+      const contentId = String(req.params.id || "");
+      if (!/^[A-Za-z0-9_-]{10,100}$/.test(contentId)) fail("invalid-argument", "Content ID मान्य नहीं है।");
+      await requireAdmin(req);
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) fail("invalid-argument", "खाली फ़ाइल upload नहीं हो सकती।");
+      if (req.body.length > 30 * 1024 * 1024) fail("invalid-argument", "फ़ाइल 30 MB से छोटी होनी चाहिए।");
+      let originalName = String(req.get("X-File-Name") || "EduFuture-file");
+      try { originalName = decodeURIComponent(originalName); } catch {}
+      const safeName = originalName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "EduFuture-file";
+      const ext = safeName.toLowerCase().split(".").pop();
+      const mimeByExt = {
+        pdf: "application/pdf", doc: "application/msword",
+        docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ppt: "application/vnd.ms-powerpoint",
+        pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp"
+      };
+      const allowed = new Set(Object.values(mimeByExt));
+      const requestedMime = String(req.get("X-File-Type") || "").toLowerCase();
+      const mime = !requestedMime || requestedMime === "application/octet-stream" ? mimeByExt[ext] : requestedMime;
+      if (!allowed.has(mime)) fail("invalid-argument", "यह file type supported नहीं है।");
+      const objectPath = contentId + "/" + Date.now() + "-" + safeName;
+      await supabaseStorageRequest("/object/" + encodeURIComponent(storageBucket) + "/" + storagePathUrl(objectPath), {
+        method: "POST",
+        headers: { "Content-Type": mime, "x-upsert": "false" },
+        body: req.body
+      });
+      return res.json({ data: { storagePath: objectPath } });
+    } catch (error) {
+      const code = error.code || "internal";
+      const status = code === "unauthenticated" ? 401 : code === "permission-denied" ? 403 : code === "invalid-argument" ? 400 : code === "failed-precondition" ? 503 : code === "not-found" ? 404 : 500;
+      if (status >= 500 && status !== 503) console.error("Storage upload error:", error);
+      return res.status(status).json({ error: { code, message: status >= 500 && status !== 503 ? "फ़ाइल upload नहीं हो सकी। कृपया बाद में कोशिश करें।" : error.message } });
+    }
+  }
+);
 app.post("/api/:name", authenticate, async (req, res) => {
   try {
     const data = await run(req.params.name, req);
