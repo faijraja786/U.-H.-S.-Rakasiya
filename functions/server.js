@@ -26,7 +26,7 @@ app.use(cors({
   methods: ["POST", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
-app.use(express.json({ limit: "8mb" }));
+app.use(express.json({ limit: "20mb" }));
 
 function fail(code, message) {
   const error = new Error(message);
@@ -138,7 +138,7 @@ async function run(name, req) {
       const questions = Array.isArray(d.questions) ? d.questions : [];
       const title = String(d.title || "").trim();
       const duration = Number(d.duration);
-      if (!title || !questions.length || questions.length > 1000) fail("invalid-argument", "Quiz title और 1 से 1000 questions जरूरी हैं।");
+      if (!title || !questions.length || questions.length > 2000) fail("invalid-argument", "Quiz title और 1 से 2000 questions जरूरी हैं।");
       if (!Number.isFinite(duration) || duration < 1 || duration > 600) fail("invalid-argument", "Timer 1 से 600 मिनट के बीच रखें।");
       let totalMarks = 0;
       questions.forEach((q, i) => {
