@@ -197,7 +197,6 @@ async function run(name, req) {
       if (!quizSnap.exists || quizSnap.data().status !== "published") fail("not-found", "Quiz उपलब्ध नहीं है।");
       const quiz = quizSnap.data();
       const closesAtMs = quiz.closesAt?.toMillis?.() || (quiz.publishedAt?.toMillis?.() || 0) + 48 * 60 * 60 * 1000;
-      if (!closesAtMs || Date.now() >= closesAtMs) fail("failed-precondition", "यह Quiz उपलब्ध नहीं है। Attempt करने की 48 घंटे की अवधि समाप्त हो गई है।");
       const attemptRef = quizRef.collection("attempts").doc(uid);
       let attemptData = null;
       await db.runTransaction(async tx => {
@@ -207,6 +206,7 @@ async function run(name, req) {
           attemptData = existing.data();
           return;
         }
+        if (!closesAtMs || Date.now() >= closesAtMs) fail("failed-precondition", "यह Quiz उपलब्ध नहीं है। Attempt करने की 48 घंटे की अवधि समाप्त हो गई है।");
         const expiresAt = Timestamp.fromMillis(Date.now() + quiz.duration * 60000);
         attemptData = { uid, status: "started", expiresAt, closesAt: Timestamp.fromMillis(closesAtMs) };
         tx.create(attemptRef, { ...attemptData, startedAt: FieldValue.serverTimestamp() });
