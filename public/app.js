@@ -136,7 +136,7 @@ async function quizPage(){
     }else{
       action='<div class="quiz-status available"><b>अभी उपलब्ध • 48 घंटे तक</b><p>Attempt बंद होने में <strong data-countdown="'+closeMs+'"></strong></p><button data-start="'+d.id+'">Start Quiz</button></div>';
     }
-    return '<article class="item quiz-window-card"><div class="question-meta"><span>'+esc(q.subject||"General")+'</span><span>'+(q.quizType==="subjective"?"SUBJECTIVE":q.quizType==="objective"?"OBJECTIVE":"MIXED TEST")+</span><span>'+Number(q.questionCount||0)+' प्रश्न</span><span>'+Number(q.duration||0)+' मिनट</span></div><h3>'+esc(q.title)+'</h3>'+action+'</article>';
+    return '<article class="item quiz-window-card"><div class="question-meta"><span>'+esc(q.subject||"General")+'</span><span>'+(q.quizType==="subjective"?"SUBJECTIVE":q.quizType==="objective"?"OBJECTIVE":"MIXED TEST")+'</span><span>'+Number(q.questionCount||0)+' प्रश्न</span><span>'+Number(q.duration||0)+' मिनट</span></div><h3>'+esc(q.title)+'</h3>'+action+'</article>';
   }));
   panel("Available Quizzes",'<div class="quiz-window-banner"><span class="eyebrow">EDUFUTURE • LIMITED ATTEMPT WINDOW</span><h2>हर प्रश्नपत्र के लिए 48 घंटे</h2><p>पहले 48 घंटे में attempt करें। Result और सभी की Rank प्रश्नपत्र upload होने के 72 घंटे बाद खुलेंगे।</p></div>'+(cards.length?cards.join(""):"<p>अभी कोई quiz प्रकाशित नहीं है।</p>"));
   const tick=()=>{$("view").querySelectorAll("[data-countdown]").forEach(el=>{const ms=Number(el.dataset.countdown)-Date.now();if(ms<=0){el.textContent="अब उपलब्ध है — पेज refresh करें";return}const h=Math.floor(ms/3600000),m=Math.floor(ms%3600000/60000),sec=Math.floor(ms%60000/1000);el.textContent=h+"घं "+m+"मि "+sec+"से"});};
