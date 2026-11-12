@@ -61,17 +61,24 @@ onAuthStateChanged(auth,async u=>{
   }catch(e){await signOut(u).catch(()=>{});openLogin();msg("Role verification नहीं हो सकी: "+e.message)}
 });
 
-const studentTabs=[["home","Home"],["quiz","Available Quizzes"],["notes","Notes & PYQ"],["leaderboard","Leaderboard"],["results","My Results"],["tasks","Daily Targets"],["planner","Study Routine"],["cards","Flashcards"]];
+const studentTabs=[["home","Dashboard"],["quiz","Available Quizzes"],["notes","Notes & PYQ"],["leaderboard","Leaderboard"],["results","My Results"],["doubts","Doubt Solving"],["tasks","Daily Targets"],["planner","Study Routine"],["cards","Flashcards"]];
 function render(){
-  const tabs=role==="superadmin"?studentTabs.concat([["admin","Admin Dashboard"],["super","Super Admin"]]):role==="admin"?studentTabs.concat([["admin","Admin Dashboard"]]):studentTabs;
+  const tabs=role==="superadmin"?studentTabs.concat([["admin","Admin Dashboard"],["super","Super Admin"]]):role==="admin"?studentTabs.concat([["admin","Admin Dashboard"]]):role==="teacher"?studentTabs.concat([["teacher","Teacher Dashboard"]]):studentTabs;
   $("nav").innerHTML=tabs.map(x=>'<button data-tab="'+x[0]+'" class="'+(tab===x[0]?"active":"")+'">'+x[1]+"</button>").join("");
   $("nav").querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render()});
-  const pages={home:homePage,quiz:quizPage,notes:notesPage,leaderboard:leaderboardPage,results:resultsPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,admin:adminPage,super:superPage};
+  const pages={home:homePage,quiz:quizPage,notes:notesPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,admin:adminPage,super:superPage};
   (pages[tab]||homePage)().catch(e=>panel("त्रुटि",'<p class="error">'+esc(e.message)+"</p>"));
 }
 async function homePage(){
-  const s=await getDocs(query(collection(db,"quizzes"),where("status","==","published")));
-  panel("स्वागत है, "+(user.displayName||"Student"),'<p>EduFuture — U.H.S. Rakasiya Smart Learning Portal</p><div class="grid"><div class="stat"><strong>'+s.size+'</strong><span>Available Quizzes</span></div><div class="stat"><strong>48 घंटे</strong><span>Result auto-release</span></div><div class="stat"><strong>'+role.toUpperCase()+'</strong><span>Verified role</span></div></div><p>Quiz हल करें, Notes पढ़ें और Daily Targets पूरे करें।');
+  const [quizSnap,resultData]=await Promise.all([getDocs(query(collection(db,"quizzes"),where("status","==","published"))),call("getMyResults")]);
+  const released=resultData.results.filter(x=>x.released), tests=resultData.results.length;
+  const marks=released.reduce((n,x)=>n+Number(x.score||0),0), total=released.reduce((n,x)=>n+Number(x.total||0),0);
+  const accuracy=total?Math.round(marks/total*100):0;
+  panel("स्वागत है, "+(user.displayName||"Student"),'<div class="dashboard-hero"><span class="eyebrow">EDUFUTURE • YOUR LEARNING SPACE</span><h2>आज सीखें, कल आगे बढ़ें।</h2><p>अपनी तैयारी, टेस्ट और प्रगति एक ही जगह देखें।</p><button data-goquiz>नया टेस्ट शुरू करें</button></div><div class="grid"><div class="stat"><strong>'+quizSnap.size+'</strong><span>Available Quizzes</span></div><div class="stat"><strong>'+tests+'</strong><span>Tests Attempted</span></div><div class="stat"><strong>'+marks+'/'+total+'</strong><span>Marks Earned</span></div><div class="stat"><strong>'+accuracy+'%</strong><span>Accuracy</span></div></div><div class="dashboard-shortcuts"><button data-godoubts>Ask a Doubt</button><button data-goresults>Test History</button><button data-gonotes>Study Notes</button></div>');
+  $("view").querySelector("[data-goquiz]").onclick=()=>{tab="quiz";render()};
+  $("view").querySelector("[data-godoubts]").onclick=()=>{tab="doubts";render()};
+  $("view").querySelector("[data-goresults]").onclick=()=>{tab="results";render()};
+  $("view").querySelector("[data-gonotes]").onclick=()=>{tab="notes";render()};
 }
 async function quizPage(){
   const s=await getDocs(query(collection(db,"quizzes"),where("status","==","published")));
@@ -122,6 +129,16 @@ async function resultsPage(){
 async function notesPage(){
   const s=await getDocs(query(collection(db,"content"),where("published","==",true)));
   panel("Notes & PYQ",s.empty?"<p>अभी Notes/PYQ उपलब्ध नहीं हैं।</p>":s.docs.map(d=>{const x=d.data();return '<article class="item"><h3>'+esc(x.title)+'</h3><p>'+esc(x.subject)+' • '+esc(x.type)+'</p><p>'+esc(x.description)+'</p><a href="'+esc(x.url)+'" target="_blank" rel="noopener">Open / Download</a></article>'}).join(""));
+}
+async function doubtsPage(){
+  const mine=await call("listDoubts");
+  panel("Doubt Solving",'<div class="doubt-compose"><h3>अपना सवाल पूछें</h3><label>Subject</label><input id="doubtSubject" placeholder="जैसे Science, Maths"><label>Topic (वैकल्पिक)</label><input id="doubtTopic" placeholder="Chapter / Topic"><label>Question</label><textarea id="doubtQuestion" maxlength="5000" placeholder="अपना सवाल विस्तार से लिखें…"></textarea><button id="sendDoubt">Submit Doubt</button></div><h3>मेरे सवाल</h3>'+(mine.doubts.length?mine.doubts.map(x=>'<article class="item"><div class="question-meta"><span>'+esc(x.subject)+'</span><span>'+esc(x.status)+'</span></div><h4>'+esc(x.topic||"General")+'</h4><p>'+esc(x.question)+'</p>'+(x.reply?'<div class="teacher-reply"><b>Teacher Reply</b><p>'+esc(x.reply)+'</p></div>':'<p class="hint">Teacher के जवाब का इंतज़ार है।</p>')+'</article>').join(""):'<p>अभी कोई सवाल नहीं पूछा गया है।</p>'));
+  $("sendDoubt").onclick=async()=>{try{await call("createDoubt",{subject:$("doubtSubject").value.trim(),topic:$("doubtTopic").value.trim(),question:$("doubtQuestion").value.trim()});alertMsg("आपका सवाल Teacher को भेज दिया गया।");doubtsPage()}catch(e){alertMsg(e.message)}};
+}
+async function teacherPage(){
+  const r=await call("listDoubts");
+  panel("Teacher Dashboard",'<div class="dashboard-hero"><span class="eyebrow">EDUFUTURE • TEACHER WORKSPACE</span><h2>Teaching & Doubt Desk</h2><p>Assigned subjects के विद्यार्थियों के सवालों का जवाब दें।</p></div><div class="grid"><div class="stat"><strong>'+r.doubts.length+'</strong><span>Assigned Doubts</span></div><div class="stat"><strong>'+r.doubts.filter(x=>x.status==="open").length+'</strong><span>Pending Replies</span></div></div>'+(r.doubts.length?r.doubts.map(x=>'<article class="item"><div class="question-meta"><span>'+esc(x.subject)+'</span><span>'+esc(x.status)+'</span></div><h3>'+esc(x.studentName||"Student")+'</h3><p>'+esc(x.topic||"General")+'</p><p>'+esc(x.question)+'</p><textarea data-reply="'+esc(x.id)+'" placeholder="अपना जवाब लिखें">'+esc(x.reply||"")+'</textarea><button data-sendreply="'+esc(x.id)+'">Send Reply</button></article>').join(""):'<p>अभी कोई assigned doubt नहीं है।</p>'));
+  $("view").querySelectorAll("[data-sendreply]").forEach(b=>b.onclick=async()=>{try{const id=b.dataset.sendreply;await call("replyDoubt",{id,reply:$("view").querySelector('[data-reply="'+id+'"]').value.trim()});alertMsg("जवाब भेज दिया गया।");teacherPage()}catch(e){alertMsg(e.message)}});
 }
 async function plannerPage(){
   const ref=doc(db,"users",user.uid,"private","planner"),s=await getDoc(ref),d=s.exists()?s.data():{};
