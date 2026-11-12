@@ -269,7 +269,7 @@ async function run(name, req) {
       const snap = await quizRef.collection("leaderboard").orderBy("score", "desc").get();
       const rows = snap.docs.map(x => x.data());
       rows.sort((a, b) => b.score - a.score || (a.submittedAt?.toMillis() || 0) - (b.submittedAt?.toMillis() || 0));
-      return { released: isAdmin || rows.length > 0, rows: rows.map((x, i) => ({ uid: x.uid, name: x.displayName || "Student", score: x.score, total: x.total, pendingReview: x.pendingReview || 0, rank: i + 1 })) };
+      return { released: isAdmin || Date.now() >= releaseAt.toMillis(), releaseAt: releaseAt.toDate().toISOString(), rows: rows.map((x, i) => ({ uid: x.uid, name: x.displayName || "Student", score: x.score, total: x.total, pendingReview: x.pendingReview || 0, rank: i + 1 })) };
     }
     case "getMyResults": {
       const quizzes = await db.collection("quizzes").get();
