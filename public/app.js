@@ -86,12 +86,31 @@ async function homePage(){
 }
 async function quizPage(){
   const s=await getDocs(query(collection(db,"quizzes"),where("status","==","published")));
-  panel("Available Quizzes",'<p class="hint">हर quiz का एक attempt मिलेगा। Result और rank submit करने के 48 घंटे बाद अपने-आप खुलेंगे।</p>'+(s.empty?"<p>अभी कोई quiz प्रकाशित नहीं है।</p>":s.docs.map(d=>'<article class="item"><h3>'+esc(d.data().title)+'</h3><p>'+esc(d.data().subject)+' • '+d.data().duration+' मिनट • '+d.data().questionCount+' प्रश्न</p><button data-start="'+d.id+'">Start Quiz</button></article>').join("")));
+  const cards=await Promise.all(s.docs.map(async d=>{
+    const q=d.data(), attemptSnap=await getDoc(doc(db,"quizzes",d.id,"attempts",user.uid));
+    const attempt=attemptSnap.exists()?attemptSnap.data():null;
+    const closeMs=q.closesAt?.toMillis?.() || (q.publishedAt?.toMillis?.()||0)+48*60*60*1000;
+    const resultMs=q.resultsAt?.toMillis?.() || (q.publishedAt?.toMillis?.()||0)+72*60*60*1000;
+    let action="";
+    if(attempt?.status==="submitted"){
+      action='<div class="quiz-status submitted"><b>✓ Attempt जमा हो चुका है</b><p>Result और Rank जारी होने में <strong data-countdown="'+resultMs+'"></strong></p><small>जारी होने का समय: '+dateText(new Date(resultMs).toISOString())+'</small></div>';
+    }else if(attempt?.status==="started"){
+      action='<div class="quiz-status in-progress"><b>आपका attempt जारी है</b><p>बचा हुआ समय: <strong data-countdown="'+attempt.expiresAt.toMillis()+'"></strong></p><button data-start="'+d.id+'">Continue Quiz</button></div>';
+    }else if(Date.now()>=closeMs){
+      action='<div class="quiz-status unavailable"><b>यह प्रश्नपत्र अब उपलब्ध नहीं है</b><p>Attempt करने की 48 घंटे की अवधि समाप्त हो गई।</p></div>';
+    }else{
+      action='<div class="quiz-status available"><b>अभी उपलब्ध • 48 घंटे तक</b><p>Attempt बंद होने में <strong data-countdown="'+closeMs+'"></strong></p><button data-start="'+d.id+'">Start Quiz</button></div>';
+    }
+    return '<article class="item quiz-window-card"><div class="question-meta"><span>'+esc(q.subject||"General")+'</span><span>'+Number(q.questionCount||0)+' प्रश्न</span><span>'+Number(q.duration||0)+' मिनट</span></div><h3>'+esc(q.title)+'</h3>'+action+'</article>';
+  }));
+  panel("Available Quizzes",'<div class="quiz-window-banner"><span class="eyebrow">EDUFUTURE • LIMITED ATTEMPT WINDOW</span><h2>हर प्रश्नपत्र के लिए 48 घंटे</h2><p>पहले 48 घंटे में attempt करें। Result और सभी की Rank प्रश्नपत्र upload होने के 72 घंटे बाद खुलेंगे।</p></div>'+(cards.length?cards.join(""):"<p>अभी कोई quiz प्रकाशित नहीं है।</p>"));
+  const tick=()=>{$("view").querySelectorAll("[data-countdown]").forEach(el=>{const ms=Number(el.dataset.countdown)-Date.now();if(ms<=0){el.textContent="समय पूरा";return}const h=Math.floor(ms/3600000),m=Math.floor(ms%3600000/60000),sec=Math.floor(ms%60000/1000);el.textContent=h+"घं "+m+"मि "+sec+"से"});};
+  tick();clearInterval(window.quizCountdownTimer);window.quizCountdownTimer=setInterval(tick,1000);
   $("view").querySelectorAll("[data-start]").forEach(b=>b.onclick=()=>startQuiz(b.dataset.start));
 }
 async function startQuiz(id){
   try{
-    const d=await call("startQuiz",{id});activeQuiz={id:id,...d};answers={};const deadline=Date.now()+d.duration*60000;
+    const d=await call("startQuiz",{id});activeQuiz={id:id,...d};answers={};const deadline=new Date(d.expiresAt).getTime();
     function draw(){
       const left=Math.max(0,Math.ceil((deadline-Date.now())/1000));
       $("view").innerHTML='<section class="panel"><h2>'+esc(activeQuiz.title)+'</h2><div class="timer" id="quizClock">'+Math.floor(left/60)+':'+String(left%60).padStart(2,"0")+'</div>'+
@@ -109,12 +128,12 @@ async function submitQuiz(){
   try{
     const r=await call("submitQuiz",{id:q.id,attemptId:q.attemptId,answers:answers});
     activeQuiz=null;
-    panel("Quiz Submitted",'<div class="success-box"><h3>आपका attempt सुरक्षित है।</h3><p>Result और rank 48 घंटे बाद अपने-आप खुलेंगे।</p><p>खुलने का समय: <b>'+dateText(r.releaseAt)+'</b></p></div>');
+    panel("Quiz Submitted",'<div class="success-box"><h3>आपका attempt सुरक्षित है।</h3><p>Result और Rank प्रश्नपत्र upload होने के 72 घंटे बाद खुलेंगे।</p><p>खुलने का समय: <b>'+dateText(r.releaseAt)+'</b></p></div>');
   }catch(e){q.submitting=false;alertMsg(e.message)}
 }
 async function leaderboardPage(){
   const s=await getDocs(query(collection(db,"quizzes"),where("status","==","published")));
-  panel("U.H.S. RAKASIYA KE TUFANO",'<div class="leaderboard-banner"><span class="eyebrow">EDUFUTURE • HALL OF FAME</span><h2>U.H.S. Rakasiya Ke Tufano 🌪️</h2><p>मेहनत से पहचान, प्रदर्शन से सम्मान।</p></div>'+(s.empty?"<p>अभी कोई quiz नहीं है।</p>":s.docs.map(d=>'<article class="leaderboard-quiz"><div><h3>'+esc(d.data().title)+'</h3><p class="hint">48 घंटे बाद जारी होने वाली आधिकारिक रैंकिंग</p></div><button data-rank="'+d.id+'">रैंकिंग देखें</button><div class="leaderboard-output" id="rank-'+d.id+'"></div></article>').join("")));
+  panel("U.H.S. RAKASIYA KE TUFANO",'<div class="leaderboard-banner"><span class="eyebrow">EDUFUTURE • HALL OF FAME</span><h2>U.H.S. Rakasiya Ke Tufano 🌪️</h2><p>मेहनत से पहचान, प्रदर्शन से सम्मान।</p></div>'+(s.empty?"<p>अभी कोई quiz नहीं है।</p>":s.docs.map(d=>'<article class="leaderboard-quiz"><div><h3>'+esc(d.data().title)+'</h3><p class="hint">प्रश्नपत्र upload होने के 72 घंटे बाद जारी होने वाली आधिकारिक रैंकिंग</p></div><button data-rank="'+d.id+'">रैंकिंग देखें</button><div class="leaderboard-output" id="rank-'+d.id+'"></div></article>').join("")));
   $("view").querySelectorAll("[data-rank]").forEach(b=>b.onclick=async()=>{
     const out=$("rank-"+b.dataset.rank);out.innerHTML='<p class="hint">रैंकिंग लोड हो रही है…</p>';
     try{
@@ -129,7 +148,7 @@ async function leaderboardPage(){
 async function resultsPage(){
   const r=await call("getMyResults");
   panel("My Results",r.results.length?r.results.map(x=>{
-    if(!x.released)return '<article class="item"><h3>'+esc(x.title)+'</h3><p class="locked-note">🔒 Result 48 घंटे बाद खुलेगा — '+dateText(x.releaseAt)+'</p></article>';
+    if(!x.released)return '<article class="item"><h3>'+esc(x.title)+'</h3><p class="locked-note">🔒 Result और Rank 72 घंटे बाद खुलेंगे — '+dateText(x.releaseAt)+'</p></article>';
     const correct=x.review.filter(q=>q.type!=="subjective"&&q.isCorrect).length, wrong=x.review.filter(q=>q.type!=="subjective"&&q.selectedAnswer!==null&&!q.isCorrect).length, skipped=x.review.filter(q=>q.selectedAnswer===null||q.selectedAnswer==="").length, pending=x.review.filter(q=>q.type==="subjective"&&q.awardedMarks===null).length;
     const topicMap={};x.review.forEach(q=>{const t=q.topic||"General";if(!topicMap[t])topicMap[t]={total:0,correct:0};topicMap[t].total++;if(q.isCorrect)topicMap[t].correct++});
     const topicHtml=Object.entries(topicMap).map(([t,v])=>'<div class="topic-progress"><span>'+esc(t)+'</span><b>'+v.correct+'/'+v.total+'</b><div><i style="width:'+Math.round(v.correct/v.total*100)+'%"></i></div></div>').join("");
