@@ -23,7 +23,7 @@ async function uploadContentFile(contentId, file) {
   const current = auth.currentUser;
   if (!current) throw new Error("कृपया पहले login करें।");
   const token = await current.getIdToken();
-  const response = await fetch(API_BASE.replace(/\\/+$/, "") + "/api/content-upload/" + encodeURIComponent(contentId), {
+  const response = await fetch(API_BASE.replace(/\/+$/, "") + "/api/content-upload/" + encodeURIComponent(contentId), {
     method: "POST",
     headers: {
       "Authorization": "Bearer " + token,
