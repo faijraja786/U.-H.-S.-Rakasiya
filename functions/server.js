@@ -55,6 +55,8 @@ async function supabaseStorageRequest(endpoint, options = {}) {
   if (!response.ok) {
     const error = new Error(data.message || data.error || "Supabase Storage request failed (" + response.status + ").");
     error.code = response.status === 404 ? "not-found" : "internal";
+    error.status = response.status;
+    error.supabaseCode = typeof data.code === "string" ? data.code : (typeof data.error === "string" ? data.error : null);
     throw error;
   }
   return data;
@@ -579,7 +581,14 @@ app.get("/health/storage", async (_req, res) => {
     await supabaseStorageRequest("/bucket/" + encodeURIComponent(storageBucket), { method: "GET" });
     return res.json({ ok: true, bucket: storageBucket, access: "private server-side" });
   } catch (error) {
-    return res.status(503).json({ ok: false, bucket: storageBucket, message: error.code === "failed-precondition" ? error.message : "Storage health check failed." });
+    return res.status(503).json({
+      ok: false,
+      bucket: storageBucket,
+      message: "Storage health check failed.",
+      upstreamStatus: Number.isInteger(error.status) ? error.status : null,
+      supabaseCode: error.supabaseCode || error.code || "unknown",
+      detail: String(error.message || "Unknown Storage error").slice(0, 180)
+    });
   }
 });
 app.post("/api/content-upload/:id",
