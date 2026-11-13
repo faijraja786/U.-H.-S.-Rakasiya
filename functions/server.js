@@ -649,7 +649,7 @@ async function run(name, req) {
       const difficulty = ["easy","medium","hard"].includes(d.difficulty) ? d.difficulty : "medium";
       const count = Math.min(15, Math.max(1, Number(d.count) || 5));
       if (!className || !subject || !topic) fail("invalid-argument", "Class, Subject और Chapter/Topic भरना जरूरी है।");
-      const model = String(process.env.GEMINI_MODEL || "gemini-2.5-flash").trim();
+      const model = "gemini-3.8-flash";
       const prompt = [
         "Create exactly " + count + " original school-level practice questions.",
         "Class: " + className, "Subject: " + subject, "Chapter/topic: " + topic,
