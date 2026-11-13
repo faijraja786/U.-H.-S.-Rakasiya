@@ -710,6 +710,11 @@ async function run(name, req) {
       const snap = await db.collection("aiQuestionDrafts").orderBy("createdAt", "desc").limit(100).get();
       return { drafts: snap.docs.map(x => ({ id: x.id, ...x.data(), createdAt: x.data().createdAt?.toDate?.().toISOString?.() || null })) };
     }
+    case "listQuestionBank": {
+      await requireAdmin(req);
+      const snap = await db.collection("questionBank").where("status", "==", "approved").orderBy("approvedAt", "desc").limit(100).get();
+      return { questions: snap.docs.map(x => ({ id: x.id, ...x.data(), approvedAt: x.data().approvedAt?.toDate?.().toISOString?.() || null })) };
+    }
     case "reviewQuestionDraft": {
       await requireAdmin(req);
       const id = String(d.id || "");
