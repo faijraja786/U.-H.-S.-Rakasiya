@@ -37,6 +37,26 @@ const storageBucket = process.env.SUPABASE_BUCKET || "learning";
 function storagePathUrl(path) {
   return String(path).split("/").map(encodeURIComponent).join("/");
 }
+
+async function deleteStorageObject(path) {
+  const clean = String(path || "").replace(/^\/+/, "");
+  if (!clean || clean.split("/").some(part => !part || part === "." || part === "..")) return;
+  await supabaseStorageRequest("/object/" + encodeURIComponent(storageBucket), {
+    method: "DELETE", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prefixes: [clean] })
+  });
+}
+async function signedStorageUrl(path, expiresIn = 3600) {
+  const signed = await supabaseStorageRequest("/object/sign/" + encodeURIComponent(storageBucket) + "/" + storagePathUrl(path), {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expiresIn })
+  });
+  const relative = signed.signedURL || signed.signedUrl;
+  if (!relative) fail("internal", "Secure media link नहीं बन सका।");
+  const base = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
+  return /^https?:\/\//i.test(relative) ? relative :
+    (relative.startsWith("/storage/v1/") ? base + relative : base + "/storage/v1" + (relative.startsWith("/") ? relative : "/" + relative));
+}
 async function supabaseStorageRequest(endpoint, options = {}) {
   const base = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
   const secret = process.env.SUPABASE_SECRET_KEY || "";
@@ -398,6 +418,59 @@ async function run(name, req) {
       });
       return { id: ref.id };
     }
+    case "deleteContent": {
+      await requireAdmin(req);
+      const id = String(d.id || "").trim();
+      if (!id) fail("invalid-argument", "Content ID missing.");
+      const ref = db.doc("content/" + id), snap = await ref.get();
+      if (!snap.exists) return { ok: true, alreadyDeleted: true };
+      const path = String(snap.data().storagePath || "");
+      if (path) {
+        const objectPath = path.startsWith("learning/" + id + "/") ? path.slice("learning/".length) : path;
+        if (!objectPath.startsWith(id + "/")) fail("invalid-argument", "Storage path मान्य नहीं है; सुरक्षा के लिए delete रोका गया।");
+        await deleteStorageObject(objectPath);
+      }
+      await ref.delete();
+      return { ok: true };
+    }
+    case "createNotice": {
+      await requireTeacher(req);
+      const id = String(d.id || "").trim(), title = String(d.title || "").trim().slice(0,140);
+      const body = String(d.body || "").trim().slice(0,5000), mediaPath = String(d.mediaPath || "").trim();
+      const mediaType = ["image","video"].includes(d.mediaType) ? d.mediaType : "";
+      if (!/^[A-Za-z0-9_-]{10,100}$/.test(id) || (!title && !body && !mediaPath)) fail("invalid-argument", "Notice में text, photo या video जोड़ें।");
+      if (mediaPath && (!mediaPath.startsWith("notices/" + id + "/") || !mediaType)) fail("invalid-argument", "Notice media path मान्य नहीं है।");
+      await db.doc("notices/" + id).set({ title, body, mediaPath, mediaType, createdBy: uid,
+        createdAt: FieldValue.serverTimestamp(), expiresAt: Timestamp.fromMillis(Date.now()+30*24*60*60*1000) });
+      return { id, expiresAt: new Date(Date.now()+30*24*60*60*1000).toISOString() };
+    }
+    case "listNotices": {
+      const snap = await db.collection("notices").orderBy("createdAt","desc").limit(100).get();
+      const cutoff = Date.now()-30*24*60*60*1000, notices=[];
+      for (const item of snap.docs) {
+        const value=item.data(), created=value.createdAt?.toMillis?.()||0;
+        if (!created || created<cutoff) continue;
+        let mediaUrl="";
+        if(value.mediaPath){try{mediaUrl=await signedStorageUrl(value.mediaPath,3600)}catch(e){console.error("Notice media signing failed:",e.message)}}
+        const role=await roleOf(uid);
+        notices.push({id:item.id,title:value.title||"",body:value.body||"",mediaType:value.mediaType||"",mediaUrl,
+          createdAt:value.createdAt?.toDate?.().toISOString()||null,expiresAt:value.expiresAt?.toDate?.().toISOString()||null,
+          canDelete:value.createdBy===uid||["admin","superadmin"].includes(role)});
+      }
+      return { notices };
+    }
+    case "deleteNotice": {
+      const id=String(d.id||"").trim();
+      if(!id) fail("invalid-argument","Notice ID missing.");
+      const ref=db.doc("notices/"+id), snap=await ref.get();
+      if(!snap.exists) return {ok:true,alreadyDeleted:true};
+      const role=await roleOf(uid);
+      if(snap.data().createdBy!==uid&&!["admin","superadmin"].includes(role)) fail("permission-denied","केवल Notice बनाने वाला Teacher या Admin इसे हटा सकता है।");
+      const path=String(snap.data().mediaPath||"");
+      if(path){if(!path.startsWith("notices/"+id+"/"))fail("invalid-argument","Notice media path मान्य नहीं है।");await deleteStorageObject(path)}
+      await ref.delete();
+      return {ok:true};
+    }
     case "setContentPublished": {
       await requireAdmin(req);
       const id = String(d.id || "");
@@ -631,6 +704,26 @@ app.post("/api/content-upload/:id",
     }
   }
 );
+app.post("/api/notice-upload/:id", express.raw({type:"application/octet-stream",limit:"50mb"}), authenticate, async(req,res)=>{
+  try{
+    const id=String(req.params.id||"");
+    if(!/^[A-Za-z0-9_-]{10,100}$/.test(id))fail("invalid-argument","Notice ID मान्य नहीं है।");
+    await requireTeacher(req);
+    if(!Buffer.isBuffer(req.body)||!req.body.length)fail("invalid-argument","खाली media upload नहीं हो सकता।");
+    if(req.body.length>50*1024*1024)fail("invalid-argument","Photo या video 50 MB से छोटी होनी चाहिए।");
+    const mime=String(req.get("X-File-Type")||"").toLowerCase().split(";")[0];
+    if(!new Set(["image/jpeg","image/png","image/webp","image/gif","video/mp4","video/webm","video/quicktime"]).has(mime))fail("invalid-argument","केवल JPG, PNG, WEBP, GIF, MP4, WEBM या MOV स्वीकार है।");
+    let name=String(req.get("X-File-Name")||"notice-media");try{name=decodeURIComponent(name)}catch{}
+    const safe=name.replace(/[^a-zA-Z0-9._-]/g,"_").slice(-100)||"notice-media";
+    const path="notices/"+id+"/"+Date.now()+"-"+safe;
+    await supabaseStorageRequest("/object/"+encodeURIComponent(storageBucket)+"/"+storagePathUrl(path),{method:"POST",headers:{"Content-Type":mime,"x-upsert":"false"},body:req.body});
+    return res.json({data:{storagePath:path,mediaType:mime.startsWith("video/")?"video":"image"}});
+  }catch(error){
+    const code=error.code||"internal",status=code==="unauthenticated"?401:code==="permission-denied"?403:code==="invalid-argument"?400:code==="failed-precondition"?503:500;
+    if(status>=500&&status!==503)console.error("Notice media upload error:",error);
+    return res.status(status).json({error:{code,message:status>=500&&status!==503?"Notice media upload नहीं हो सका।":error.message}});
+  }
+});
 app.post("/api/:name", authenticate, async (req, res) => {
   try {
     const data = await run(req.params.name, req);
