@@ -360,13 +360,19 @@ async function aiQuestionBankPage(){
     const [pendingResult,approvedResult]=await Promise.allSettled([call("listQuestionDrafts"),call("listQuestionBank")]);
     const pending=pendingResult.status==="fulfilled"?pendingResult.value:null;
     const approved=approvedResult.status==="fulfilled"?approvedResult.value:null;
-    $("aiPending").innerHTML=pending?(pending.drafts||[]).filter(x=>x.status==="pending").map(q=>{
-      const id=esc(q.id), mcq=q.type==="objective";
-      return '<article class="item"><div class="question-meta"><span>'+esc(q.className)+'</span><span>'+esc(q.subject)+'</span><span>'+esc(q.difficulty)+'</span></div><p class="hint">'+esc(q.topic)+' • '+(mcq?"MCQ":"Subjective")+'</p><label>Question (review/edit)</label><textarea rows="3" data-ai-text="'+id+'">'+esc(q.text)+'</textarea>'+
-        (mcq?'<label>Options (one per line)</label><textarea rows="4" data-ai-options="'+id+'">'+esc((q.options||[]).join("\n"))+'</textarea><label>Correct Option</label><select data-ai-answer="'+id+'">'+(q.options||[]).map((v,i)=>'<option value="'+i+'" '+(Number(q.answer)===i?"selected":"")+'>'+String.fromCharCode(65+i)+' — '+esc(v)+'</option>').join("")+'</select>':'<label>Model Answer (review/edit)</label><textarea rows="3" data-ai-model="'+id+'">'+esc(q.modelAnswer||"")+'</textarea>')+
-        '<label>Explanation (optional)</label><textarea rows="2" data-ai-explanation="'+id+'">'+esc(q.explanation||"")+'</textarea><div class="overview-actions"><button data-ai-approve="'+id+'">Approve to Question Bank</button><button class="secondary" data-ai-reject="'+id+'">Reject</button></div></article>';
-    }).join(""):'<div class="empty-state">अभी कोई Pending AI प्रश्न नहीं है।</div>':'<div class="error">Pending Draft लोड नहीं हुए: '+esc(pendingResult.reason?.message||"अज्ञात त्रुटि")+'</div>';
-    $("aiApproved").innerHTML=approved?(approved.questions||[]).length?approved.questions.map(q=>'<article class="item"><div class="question-meta"><span>'+esc(q.className)+'</span><span>'+esc(q.subject)+'</span><span>'+esc(q.difficulty)+'</span></div><b>'+esc(q.text)+'</b><p class="hint">'+esc(q.topic)+' • '+(q.type==="objective"?"MCQ":"Subjective")+'</p>'+(q.type==="objective"?'<ol type="A">'+(q.options||[]).map((x,i)=>'<li>'+esc(x)+(i===q.answer?' ✓ सही उत्तर':'')+'</li>').join("")+'</ol>':'<p><b>Model Answer:</b> '+esc(q.modelAnswer||"")+'</p>')+'</article>').join(""):'<div class="empty-state">अभी Question Bank में कोई approved प्रश्न नहीं है।</div>':'<div class="error">Question Bank लोड नहीं हुआ: '+esc(approvedResult.reason?.message||"अज्ञात त्रुटि")+'</div>';
+    const pendingHtml=pendingResult.status==="fulfilled"
+      ? ((pending.drafts||[]).filter(x=>x.status==="pending").map(q=>{
+          const id=esc(q.id),mcq=q.type==="objective";
+          return '<article class="item"><div class="question-meta"><span>'+esc(q.className)+'</span><span>'+esc(q.subject)+'</span><span>'+esc(q.difficulty)+'</span></div><p class="hint">'+esc(q.topic)+' • '+(mcq?"MCQ":"Subjective")+'</p><label>Question (review/edit)</label><textarea rows="3" data-ai-text="'+id+'">'+esc(q.text)+'</textarea>'+
+            (mcq?'<label>Options (one per line)</label><textarea rows="4" data-ai-options="'+id+'">'+esc((q.options||[]).join("\n"))+'</textarea><label>Correct Option</label><select data-ai-answer="'+id+'">'+(q.options||[]).map((v,k)=>'<option value="'+k+'" '+(Number(q.answer)===k?"selected":"")+'>'+String.fromCharCode(65+k)+' — '+esc(v)+'</option>').join("")+'</select>':'<label>Model Answer (review/edit)</label><textarea rows="3" data-ai-model="'+id+'">'+esc(q.modelAnswer||"")+'</textarea>')+
+            '<label>Explanation (optional)</label><textarea rows="2" data-ai-explanation="'+id+'">'+esc(q.explanation||"")+'</textarea><div class="overview-actions"><button data-ai-approve="'+id+'">Approve to Question Bank</button><button class="secondary" data-ai-reject="'+id+'">Reject</button></div></article>';
+        }).join("")||'<div class="empty-state">अभी कोई Pending AI प्रश्न नहीं है।</div>')
+      : '<div class="error">Pending Draft लोड नहीं हुए: '+esc(pendingResult.reason?.message||"अज्ञात त्रुटि")+'</div>';
+    const approvedHtml=approvedResult.status==="fulfilled"
+      ? ((approved.questions||[]).map(q=>'<article class="item"><div class="question-meta"><span>'+esc(q.className)+'</span><span>'+esc(q.subject)+'</span><span>'+esc(q.difficulty)+'</span></div><b>'+esc(q.text)+'</b><p class="hint">'+esc(q.topic)+' • '+(q.type==="objective"?"MCQ":"Subjective")+'</p>'+(q.type==="objective"?'<ol type="A">'+(q.options||[]).map((x,k)=>'<li>'+esc(x)+(k===q.answer?' ✓ सही उत्तर':'')+'</li>').join("")+'</ol>':'<p><b>Model Answer:</b> '+esc(q.modelAnswer||"")+'</p>')+'</article>').join("")||'<div class="empty-state">अभी Question Bank में कोई approved प्रश्न नहीं है।</div>')
+      : '<div class="error">Question Bank लोड नहीं हुआ: '+esc(approvedResult.reason?.message||"अज्ञात त्रुटि")+'</div>';
+    $("aiPending").innerHTML=pendingHtml;
+    $("aiApproved").innerHTML=approvedHtml;
     $("view").querySelectorAll("[data-ai-approve]").forEach(b=>b.onclick=async()=>{
       const id=b.dataset.aiApprove;
       try{
