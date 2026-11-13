@@ -113,6 +113,10 @@ async function requireTeacher(req, subject) {
   return true;
 }
 
+function normalizeClassName(value) {
+  return String(value || "").toLowerCase().replace(/^(class|कक्षा)\s*/i, "").replace(/[^\p{L}\p{N}]/gu, "");
+}
+
 async function setRole(uid, role, extra = {}) {
   const user = await auth.getUser(uid);
   await db.doc("roles/" + uid).set({
@@ -732,8 +736,10 @@ async function run(name, req) {
     }
     case "listQuestionBank": {
       await requireAdmin(req);
-      const snap = await db.collection("questionBank").where("status", "==", "approved").orderBy("approvedAt", "desc").limit(100).get();
-      return { questions: snap.docs.map(x => ({ id: x.id, ...x.data(), approvedAt: x.data().approvedAt?.toDate?.().toISOString?.() || null })) };
+      const snap = await db.collection("questionBank").where("status", "==", "approved").limit(100).get();
+      const questions = snap.docs.map(x => ({ id: x.id, ...x.data(), approvedAt: x.data().approvedAt?.toDate?.().toISOString?.() || null }));
+      questions.sort((a, b) => String(b.approvedAt || "").localeCompare(String(a.approvedAt || "")));
+      return { questions };
     }
     case "reviewQuestionDraft": {
       await requireAdmin(req);
