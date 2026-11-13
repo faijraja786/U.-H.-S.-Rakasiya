@@ -514,14 +514,15 @@ async function run(name, req) {
       await requireAdmin(req);
       const email = String(d.email || "").trim().toLowerCase();
       const subjects = Array.isArray(d.subjects) ? [...new Set(d.subjects.map(x => String(x).trim()).filter(Boolean))].slice(0,30) : [];
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !subjects.length) fail("invalid-argument", "Teacher का registered email और कम-से-कम एक subject दें।");
+      const classes = Array.isArray(d.classes) ? [...new Set(d.classes.map(x => String(x).trim()).filter(Boolean))].slice(0,30) : [];
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !subjects.length || !classes.length) fail("invalid-argument", "Teacher का registered email, कम-से-कम एक subject और assigned class देना जरूरी है।");
       let target;
       try { target = await auth.getUserByEmail(email); } catch { fail("not-found", "पहले इस email से Teacher account बनवाएँ।"); }
       const targetRole = await roleOf(target.uid);
       if (["admin", "superadmin"].includes(targetRole)) fail("failed-precondition", "Admin या Super Admin को Teacher में नहीं बदला जा सकता।");
       await setRole(target.uid, "teacher", { assignedBy: uid });
-      await db.doc("teacherAssignments/" + target.uid).set({ subjects, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid }, { merge: true });
-      return { ok: true, uid: target.uid, subjects };
+      await db.doc("teacherAssignments/" + target.uid).set({ subjects, classes, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid }, { merge: true });
+      return { ok: true, uid: target.uid, subjects, classes };
     }
     case "createDoubt": {
       const question = String(d.question || "").trim();
@@ -564,8 +565,14 @@ async function run(name, req) {
     }
     case "listTeacherStudents": {
       await requireTeacher(req);
+      const assignment = await db.doc("teacherAssignments/" + uid).get();
+      const assignedClasses = assignment.exists ? (assignment.data().classes || []) : [];
+      if (!assignedClasses.length) return { students: [], assignedClasses: [] };
+      const allowed = new Set(assignedClasses.map(normalizeClassName));
       const snap = await db.collection("roles").where("role","==","student").limit(500).get();
-      return { students: snap.docs.map(x=>({uid:x.id,email:x.data().email||"",displayName:x.data().displayName||"",className:x.data().className||""})) };
+      const students = snap.docs.filter(x => allowed.has(normalizeClassName(x.data().className)))
+        .map(x=>({uid:x.id,email:x.data().email||"",displayName:x.data().displayName||"",className:x.data().className||""}));
+      return { students, assignedClasses };
     }
     case "listSubjectiveSubmissions": {
       const role = await roleOf(uid);
