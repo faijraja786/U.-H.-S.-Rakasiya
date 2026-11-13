@@ -18,6 +18,26 @@ service cloud.firestore {
         && userRole() in ['admin', 'superadmin'];
     }
 
+    function studentClassMatchesQuiz(quiz) {
+      let quizClass = quiz.get('className', '');
+      let rolePath = /databases/$(database)/documents/roles/$(request.auth.uid);
+      return exists(rolePath)
+        && (
+          quizClass == ''
+          || quizClass in ['all', 'All', 'general', 'General', 'सभी']
+          || quizClass == get(rolePath).data.get('className', '')
+        );
+    }
+
+    function canReadQuizQuestions(quizId) {
+      let quiz = get(/databases/$(database)/documents/quizzes/$(quizId)).data;
+      return signedIn()
+        && (
+          isAdmin()
+          || (quiz.status == 'published' && studentClassMatchesQuiz(quiz))
+        );
+    }
+
     // USER ROLES
     match /roles/{uid} {
       allow read: if signedIn()
@@ -35,14 +55,8 @@ service cloud.firestore {
 
       // PUBLIC QUESTIONS
       match /publicQuestions/{questionId} {
-        allow read: if signedIn()
-          && (
-            isAdmin()
-            || get(
-              /databases/$(database)/documents/quizzes/$(quizId)
-            ).data.status == 'published'
-          );
-
+        // A student may read questions only for their own class (or general quizzes).
+        allow read: if canReadQuizQuestions(quizId);
         allow write: if false;
       }
 
