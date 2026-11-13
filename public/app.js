@@ -250,7 +250,7 @@ async function submitQuiz(){
 }
 async function leaderboardPage(){
   const s=await getDocs(query(collection(db,"quizzes"),where("status","==","published")));
-  panel("Objective & Subjective Rankings",'<div class="leaderboard-banner"><span class="eyebrow">EDUFUTURE • HALL OF FAME</span><h2>U.H.S. Rakasiya Ke Tufano 🌪️</h2><p>Objective और Subjective की अलग-अलग आधिकारिक रैंकिंग।</p></div>'+(s.empty?"<p>अभी कोई quiz नहीं है।</p>":s.docs.map(d=>'<article class="leaderboard-quiz"><div><h3>'+esc(d.data().title)+'</h3><p class="hint">'+(d.data().quizType==="subjective"?"Subjective Written Test":d.data().quizType==="objective"?"Objective MCQ Test":"Objective + Subjective Test")+'</p></div><div class="rank-actions"><button data-rank="'+d.id+'" data-rank-type="objective">Objective Rank</button><button class="secondary" data-rank="'+d.id+'" data-rank-type="subjective">Subjective Rank</button></div><div class="leaderboard-output" id="rank-'+d.id+'-objective"></div><div class="leaderboard-output" id="rank-'+d.id+'-subjective"></div></article>').join("")));
+  panel("Objective & Subjective Rankings",'<div class="leaderboard-banner"><span class="eyebrow">EDUFUTURE • HALL OF FAME</span><h2>आपकी मेहनत, आपकी पहचान</h2><p>हर Quiz में अपनी रैंक और कुल प्रतिभागियों की संख्या देखें।</p></div>'+(s.empty?"<p>अभी कोई quiz नहीं है।</p>":s.docs.map(d=>'<article class="leaderboard-quiz"><div><h3>'+esc(d.data().title)+'</h3><p class="hint">'+(d.data().quizType==="subjective"?"Subjective Written Test":d.data().quizType==="objective"?"Objective MCQ Test":"Objective + Subjective Test")+'</p></div><div class="rank-actions"><button data-rank="'+d.id+'" data-rank-type="objective">Objective Rank</button><button class="secondary" data-rank="'+d.id+'" data-rank-type="subjective">Subjective Rank</button></div><div class="leaderboard-output" id="rank-'+d.id+'-objective"></div><div class="leaderboard-output" id="rank-'+d.id+'-subjective"></div></article>').join("")));
   $("view").querySelectorAll("[data-rank]").forEach(b=>b.onclick=async()=>{
     const id=b.dataset.rank,type=b.dataset.rankType,out=$("rank-"+id+"-"+type);
     $("view").querySelectorAll("#rank-"+id+"-objective,#rank-"+id+"-subjective").forEach(x=>{if(x!==out)x.innerHTML=""});
@@ -260,7 +260,9 @@ async function leaderboardPage(){
       if(!r.released){out.innerHTML='<div class="locked-note">🔒 '+(type==="subjective"?"Teacher अभी written answers जाँच रहे हैं। सभी जाँच पूरी होने और result खुलने के बाद Subjective Rank दिखाई देगी।":"Objective Rank निर्धारित समय पर खुलेगी।")+' '+(r.releaseAt?'समय: '+dateText(r.releaseAt):"")+'</div>';return}
       if(!r.rows.length){out.innerHTML='<p>अभी कोई result उपलब्ध नहीं है।</p>';return}
       const medals=["🥇","🥈","🥉"];
-      out.innerHTML='<h4>'+(type==="objective"?"Objective Ranking":"Subjective Ranking")+'</h4><div class="podium">'+r.rows.slice(0,3).map((x,i)=>'<div class="podium-card podium-'+(i+1)+'"><span class="medal">'+medals[i]+'</span><strong>#'+x.rank+'</strong><b>'+esc(x.name)+'</b><small>'+x.score+'/'+x.total+' अंक</small></div>').join("")+'</div><div class="rank-table">'+r.rows.map(x=>'<div class="rank-row '+(x.uid===user.uid?'my-rank':'')+'"><b class="rank-number">#'+x.rank+'</b><span class="rank-name">'+esc(x.name)+(x.uid===user.uid?' <em>YOU</em>':'')+'</span><strong>'+x.score+'/'+x.total+'</strong><span class="rank-percent">'+Math.round(x.total?x.score/x.total*100:0)+'%</span></div>').join("")+'</div>';
+      const mine=r.rows.find(x=>x.uid===user.uid);
+      const rankSummary='<div class="rank-summary"><b>कुल विद्यार्थी: '+r.rows.length+'</b>'+(mine?'<span>आपकी रैंक: #'+mine.rank+' / '+r.rows.length+'</span>':'<span>आपने अभी यह Quiz Attempt नहीं किया है।</span>')+'</div>';
+      out.innerHTML=rankSummary+'<h4>'+(type==="objective"?"Objective Ranking":"Subjective Ranking")+'</h4><div class="podium">'+r.rows.slice(0,3).map((x,i)=>'<div class="podium-card podium-'+(i+1)+'"><span class="medal">'+medals[i]+'</span><strong>#'+x.rank+'</strong><b>'+esc(x.name)+'</b><small>'+x.score+'/'+x.total+' अंक</small></div>').join("")+'</div><div class="rank-table">'+r.rows.map(x=>'<div class="rank-row '+(x.uid===user.uid?'my-rank':'')+'"><b class="rank-number">#'+x.rank+'</b><span class="rank-name">'+esc(x.name)+(x.uid===user.uid?' <em>YOU</em>':'')+'</span><strong>'+x.score+'/'+x.total+'</strong><span class="rank-percent">'+Math.round(x.total?x.score/x.total*100:0)+'%</span></div>').join("")+'</div>';
     }catch(e){out.textContent=e.message}
   });
 }
@@ -414,18 +416,18 @@ async function createQuizPage(){
       $("addQuestion").onclick=()=>{if(questions.length>=2000)return alertMsg("एक Quiz में अधिकतम 2000 प्रश्न जोड़ सकते हैं।");questions.push(blank());draw();$("view").querySelector(".question-stack .builder-question:last-child")?.scrollIntoView({behavior:"smooth",block:"start"})};
       $("publishQuiz").onclick=async()=>{
         const button=$("publishQuiz"),status=$("publishStatus");
-        const cleaned=questions.map((q,i)=>{
-          if(!q.text.trim())throw new Error("प्रश्न "+(i+1)+" खाली है।");
-          if(!Number.isInteger(Number(q.marks))||Number(q.marks)<1||Number(q.marks)>100)throw new Error("प्रश्न "+(i+1)+" के अंक जाँचें।");
-          if(objective&&(q.options.length!==4||q.options.some(v=>!String(v).trim())))throw new Error("प्रश्न "+(i+1)+" के चारों विकल्प भरें।");
-          if(objective&&(!Number.isInteger(q.answer)||q.answer<0||q.answer>3))throw new Error("प्रश्न "+(i+1)+" का सही उत्तर चुनें।");
-          return {...q,type:quizType,options:objective?q.options:[],answer:objective?q.answer:null,marks:Number(q.marks)};
-        });
-        if(!cleaned.length)return alertMsg("कम-से-कम एक प्रश्न जोड़ें।");
-        if(!window.confirm("क्या आप "+cleaned.length+" प्रश्नों वाला यह Quiz Publish करना चाहते हैं?"))return;
-        if(!window.confirm("अंतिम पुष्टि: Publish होने के बाद विद्यार्थी इसे देख और निर्धारित समय में Attempt कर सकेंगे। क्या आप निश्चित हैं?"))return;
-        button.disabled=true;status.textContent="Quiz सुरक्षित रूप से publish हो रहा है…";
         try{
+          const cleaned=questions.map((q,i)=>{
+            if(!q.text.trim())throw new Error("प्रश्न "+(i+1)+" खाली है।");
+            if(!Number.isInteger(Number(q.marks))||Number(q.marks)<1||Number(q.marks)>100)throw new Error("प्रश्न "+(i+1)+" के अंक जाँचें।");
+            if(objective&&(q.options.length!==4||q.options.some(v=>!String(v).trim())))throw new Error("प्रश्न "+(i+1)+" के चारों विकल्प भरें।");
+            if(objective&&(!Number.isInteger(q.answer)||q.answer<0||q.answer>3))throw new Error("प्रश्न "+(i+1)+" का सही उत्तर चुनें।");
+            return {...q,type:quizType,options:objective?q.options:[],answer:objective?q.answer:null,marks:Number(q.marks)};
+          });
+          if(!cleaned.length)throw new Error("कम-से-कम एक प्रश्न जोड़ें।");
+          if(!window.confirm("क्या आप "+cleaned.length+" प्रश्नों वाला यह Quiz Publish करना चाहते हैं?"))return;
+          if(!window.confirm("अंतिम पुष्टि: Publish होने के बाद विद्यार्थी इसे देख और निर्धारित समय में Attempt कर सकेंगे। क्या आप निश्चित हैं?"))return;
+          button.disabled=true;status.textContent="Quiz सुरक्षित रूप से publish हो रहा है…";
           const result=await call("saveQuiz",{title:meta.topic+" - "+(objective?"Objective":"Subjective")+" Quiz",className:meta.className,subject:meta.subject,topic:meta.topic,duration:meta.duration,questions:cleaned,quizType,publish:true});
           alertMsg("Quiz Publish हो गया। "+result.questionCount+" प्रश्न • कुल "+result.totalMarks+" अंक");
           tab="admin";render();
