@@ -307,6 +307,14 @@ async function run(name, req) {
       const answers = d.answers && typeof d.answers === "object" && !Array.isArray(d.answers) ? d.answers : {};
       if (!quizId || attemptId !== uid) fail("invalid-argument", "Quiz attempt मान्य नहीं है।");
       const quizRef = db.doc("quizzes/" + quizId);
+      const quizSnap = await quizRef.get();
+      if (!quizSnap.exists || quizSnap.data().status !== "published") fail("not-found", "Quiz उपलब्ध नहीं है।");
+      const quizData = quizSnap.data();
+      const profileSnap = await db.doc("roles/" + uid).get();
+      const studentClass = profileSnap.exists ? profileSnap.data().className : "";
+      const quizClass = String(quizData.className || "").trim();
+      const generalClass = !quizClass || ["all", "general", "सभी"].includes(quizClass.toLowerCase());
+      if (!generalClass && normalizeClassName(studentClass) !== normalizeClassName(quizClass)) fail("permission-denied", "यह Quiz आपकी कक्षा के लिए नहीं है।");
       const attemptRef = quizRef.collection("attempts").doc(uid);
       const [answerSnap, questionSnap] = await Promise.all([
         quizRef.collection("privateAnswers").get(),
@@ -328,7 +336,6 @@ async function run(name, req) {
         }
       });
       const userRecord = await auth.getUser(uid);
-      const quizData = (await quizRef.get()).data();
       const releaseAt = quizData.resultsAt || Timestamp.fromMillis((quizData.publishedAt?.toMillis?.() || Date.now()) + 72 * 60 * 60 * 1000);
       const totalMarks = Number(quizData.totalMarks || questionSnap.docs.reduce((n,x)=>n+Number(x.data().marks||1),0));
       await db.runTransaction(async tx => {
@@ -351,6 +358,7 @@ async function run(name, req) {
       const requesterRole = await roleOf(uid);
       const isAdmin = ["admin", "superadmin"].includes(requesterRole);
       const quizData = quiz.data();
+      if (requesterRole === "student" && quizData.status !== "published") fail("not-found", "Quiz उपलब्ध नहीं है।");
       if (requesterRole === "student") {
         const profile = await db.doc("roles/" + uid).get();
         const studentClass = profile.exists ? profile.data().className : "";
