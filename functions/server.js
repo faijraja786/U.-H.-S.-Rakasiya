@@ -135,10 +135,28 @@ async function run(name, req) {
         const snap = await tx.get(ref);
         if (!snap.exists) tx.create(ref, {
           role: "student", email: (req.user.email || "").toLowerCase(),
-          displayName: req.user.name || "", createdAt: FieldValue.serverTimestamp()
+          displayName: req.user.name || "", className: "", createdAt: FieldValue.serverTimestamp()
         });
+        else if (!snap.data().displayName && req.user.name) tx.set(ref, {
+          displayName: req.user.name, email: (req.user.email || "").toLowerCase(),
+          updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
       });
       return { role: await roleOf(uid) };
+    }
+    case "saveStudentProfile": {
+      const currentRole = await roleOf(uid);
+      if (currentRole !== "student") fail("permission-denied", "केवल Student अपना profile पूरा कर सकता है।");
+      const displayName = String(d.displayName || "").trim().replace(/\\s+/g, " ").slice(0, 80);
+      const className = String(d.className || "").trim().slice(0, 30);
+      if (displayName.length < 2 || !className) fail("invalid-argument", "पूरा नाम और कक्षा भरना जरूरी है।");
+      await auth.updateUser(uid, { displayName });
+      await db.doc("roles/" + uid).set({
+        role: "student", email: (req.user.email || "").toLowerCase(),
+        displayName, className, profileCompleted: true,
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+      return { ok: true, displayName, className };
     }
     case "bootstrapFirstAdmin": {
       const email = (req.user.email || "").toLowerCase();
@@ -486,7 +504,7 @@ async function run(name, req) {
     case "listStudents": {
       await requireAdmin(req);
       const snap = await db.collection("roles").where("role", "==", "student").limit(500).get();
-      return { students: snap.docs.map(x => ({ uid: x.id, email: x.data().email || "", displayName: x.data().displayName || "" })) };
+      return { students: snap.docs.map(x => ({ uid: x.id, email: x.data().email || "", displayName: x.data().displayName || "", className: x.data().className || "" })) };
     }
     case "assignTeacher": {
       await requireAdmin(req);
@@ -505,8 +523,10 @@ async function run(name, req) {
       const question = String(d.question || "").trim();
       const subject = String(d.subject || "").trim();
       if (!question || question.length > 5000 || !subject) fail("invalid-argument", "Subject और doubt लिखें (अधिकतम 5000 अक्षर)।");
+      const profileSnap = await db.doc("roles/" + uid).get();
+      const studentName = profileSnap.exists ? (profileSnap.data().displayName || req.user.name || req.user.email || "Student") : (req.user.name || req.user.email || "Student");
       const ref = await db.collection("doubts").add({
-        uid, studentName: req.user.name || req.user.email || "Student",
+        uid, studentName,
         subject, topic: String(d.topic || "").trim(), question,
         status: "open", createdAt: FieldValue.serverTimestamp()
       });
@@ -541,7 +561,7 @@ async function run(name, req) {
     case "listTeacherStudents": {
       await requireTeacher(req);
       const snap = await db.collection("roles").where("role","==","student").limit(500).get();
-      return { students: snap.docs.map(x=>({uid:x.id,email:x.data().email||"",displayName:x.data().displayName||""})) };
+      return { students: snap.docs.map(x=>({uid:x.id,email:x.data().email||"",displayName:x.data().displayName||"",className:x.data().className||""})) };
     }
     case "listSubjectiveSubmissions": {
       const role = await roleOf(uid);
