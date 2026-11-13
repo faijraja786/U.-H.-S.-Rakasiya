@@ -460,6 +460,7 @@ async function run(name, req) {
       return { notices };
     }
     case "deleteNotice": {
+      await requireTeacher(req);
       const id=String(d.id||"").trim();
       if(!id) fail("invalid-argument","Notice ID missing.");
       const ref=db.doc("notices/"+id), snap=await ref.get();
