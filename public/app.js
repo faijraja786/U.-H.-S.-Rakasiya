@@ -110,7 +110,7 @@ function render(){
   if(role==="teacher")tabs=[["home","Home"],["notices","Important Notice"],["teacher","Teacher Workspace"]];
   if(role==="admin")tabs=[["home","Home"],["notices","Important Notice"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"]];
   if(role==="superadmin")tabs=[["home","Home"],["notices","Important Notice"],["overview","Overview"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"],["super","Super Admin"]];
-  const pages={overview:superOverviewPage,home:role==="superadmin"?superHomePage:homePage,notices:importantNoticesPage,quiz:quizPage,notes:notesPage,pyq:pyqPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,admin:adminPage,createquiz:createQuizPage,objectivebuilder:()=>quizBuilderPage("objective"),subjectivebuilder:()=>quizBuilderPage("subjective"),notesupload:()=>contentUploadPage("note"),pyqupload:()=>contentUploadPage("pyq"),super:superPage};
+  const pages={overview:superOverviewPage,home:role==="superadmin"?superHomePage:homePage,notices:importantNoticesPage,quiz:quizPage,notes:notesPage,pyq:pyqPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,admin:adminPage,aiquestions:aiQuestionBankPage,createquiz:createQuizPage,objectivebuilder:()=>quizBuilderPage("objective"),subjectivebuilder:()=>quizBuilderPage("subjective"),notesupload:()=>contentUploadPage("note"),pyqupload:()=>contentUploadPage("pyq"),super:superPage};
   // Internal workflow pages are intentionally not sidebar items. Keep them routable.
   if(!tabs.some(x=>x[0]===tab)&&!pages[tab])tab=tabs[0][0];
   $("nav").innerHTML='<div class="nav-section-label">MENU</div>'+tabs.map(x=>'<button data-tab="'+x[0]+'" class="nav-link '+(tab===x[0]?"active":"")+'"><span class="nav-icon">'+({overview:"◈",home:"⌂",notices:"📢",quiz:"▤",notes:"▧",leaderboard:"♛",results:"◷",doubts:"✉",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜"}[x[0]]||"•")+'</span><span>'+x[1]+"</span></button>").join("");
@@ -301,13 +301,60 @@ async function cardsPage(){
 }
 async function adminPage(){
   if(role!=="admin"&&role!=="superadmin")return;
-  panel("Admin Dashboard",'<div class="admin-welcome"><span class="eyebrow">EDUFUTURE • CONTROL CENTER</span><h2>Learning Management</h2><p>Quiz बनाएं, Notes और PYQ अलग-अलग upload करें और learning activities manage करें।</p></div><div class="admin-action-grid"><button class="admin-action-card" data-admin-go="createquiz"><span>＋</span><b>Create Quiz</b><small>Objective या Subjective चुनें</small></button><button class="admin-action-card" data-admin-go="notesupload"><span>▤</span><b>Upload Notes</b><small>Notes अलग से publish करें</small></button><button class="admin-action-card" data-admin-go="pyqupload"><span>▧</span><b>Upload PYQ</b><small>Previous year papers अलग रखें</small></button><button class="admin-action-card" data-admin-go="teacher"><span>♙</span><b>Teacher Workspace</b><small>Written answers और doubts जाँचें</small></button></div><section class="item"><h3>Teacher Assignment</h3><label>Registered Teacher Email</label><input id="teacherEmail" type="email" placeholder="teacher@example.com"><label>Assigned Subjects (comma separated)</label><input id="teacherSubjects" placeholder="Maths, Science"><button id="assignTeacher">Assign Teacher</button></section><section class="item"><h3>Student Management</h3><button id="loadStudents" class="secondary">View Students</button><div id="studentList"></div></section><section class="item"><h3>Quiz Results</h3><div id="adminResults">Loading quizzes…</div></section>');
+  panel("Admin Dashboard",'<div class="admin-welcome"><span class="eyebrow">EDUFUTURE • CONTROL CENTER</span><h2>Learning Management</h2><p>Quiz बनाएं, Notes और PYQ अलग-अलग upload करें और learning activities manage करें।</p></div><div class="admin-action-grid"><button class="admin-action-card" data-admin-go="createquiz"><span>＋</span><b>Create Quiz</b><small>Objective या Subjective चुनें</small></button><button class="admin-action-card" data-admin-go="notesupload"><span>▤</span><b>Upload Notes</b><small>Notes अलग से publish करें</small></button><button class="admin-action-card" data-admin-go="pyqupload"><span>▧</span><b>Upload PYQ</b><small>Previous year papers अलग रखें</small></button><button class="admin-action-card" data-admin-go="teacher"><span>♙</span><b>Teacher Workspace</b><small>Written answers और doubts जाँचें</small></button><button class="admin-action-card" data-admin-go="aiquestions"><span>✦</span><b>AI Question Generator</b><small>Gemini से प्रश्न बनाएं और approve करें</small></button></div><section class="item"><h3>Teacher Assignment</h3><label>Registered Teacher Email</label><input id="teacherEmail" type="email" placeholder="teacher@example.com"><label>Assigned Subjects (comma separated)</label><input id="teacherSubjects" placeholder="Maths, Science"><button id="assignTeacher">Assign Teacher</button></section><section class="item"><h3>Student Management</h3><button id="loadStudents" class="secondary">View Students</button><div id="studentList"></div></section><section class="item"><h3>Quiz Results</h3><div id="adminResults">Loading quizzes…</div></section>');
   $("view").querySelectorAll("[data-admin-go]").forEach(b=>b.onclick=()=>{tab=b.dataset.adminGo;render()});
   $("assignTeacher").onclick=async()=>{try{const subjects=$("teacherSubjects").value.split(",").map(x=>x.trim()).filter(Boolean);await call("assignTeacher",{email:$("teacherEmail").value.trim(),subjects});alertMsg("Teacher assign हो गया।");$("teacherEmail").value="";$("teacherSubjects").value=""}catch(e){alertMsg(e.message)}};
   $("loadStudents").onclick=async()=>{try{const r=await call("listStudents");$("studentList").innerHTML=r.students.length?r.students.map(x=>"<p>"+esc(x.displayName||x.email||x.uid)+"</p>").join(""):"<p>कोई student record नहीं मिला।</p>"}catch(e){$("studentList").textContent=e.message}};
   const snap=await getDocs(collection(db,"quizzes"));
   $("adminResults").innerHTML=snap.empty?"<p>अभी कोई Quiz नहीं है।</p>":snap.docs.map(d=>'<div class="admin-row"><span>'+esc(d.data().title)+'</span><button data-admin-result="'+d.id+'">View Results</button></div><div id="admin-result-'+d.id+'"></div>').join("");
   $("adminResults").querySelectorAll("[data-admin-result]").forEach(b=>b.onclick=async()=>{const out=$("admin-result-"+b.dataset.adminResult);out.textContent="Loading…";try{const r=await call("getLeaderboard",{id:b.dataset.adminResult});out.innerHTML=r.rows.length?"<ol>"+r.rows.map(x=>"<li>"+esc(x.name)+" — "+x.score+"/"+x.total+(x.pendingReview?" • Subjective pending":"")+"</li>").join("")+"</ol>":"<p>अभी कोई submitted result नहीं है।</p>"}catch(e){out.textContent=e.message}});
+}
+
+async function aiQuestionBankPage(){
+  if(role!=="admin"&&role!=="superadmin")return;
+  panel("AI Question Generator",'<button class="text-button" id="aiBack">← Admin Dashboard</button><div class="dashboard-hero"><span class="eyebrow">EDUFUTURE • GEMINI AI</span><h2>AI से प्रश्न बनाएं</h2><p>AI के बनाए प्रश्न पहले Pending में आएँगे। जाँच और Approve करने के बाद ही वे Question Bank में जुड़ेंगे।</p></div><section class="item"><div class="builder-meta-grid"><div><label>Class</label><input id="aiClass" placeholder="जैसे Class 10"></div><div><label>Subject</label><input id="aiSubject" placeholder="जैसे Science"></div><div><label>Chapter / Topic</label><input id="aiTopic" placeholder="जैसे प्रकाश और परावर्तन"></div><div><label>Question Type</label><select id="aiType"><option value="objective">MCQ</option><option value="subjective">Subjective</option></select></div><div><label>Difficulty</label><select id="aiDifficulty"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select></div><div><label>Number of Questions (1–15)</label><input id="aiCount" type="number" min="1" max="15" value="5"></div></div><button id="aiGenerate" class="success-action">✦ Generate Questions</button><span id="aiStatus" class="hint"></span></section><h3>Pending Review</h3><div id="aiPending">Loading pending questions…</div><h3>Approved Question Bank</h3><div id="aiApproved">Loading approved questions…</div>');
+  $("aiBack").onclick=()=>{tab="admin";render()};
+  async function loadLists(){
+    const [pending,approved]=await Promise.all([call("listQuestionDrafts"),call("listQuestionBank")]);
+    $("aiPending").innerHTML=pending.drafts.length?pending.drafts.filter(x=>x.status==="pending").map(q=>{
+      const id=esc(q.id), mcq=q.type==="objective";
+      return '<article class="item"><div class="question-meta"><span>'+esc(q.className)+'</span><span>'+esc(q.subject)+'</span><span>'+esc(q.difficulty)+'</span></div><p class="hint">'+esc(q.topic)+' • '+(mcq?"MCQ":"Subjective")+'</p><label>Question (review/edit)</label><textarea rows="3" data-ai-text="'+id+'">'+esc(q.text)+'</textarea>'+
+        (mcq?'<label>Options (one per line)</label><textarea rows="4" data-ai-options="'+id+'">'+esc((q.options||[]).join("\n"))+'</textarea><label>Correct Option</label><select data-ai-answer="'+id+'">'+(q.options||[]).map((v,i)=>'<option value="'+i+'" '+(Number(q.answer)===i?"selected":"")+'>'+String.fromCharCode(65+i)+' — '+esc(v)+'</option>').join("")+'</select>':'<label>Model Answer (review/edit)</label><textarea rows="3" data-ai-model="'+id+'">'+esc(q.modelAnswer||"")+'</textarea>')+
+        '<label>Explanation (optional)</label><textarea rows="2" data-ai-explanation="'+id+'">'+esc(q.explanation||"")+'</textarea><div class="overview-actions"><button data-ai-approve="'+id+'">Approve to Question Bank</button><button class="secondary" data-ai-reject="'+id+'">Reject</button></div></article>';
+    }).join(""):'<div class="empty-state">अभी कोई Pending AI प्रश्न नहीं है।</div>';
+    $("aiApproved").innerHTML=approved.questions.length?approved.questions.map(q=>'<article class="item"><div class="question-meta"><span>'+esc(q.className)+'</span><span>'+esc(q.subject)+'</span><span>'+esc(q.difficulty)+'</span></div><b>'+esc(q.text)+'</b><p class="hint">'+esc(q.topic)+' • '+(q.type==="objective"?"MCQ":"Subjective")+'</p>'+(q.type==="objective"?'<ol type="A">'+(q.options||[]).map((x,i)=>'<li>'+esc(x)+(i===q.answer?' ✓ सही उत्तर':'')+'</li>').join("")+'</ol>':'<p><b>Model Answer:</b> '+esc(q.modelAnswer||"")+'</p>')+'</article>').join(""):'<div class="empty-state">अभी Question Bank में कोई approved प्रश्न नहीं है।</div>';
+    $("view").querySelectorAll("[data-ai-approve]").forEach(b=>b.onclick=async()=>{
+      const id=b.dataset.aiApprove;
+      try{
+        const question={text:$("view").querySelector('[data-ai-text="'+id+'"]').value,explanation:$("view").querySelector('[data-ai-explanation="'+id+'"]').value};
+        const card=b.closest(".item");
+        const optionsField=card.querySelector("[data-ai-options]");
+        if(optionsField){question.options=optionsField.value.split("\n").map(x=>x.trim()).filter(Boolean);question.answer=Number(card.querySelector("[data-ai-answer]").value)}
+        else question.modelAnswer=card.querySelector("[data-ai-model]").value;
+        b.disabled=true;
+        await call("reviewQuestionDraft",{id,decision:"approve",question});
+        alertMsg("प्रश्न जाँचकर Question Bank में जोड़ दिया गया।");
+        await loadLists();
+      }catch(e){b.disabled=false;alertMsg(e.message)}
+    });
+    $("view").querySelectorAll("[data-ai-reject]").forEach(b=>b.onclick=async()=>{
+      if(!window.confirm("क्या इस AI प्रश्न को Reject करना है?"))return;
+      try{await call("reviewQuestionDraft",{id:b.dataset.aiReject,decision:"reject"});await loadLists()}catch(e){alertMsg(e.message)}
+    });
+  }
+  $("aiGenerate").onclick=async()=>{
+    const button=$("aiGenerate"),status=$("aiStatus");
+    const count=Number($("aiCount").value);
+    if(!Number.isInteger(count)||count<1||count>15){alertMsg("1 से 15 प्रश्न चुनें।");return}
+    button.disabled=true;status.textContent="Gemini AI प्रश्न तैयार कर रहा है…";
+    try{
+      const result=await call("generateQuestionDraft",{className:$("aiClass").value.trim(),subject:$("aiSubject").value.trim(),topic:$("aiTopic").value.trim(),type:$("aiType").value,difficulty:$("aiDifficulty").value,count});
+      status.textContent=(result.drafts?.length||0)+" प्रश्न Pending Review में आए।";
+      await loadLists();
+    }catch(e){status.textContent=e.message}
+    finally{button.disabled=false}
+  };
+  try{await loadLists()}catch(e){$("aiPending").textContent=e.message;$("aiApproved").textContent="Question Bank लोड नहीं हो सका।"}
 }
 async function createQuizPage(){
   if(role!=="admin"&&role!=="superadmin")return;
