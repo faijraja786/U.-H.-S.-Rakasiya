@@ -267,6 +267,15 @@ async function run(name, req) {
       const quizSnap = await quizRef.get();
       if (!quizSnap.exists || quizSnap.data().status !== "published") fail("not-found", "Quiz उपलब्ध नहीं है।");
       const quiz = quizSnap.data();
+      if (await roleOf(uid) === "student") {
+        const profileSnap = await db.doc("roles/" + uid).get();
+        const studentClass = profileSnap.exists ? profileSnap.data().className : "";
+        const quizClass = String(quiz.className || "").trim();
+        const generalClass = !quizClass || ["all", "general", "सभी"].includes(quizClass.toLowerCase());
+        if (!generalClass && normalizeClassName(studentClass) !== normalizeClassName(quizClass)) {
+          fail("permission-denied", "यह Quiz आपकी कक्षा के लिए नहीं है।");
+        }
+      }
       const closesAtMs = quiz.closesAt?.toMillis?.() || (quiz.publishedAt?.toMillis?.() || 0) + 48 * 60 * 60 * 1000;
       const attemptRef = quizRef.collection("attempts").doc(uid);
       let attemptData = null;
@@ -527,13 +536,20 @@ async function run(name, req) {
     case "createDoubt": {
       const question = String(d.question || "").trim();
       const subject = String(d.subject || "").trim();
+      const requestId = String(d.requestId || "");
+      if (!/^[A-Za-z0-9_-]{12,100}$/.test(requestId)) fail("invalid-argument", "Doubt request ID मान्य नहीं है।");
       if (!question || question.length > 5000 || !subject) fail("invalid-argument", "Subject और doubt लिखें (अधिकतम 5000 अक्षर)।");
       const profileSnap = await db.doc("roles/" + uid).get();
       const studentName = profileSnap.exists ? (profileSnap.data().displayName || req.user.name || req.user.email || "Student") : (req.user.name || req.user.email || "Student");
-      const ref = await db.collection("doubts").add({
-        uid, studentName, studentClass: profileSnap.exists ? (profileSnap.data().className || "") : "",
-        subject, topic: String(d.topic || "").trim(), question,
-        status: "open", createdAt: FieldValue.serverTimestamp()
+      const ref = db.collection("doubts").doc(uid + "_" + requestId);
+      await db.runTransaction(async tx => {
+        const existing = await tx.get(ref);
+        if (existing.exists) return;
+        tx.create(ref, {
+          uid, studentName, studentClass: profileSnap.exists ? (profileSnap.data().className || "") : "",
+          subject, topic: String(d.topic || "").trim(), question,
+          status: "open", createdAt: FieldValue.serverTimestamp()
+        });
       });
       return { id: ref.id };
     }
