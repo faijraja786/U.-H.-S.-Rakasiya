@@ -637,6 +637,118 @@ async function run(name, req) {
       await quizRef.collection("leaderboard").doc(attemptUid).update({ score: finalScore, subjectiveScore, pendingReview });
       return { ok: true, updated: Boolean(previousGrade), pendingReview, score: finalScore, subjectiveScore };
     }
+
+    case "generateQuestionDraft": {
+      await requireAdmin(req);
+      const apiKey = String(process.env.GEMINI_API_KEY || "").trim();
+      if (!apiKey) fail("failed-precondition", "Gemini API Key अभी Render Environment में configure नहीं है।");
+      const className = String(d.className || "").trim().slice(0, 40);
+      const subject = String(d.subject || "").trim().slice(0, 80);
+      const topic = String(d.topic || "").trim().slice(0, 160);
+      const type = d.type === "subjective" ? "subjective" : "objective";
+      const difficulty = ["easy","medium","hard"].includes(d.difficulty) ? d.difficulty : "medium";
+      const count = Math.min(15, Math.max(1, Number(d.count) || 5));
+      if (!className || !subject || !topic) fail("invalid-argument", "Class, Subject और Chapter/Topic भरना जरूरी है।");
+      const model = String(process.env.GEMINI_MODEL || "gemini-2.5-flash").trim();
+      const prompt = [
+        "Create exactly " + count + " original school-level practice questions.",
+        "Class: " + className, "Subject: " + subject, "Chapter/topic: " + topic,
+        "Difficulty: " + difficulty, "Question type: " + type,
+        "Return ONLY a JSON array. Every item must have keys: text, options, answer, modelAnswer, explanation, marks, difficulty, topic.",
+        type === "objective"
+          ? "For each item, options must be exactly four short strings and answer must be a zero-based integer from 0 to 3. modelAnswer must be an empty string."
+          : "For each item, options must be an empty array, answer must be null, and modelAnswer must contain a concise correct reference answer.",
+        "Use clear age-appropriate Hindi. Do not include markdown fences. Ensure the answer is factually accurate."
+      ].join("\n");
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent?key=" + encodeURIComponent(apiKey), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json", temperature: 0.35 }
+        })
+      });
+      const raw = await response.text();
+      let payload = {};
+      try { payload = raw ? JSON.parse(raw) : {}; } catch {}
+      if (!response.ok) {
+        const detail = payload.error?.message || "Gemini API request असफल रही (" + response.status + ").";
+        const err = new Error(detail.slice(0, 500));
+        err.code = response.status === 429 ? "resource-exhausted" : response.status === 400 ? "invalid-argument" : "failed-precondition";
+        throw err;
+      }
+      const generatedText = payload.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("") || "";
+      let generated;
+      try { generated = JSON.parse(generatedText); } catch { fail("internal", "AI का उत्तर सही JSON में नहीं आया। फिर से कोशिश करें।"); }
+      if (!Array.isArray(generated) || generated.length !== count) fail("internal", "AI ने अपेक्षित संख्या में प्रश्न नहीं बनाए। फिर से कोशिश करें।");
+      const batch = db.batch();
+      const drafts = [];
+      generated.forEach((q, index) => {
+        const text = String(q.text || "").trim().slice(0, 3000);
+        const options = type === "objective" && Array.isArray(q.options) ? q.options.slice(0,4).map(x => String(x || "").trim().slice(0,500)) : [];
+        const answer = type === "objective" ? Number(q.answer) : null;
+        if (!text || (type === "objective" && (options.length !== 4 || options.some(x => !x) || !Number.isInteger(answer) || answer < 0 || answer > 3))) {
+          fail("internal", "AI से मिला प्रश्न " + (index + 1) + " जाँच में असफल रहा। दोबारा Generate करें।");
+        }
+        const ref = db.collection("aiQuestionDrafts").doc();
+        const draft = {
+          className, subject, topic, type, difficulty,
+          text, options, answer,
+          modelAnswer: type === "subjective" ? String(q.modelAnswer || "").trim().slice(0,5000) : "",
+          explanation: String(q.explanation || "").trim().slice(0,2000),
+          marks: Math.min(20, Math.max(1, Number(q.marks) || 1)),
+          status: "pending", createdBy: uid, createdAt: FieldValue.serverTimestamp()
+        };
+        batch.set(ref, draft);
+        drafts.push({ id: ref.id, ...draft, createdAt: null });
+      });
+      await batch.commit();
+      return { drafts };
+    }
+    case "listQuestionDrafts": {
+      await requireAdmin(req);
+      const snap = await db.collection("aiQuestionDrafts").orderBy("createdAt", "desc").limit(100).get();
+      return { drafts: snap.docs.map(x => ({ id: x.id, ...x.data(), createdAt: x.data().createdAt?.toDate?.().toISOString?.() || null })) };
+    }
+    case "reviewQuestionDraft": {
+      await requireAdmin(req);
+      const id = String(d.id || "");
+      const decision = d.decision === "approve" ? "approve" : d.decision === "reject" ? "reject" : "";
+      if (!id || !decision) fail("invalid-argument", "Draft और review action जरूरी हैं।");
+      const ref = db.doc("aiQuestionDrafts/" + id);
+      const snap = await ref.get();
+      if (!snap.exists || snap.data().status !== "pending") fail("not-found", "यह pending AI draft नहीं मिला।");
+      if (decision === "reject") {
+        await ref.update({ status: "rejected", reviewedBy: uid, reviewedAt: FieldValue.serverTimestamp() });
+        return { ok: true, status: "rejected" };
+      }
+      const original = snap.data();
+      const edited = d.question && typeof d.question === "object" ? d.question : {};
+      const text = String(edited.text ?? original.text).trim().slice(0,3000);
+      const type = original.type === "subjective" ? "subjective" : "objective";
+      const options = type === "objective" ? (Array.isArray(edited.options) ? edited.options : original.options).slice(0,4).map(x=>String(x||"").trim().slice(0,500)) : [];
+      const answer = type === "objective" ? Number(edited.answer ?? original.answer) : null;
+      const modelAnswer = type === "subjective" ? String(edited.modelAnswer ?? original.modelAnswer ?? "").trim().slice(0,5000) : "";
+      if (!text || (type === "objective" && (options.length !== 4 || options.some(x=>!x) || !Number.isInteger(answer) || answer<0 || answer>3))) fail("invalid-argument", "Approve करने से पहले प्रश्न, चारों विकल्प और सही उत्तर जाँचें।");
+      if (type === "subjective" && !modelAnswer) fail("invalid-argument", "Subjective प्रश्न का Model Answer भरें।");
+      const bankRef = db.collection("questionBank").doc();
+      const bankQuestion = {
+        className: original.className, subject: original.subject, topic: original.topic,
+        type, difficulty: original.difficulty, text, options, answer, modelAnswer,
+        explanation: String(edited.explanation ?? original.explanation ?? "").trim().slice(0,2000),
+        marks: Math.min(20,Math.max(1,Number(edited.marks ?? original.marks)||1)),
+        status: "approved", source: "gemini", sourceDraftId: id,
+        createdBy: original.createdBy, approvedBy: uid,
+        createdAt: FieldValue.serverTimestamp(), approvedAt: FieldValue.serverTimestamp()
+      };
+      await db.runTransaction(async tx => {
+        const current = await tx.get(ref);
+        if (!current.exists || current.data().status !== "pending") fail("already-exists", "इस Draft की review पहले हो चुकी है।");
+        tx.create(bankRef, bankQuestion);
+        tx.update(ref, { status: "approved", reviewedBy: uid, reviewedAt: FieldValue.serverTimestamp(), questionBankId: bankRef.id, reviewedQuestion: { text, options, answer, modelAnswer, explanation: bankQuestion.explanation, marks: bankQuestion.marks } });
+      });
+      return { ok: true, status: "approved", questionBankId: bankRef.id };
+    }
     default:
       fail("not-found", "Unknown API action.");
   }
