@@ -53,9 +53,11 @@ service cloud.firestore {
 
       // QUIZ ATTEMPTS
       match /attempts/{attemptId} {
+        // Allow reading the student's own attempt even before it exists.
         allow read: if signedIn()
           && (
             isAdmin()
+            || attemptId == request.auth.uid
             || resource.data.uid == request.auth.uid
           );
 
