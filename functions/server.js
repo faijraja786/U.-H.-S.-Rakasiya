@@ -588,11 +588,15 @@ async function run(name, req) {
     }
     case "listTeacherStudents": {
       await requireTeacher(req);
+      const currentRole = await roleOf(uid);
+      const snap = await db.collection("roles").where("role","==","student").limit(500).get();
+      if (["admin", "superadmin"].includes(currentRole)) {
+        return { students: snap.docs.map(x=>({uid:x.id,email:x.data().email||"",displayName:x.data().displayName||"",className:x.data().className||""})), assignedClasses: [] };
+      }
       const assignment = await db.doc("teacherAssignments/" + uid).get();
       const assignedClasses = assignment.exists ? (assignment.data().classes || []) : [];
       if (!assignedClasses.length) return { students: [], assignedClasses: [] };
       const allowed = new Set(assignedClasses.map(normalizeClassName));
-      const snap = await db.collection("roles").where("role","==","student").limit(500).get();
       const students = snap.docs.filter(x => allowed.has(normalizeClassName(x.data().className)))
         .map(x=>({uid:x.id,email:x.data().email||"",displayName:x.data().displayName||"",className:x.data().className||""}));
       return { students, assignedClasses };
