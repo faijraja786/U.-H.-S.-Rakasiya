@@ -178,11 +178,19 @@ async function homePage(){
   $("view").querySelector("[data-open-notices]")?.addEventListener("click",()=>{tab="notices";render()});
 }
 async function quizPage(){
-  const s=await getDocs(query(collection(db,"quizzes"),where("status","==","published")));
+  const [s,profileSnap]=await Promise.all([
+    getDocs(query(collection(db,"quizzes"),where("status","==","published"))),
+    getDoc(doc(db,"roles",user.uid))
+  ]);
+  const studentClass=String(profileSnap.exists()?profileSnap.data().className||"": "").toLowerCase().replace(/^(class|कक्षा)\s*/i,"").replace(/[^\p{L}\p{N}]/gu,"");
   const activeDocs=s.docs.filter(d=>{
     const q=d.data(), published=q.publishedAt?.toMillis?.()||0;
     const release=q.resultsAt?.toMillis?.()||published+72*60*60*1000;
-    return !release||Date.now()<release;
+    const quizClass=String(q.className||"").trim();
+    const generalClass=!quizClass||["all","general","सभी"].includes(quizClass.toLowerCase());
+    const normalizedQuizClass=quizClass.toLowerCase().replace(/^(class|कक्षा)\s*/i,"").replace(/[^\p{L}\p{N}]/gu,"");
+    const matchesClass=generalClass||(studentClass&&studentClass===normalizedQuizClass);
+    return matchesClass&&(!release||Date.now()<release);
   });
   const cards=await Promise.all(activeDocs.map(async d=>{
     const q=d.data(), attemptSnap=await getDoc(doc(db,"quizzes",d.id,"attempts",user.uid));
@@ -287,7 +295,16 @@ async function pyqPage(){return contentLibraryPage("pyq","Previous Year Question
 async function doubtsPage(){
   const mine=await call("listDoubts");
   panel("Doubt Solving",'<div class="doubt-compose"><h3>अपना सवाल पूछें</h3><label>Subject</label><input id="doubtSubject" placeholder="जैसे Science, Maths"><label>Topic (वैकल्पिक)</label><input id="doubtTopic" placeholder="Chapter / Topic"><label>Question</label><textarea id="doubtQuestion" maxlength="5000" placeholder="अपना सवाल विस्तार से लिखें…"></textarea><button id="sendDoubt">Submit Doubt</button></div><h3>मेरे सवाल</h3>'+(mine.doubts.length?mine.doubts.map(x=>'<article class="item"><div class="question-meta"><span>'+esc(x.subject)+'</span><span>'+esc(x.status)+'</span></div><h4>'+esc(x.topic||"General")+'</h4><p>'+esc(x.question)+'</p>'+(x.reply?'<div class="teacher-reply"><b>Teacher Reply</b><p>'+esc(x.reply)+'</p></div>':'<p class="hint">Teacher के जवाब का इंतज़ार है।</p>')+'</article>').join(""):'<p>अभी कोई सवाल नहीं पूछा गया है।</p>'));
-  $("sendDoubt").onclick=async()=>{try{await call("createDoubt",{subject:$("doubtSubject").value.trim(),topic:$("doubtTopic").value.trim(),question:$("doubtQuestion").value.trim()});alertMsg("आपका सवाल Teacher को भेज दिया गया।");doubtsPage()}catch(e){alertMsg(e.message)}};
+  $("sendDoubt").onclick=async()=>{
+    const button=$("sendDoubt"),subject=$("doubtSubject").value.trim(),topic=$("doubtTopic").value.trim(),question=$("doubtQuestion").value.trim();
+    if(button.disabled)return;
+    button.disabled=true;
+    try{
+      const requestId=window.crypto?.randomUUID?window.crypto.randomUUID():("doubt_"+Date.now()+"_"+Math.random().toString(36).slice(2));
+      await call("createDoubt",{requestId,subject,topic,question});
+      alertMsg("आपका सवाल Teacher को भेज दिया गया।");doubtsPage();
+    }catch(e){alertMsg(e.message);button.disabled=false}
+  };
 }
 async function teacherPage(cursor=null, quizId=null, attemptCursor=null){
   const [r,graded,students]=await Promise.all([
@@ -325,9 +342,9 @@ async function cardsPage(){
 }
 async function adminPage(){
   if(role!=="admin"&&role!=="superadmin")return;
-  panel("Admin Dashboard",'<div class="admin-welcome"><span class="eyebrow">EDUFUTURE • CONTROL CENTER</span><h2>Learning Management</h2><p>Quiz बनाएं, Notes और PYQ अलग-अलग upload करें और learning activities manage करें।</p></div><div class="admin-action-grid"><button class="admin-action-card" data-admin-go="createquiz"><span>＋</span><b>Create Quiz</b><small>Objective या Subjective चुनें</small></button><button class="admin-action-card" data-admin-go="notesupload"><span>▤</span><b>Upload Notes</b><small>Notes अलग से publish करें</small></button><button class="admin-action-card" data-admin-go="pyqupload"><span>▧</span><b>Upload PYQ</b><small>Previous year papers अलग रखें</small></button><button class="admin-action-card" data-admin-go="teacher"><span>♙</span><b>Teacher Workspace</b><small>Written answers और doubts जाँचें</small></button><button class="admin-action-card" data-admin-go="aiquestions"><span>✦</span><b>AI Question Generator</b><small>Gemini से प्रश्न बनाएं और approve करें</small></button></div><section class="item"><h3>Teacher Assignment</h3><label>Registered Teacher Email</label><input id="teacherEmail" type="email" placeholder="teacher@example.com"><label>Assigned Subjects (comma separated)</label><input id="teacherSubjects" placeholder="Maths, Science"><button id="assignTeacher">Assign Teacher</button></section><section class="item"><h3>Student Management</h3><button id="loadStudents" class="secondary">View Students</button><div id="studentList"></div></section><section class="item"><h3>Quiz Results</h3><div id="adminResults">Loading quizzes…</div></section>');
+  panel("Admin Dashboard",'<div class="admin-welcome"><span class="eyebrow">EDUFUTURE • CONTROL CENTER</span><h2>Learning Management</h2><p>Quiz बनाएं, Notes और PYQ अलग-अलग upload करें और learning activities manage करें।</p></div><div class="admin-action-grid"><button class="admin-action-card" data-admin-go="createquiz"><span>＋</span><b>Create Quiz</b><small>Objective या Subjective चुनें</small></button><button class="admin-action-card" data-admin-go="notesupload"><span>▤</span><b>Upload Notes</b><small>Notes अलग से publish करें</small></button><button class="admin-action-card" data-admin-go="pyqupload"><span>▧</span><b>Upload PYQ</b><small>Previous year papers अलग रखें</small></button><button class="admin-action-card" data-admin-go="teacher"><span>♙</span><b>Teacher Workspace</b><small>Written answers और doubts जाँचें</small></button><button class="admin-action-card" data-admin-go="aiquestions"><span>✦</span><b>AI Question Generator</b><small>Gemini से प्रश्न बनाएं और approve करें</small></button></div><section class="item"><h3>Teacher Assignment</h3><label>Registered Teacher Email</label><input id="teacherEmail" type="email" placeholder="teacher@example.com"><label>Assigned Subjects (comma separated)</label><input id="teacherSubjects" placeholder="Maths, Science"><label>Assigned Classes (comma separated)</label><input id="teacherClasses" placeholder="Class 9, Class 10"><button id="assignTeacher">Assign Teacher</button></section><section class="item"><h3>Student Management</h3><button id="loadStudents" class="secondary">View Students</button><div id="studentList"></div></section><section class="item"><h3>Quiz Results</h3><div id="adminResults">Loading quizzes…</div></section>');
   $("view").querySelectorAll("[data-admin-go]").forEach(b=>b.onclick=()=>{tab=b.dataset.adminGo;render()});
-  $("assignTeacher").onclick=async()=>{try{const subjects=$("teacherSubjects").value.split(",").map(x=>x.trim()).filter(Boolean);await call("assignTeacher",{email:$("teacherEmail").value.trim(),subjects});alertMsg("Teacher assign हो गया।");$("teacherEmail").value="";$("teacherSubjects").value=""}catch(e){alertMsg(e.message)}};
+  $("assignTeacher").onclick=async()=>{try{const subjects=$("teacherSubjects").value.split(",").map(x=>x.trim()).filter(Boolean),classes=$("teacherClasses").value.split(",").map(x=>x.trim()).filter(Boolean);await call("assignTeacher",{email:$("teacherEmail").value.trim(),subjects,classes});alertMsg("Teacher को चुने गए subjects और classes assign हो गए।");$("teacherEmail").value="";$("teacherSubjects").value="";$("teacherClasses").value=""}catch(e){alertMsg(e.message)}};
   $("loadStudents").onclick=async()=>{try{const r=await call("listStudents");$("studentList").innerHTML=r.students.length?r.students.map(x=>"<p>"+esc(x.displayName||x.email||x.uid)+" • "+esc(x.className||"कक्षा नहीं भरी")+"</p>").join(""):"<p>कोई student record नहीं मिला।</p>"}catch(e){$("studentList").textContent=e.message}};
   $("loadStudents").click();
   const snap=await getDocs(collection(db,"quizzes"));
@@ -340,14 +357,22 @@ async function aiQuestionBankPage(){
   panel("AI Question Generator",'<button class="text-button" id="aiBack">← Admin Dashboard</button><div class="dashboard-hero"><span class="eyebrow">EDUFUTURE • GEMINI AI</span><h2>AI से प्रश्न बनाएं</h2><p>AI के बनाए प्रश्न पहले Pending में आएँगे। जाँच और Approve करने के बाद ही वे Question Bank में जुड़ेंगे।</p></div><section class="item"><div class="builder-meta-grid"><div><label>Class</label><input id="aiClass" placeholder="जैसे Class 10"></div><div><label>Subject</label><input id="aiSubject" placeholder="जैसे Science"></div><div><label>Chapter / Topic</label><input id="aiTopic" placeholder="जैसे प्रकाश और परावर्तन"></div><div><label>Question Type</label><select id="aiType"><option value="objective">MCQ</option><option value="subjective">Subjective</option></select></div><div><label>Difficulty</label><select id="aiDifficulty"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select></div><div><label>Number of Questions (1–15)</label><input id="aiCount" type="number" min="1" max="15" value="5"></div></div><button id="aiGenerate" class="success-action">✦ Generate Questions</button><span id="aiStatus" class="hint"></span></section><h3>Pending Review</h3><div id="aiPending">Loading pending questions…</div><h3>Approved Question Bank</h3><div id="aiApproved">Loading approved questions…</div>');
   $("aiBack").onclick=()=>{tab="admin";render()};
   async function loadLists(){
-    const [pending,approved]=await Promise.all([call("listQuestionDrafts"),call("listQuestionBank")]);
-    $("aiPending").innerHTML=pending.drafts.length?pending.drafts.filter(x=>x.status==="pending").map(q=>{
-      const id=esc(q.id), mcq=q.type==="objective";
-      return '<article class="item"><div class="question-meta"><span>'+esc(q.className)+'</span><span>'+esc(q.subject)+'</span><span>'+esc(q.difficulty)+'</span></div><p class="hint">'+esc(q.topic)+' • '+(mcq?"MCQ":"Subjective")+'</p><label>Question (review/edit)</label><textarea rows="3" data-ai-text="'+id+'">'+esc(q.text)+'</textarea>'+
-        (mcq?'<label>Options (one per line)</label><textarea rows="4" data-ai-options="'+id+'">'+esc((q.options||[]).join("\n"))+'</textarea><label>Correct Option</label><select data-ai-answer="'+id+'">'+(q.options||[]).map((v,i)=>'<option value="'+i+'" '+(Number(q.answer)===i?"selected":"")+'>'+String.fromCharCode(65+i)+' — '+esc(v)+'</option>').join("")+'</select>':'<label>Model Answer (review/edit)</label><textarea rows="3" data-ai-model="'+id+'">'+esc(q.modelAnswer||"")+'</textarea>')+
-        '<label>Explanation (optional)</label><textarea rows="2" data-ai-explanation="'+id+'">'+esc(q.explanation||"")+'</textarea><div class="overview-actions"><button data-ai-approve="'+id+'">Approve to Question Bank</button><button class="secondary" data-ai-reject="'+id+'">Reject</button></div></article>';
-    }).join(""):'<div class="empty-state">अभी कोई Pending AI प्रश्न नहीं है।</div>';
-    $("aiApproved").innerHTML=approved.questions.length?approved.questions.map(q=>'<article class="item"><div class="question-meta"><span>'+esc(q.className)+'</span><span>'+esc(q.subject)+'</span><span>'+esc(q.difficulty)+'</span></div><b>'+esc(q.text)+'</b><p class="hint">'+esc(q.topic)+' • '+(q.type==="objective"?"MCQ":"Subjective")+'</p>'+(q.type==="objective"?'<ol type="A">'+(q.options||[]).map((x,i)=>'<li>'+esc(x)+(i===q.answer?' ✓ सही उत्तर':'')+'</li>').join("")+'</ol>':'<p><b>Model Answer:</b> '+esc(q.modelAnswer||"")+'</p>')+'</article>').join(""):'<div class="empty-state">अभी Question Bank में कोई approved प्रश्न नहीं है।</div>';
+    const [pendingResult,approvedResult]=await Promise.allSettled([call("listQuestionDrafts"),call("listQuestionBank")]);
+    const pending=pendingResult.status==="fulfilled"?pendingResult.value:null;
+    const approved=approvedResult.status==="fulfilled"?approvedResult.value:null;
+    const pendingHtml=pendingResult.status==="fulfilled"
+      ? ((pending.drafts||[]).filter(x=>x.status==="pending").map(q=>{
+          const id=esc(q.id),mcq=q.type==="objective";
+          return '<article class="item"><div class="question-meta"><span>'+esc(q.className)+'</span><span>'+esc(q.subject)+'</span><span>'+esc(q.difficulty)+'</span></div><p class="hint">'+esc(q.topic)+' • '+(mcq?"MCQ":"Subjective")+'</p><label>Question (review/edit)</label><textarea rows="3" data-ai-text="'+id+'">'+esc(q.text)+'</textarea>'+
+            (mcq?'<label>Options (one per line)</label><textarea rows="4" data-ai-options="'+id+'">'+esc((q.options||[]).join("\n"))+'</textarea><label>Correct Option</label><select data-ai-answer="'+id+'">'+(q.options||[]).map((v,k)=>'<option value="'+k+'" '+(Number(q.answer)===k?"selected":"")+'>'+String.fromCharCode(65+k)+' — '+esc(v)+'</option>').join("")+'</select>':'<label>Model Answer (review/edit)</label><textarea rows="3" data-ai-model="'+id+'">'+esc(q.modelAnswer||"")+'</textarea>')+
+            '<label>Explanation (optional)</label><textarea rows="2" data-ai-explanation="'+id+'">'+esc(q.explanation||"")+'</textarea><div class="overview-actions"><button data-ai-approve="'+id+'">Approve to Question Bank</button><button class="secondary" data-ai-reject="'+id+'">Reject</button></div></article>';
+        }).join("")||'<div class="empty-state">अभी कोई Pending AI प्रश्न नहीं है।</div>')
+      : '<div class="error">Pending Draft लोड नहीं हुए: '+esc(pendingResult.reason?.message||"अज्ञात त्रुटि")+'</div>';
+    const approvedHtml=approvedResult.status==="fulfilled"
+      ? ((approved.questions||[]).map(q=>'<article class="item"><div class="question-meta"><span>'+esc(q.className)+'</span><span>'+esc(q.subject)+'</span><span>'+esc(q.difficulty)+'</span></div><b>'+esc(q.text)+'</b><p class="hint">'+esc(q.topic)+' • '+(q.type==="objective"?"MCQ":"Subjective")+'</p>'+(q.type==="objective"?'<ol type="A">'+(q.options||[]).map((x,k)=>'<li>'+esc(x)+(k===q.answer?' ✓ सही उत्तर':'')+'</li>').join("")+'</ol>':'<p><b>Model Answer:</b> '+esc(q.modelAnswer||"")+'</p>')+'</article>').join("")||'<div class="empty-state">अभी Question Bank में कोई approved प्रश्न नहीं है।</div>')
+      : '<div class="error">Question Bank लोड नहीं हुआ: '+esc(approvedResult.reason?.message||"अज्ञात त्रुटि")+'</div>';
+    $("aiPending").innerHTML=pendingHtml;
+    $("aiApproved").innerHTML=approvedHtml;
     $("view").querySelectorAll("[data-ai-approve]").forEach(b=>b.onclick=async()=>{
       const id=b.dataset.aiApprove;
       try{
@@ -379,7 +404,7 @@ async function aiQuestionBankPage(){
     }catch(e){status.textContent=e.message}
     finally{button.disabled=false}
   };
-  try{await loadLists()}catch(e){$("aiPending").textContent=e.message;$("aiApproved").textContent="Question Bank लोड नहीं हो सका।"}
+  await loadLists()
 }
 async function createQuizPage(){
   if(role!=="admin"&&role!=="superadmin")return;
@@ -441,7 +466,7 @@ async function createQuizPage(){
 async function quizBuilderPage(mode){
   if(role!=="admin"&&role!=="superadmin")return;
   const isObjective=mode==="objective",kind=isObjective?"Objective":"Subjective";
-  panel(kind+" Quiz Builder",'<button class="text-button" id="backQuizChoice">← Quiz Type चुनें</button><div class="builder-heading"><span class="eyebrow">EDUFUTURE • '+kind.toUpperCase()+' BUILDER</span><h2>'+kind+' Quiz बनाएं</h2><p>Subject, Topic और Timer भरें। प्रश्न नीचे जोड़ें या CSV से import करें।</p></div><div class="builder-meta-grid"><div><label for="builderSubject">Subject</label><input id="builderSubject" placeholder="जैसे: Science"></div><div><label for="builderTopic">Topic / Chapter</label><input id="builderTopic" placeholder="जैसे: प्रकाश और परावर्तन"></div><div><label for="builderDuration">Time Limit (minutes)</label><input id="builderDuration" type="number" min="1" max="600" value="30"></div></div><section class="bulk-import-box"><b>Bulk Question Import</b><p class="hint">CSV से 2000 तक प्रश्न import करें। Objective columns: question, optionA, optionB, optionC, optionD, answer, marks.</p><input id="builderCsvFile" type="file" accept=".csv,text/csv"><textarea id="builderCsvText" rows="3" placeholder="या CSV content यहाँ paste करें…"></textarea><button id="builderImport" class="secondary">Import CSV</button> <span id="builderImportStatus" class="hint"></span></section><div class="question-toolbar"><div><b>Questions</b><span id="questionCount" class="question-count"></span></div><button id="builderAddQuestion">＋ Add Question</button></div><div id="builderQuestions"></div><div class="question-pagination"><button id="questionPrev" class="secondary">← Previous</button><span id="questionPageLabel">Page 1</span><button id="questionNext" class="secondary">Next →</button></div><div class="publish-row"><button id="publishQuiz" class="success-action">Publish '+kind+' Quiz</button></div>');
+  panel(kind+" Quiz Builder",'<button class="text-button" id="backQuizChoice">← Quiz Type चुनें</button><div class="builder-heading"><span class="eyebrow">EDUFUTURE • '+kind.toUpperCase()+' BUILDER</span><h2>'+kind+' Quiz बनाएं</h2><p>Subject, Topic और Timer भरें। प्रश्न नीचे जोड़ें या CSV से import करें।</p></div><div class="builder-meta-grid"><div><label for="builderSubject">Subject</label><input id="builderSubject" placeholder="जैसे: Science"></div><div><label for="builderTopic">Topic / Chapter</label><input id="builderTopic" placeholder="जैसे: प्रकाश और परावर्तन"></div><div><label for="builderDuration">Time Limit (minutes)</label><input id="builderDuration" type="number" min="1" max="600" value="30"></div></div><details class="bulk-import-box"><summary><b>वैकल्पिक: CSV से Bulk Import</b></summary><p class="hint">यह advanced विकल्प है। CSV को Excel या Google Sheets में तैयार करके यहाँ import करें। Objective columns: question, optionA, optionB, optionC, optionD, answer, marks.</p><input id="builderCsvFile" type="file" accept=".csv,text/csv"><textarea id="builderCsvText" rows="3" placeholder="या CSV content यहाँ paste करें…"></textarea><button id="builderImport" class="secondary">Import CSV</button> <span id="builderImportStatus" class="hint"></span></details><div class="question-toolbar"><div><b>Questions</b><span id="questionCount" class="question-count"></span></div><button id="builderAddQuestion">＋ Add Question</button></div><div id="builderQuestions"></div><div class="question-pagination"><button id="questionPrev" class="secondary">← Previous</button><span id="questionPageLabel">Page 1</span><button id="questionNext" class="secondary">Next →</button></div><div class="publish-row"><button id="publishQuiz" class="success-action">Publish '+kind+' Quiz</button></div>');
   $("backQuizChoice").onclick=()=>{tab="createquiz";render()};
   let questions=[blank()],page=0;const perPage=10;
   function blank(){return {text:"",type:mode,options:["","","",""],answer:null,marks:1,modelAnswer:"",topic:"",difficulty:"medium",explanation:""}}

@@ -103,14 +103,21 @@ async function requireAdmin(req, superOnly = false) {
   }
   return req.user.uid;
 }
-async function requireTeacher(req, subject) {
+async function requireTeacher(req, subject, className) {
   const role = await roleOf(req.user.uid);
   if (!["teacher", "admin", "superadmin"].includes(role)) fail("permission-denied", "यह सुविधा केवल Teacher या Admin के लिए है।");
   if (["admin", "superadmin"].includes(role)) return true;
   const snap = await db.doc("teacherAssignments/" + req.user.uid).get();
-  const subjects = snap.exists ? (snap.data().subjects || []) : [];
+  const assignment = snap.exists ? snap.data() : {};
+  const subjects = assignment.subjects || [];
+  const classes = assignment.classes || [];
   if (subject && !subjects.some(x => String(x).toLowerCase() === String(subject).toLowerCase())) fail("permission-denied", "यह विषय आपको assign नहीं किया गया है।");
+  if (subject && (!className || !classes.length || !classes.some(x => normalizeClassName(x) === normalizeClassName(className)))) fail("permission-denied", "यह कक्षा आपको assign नहीं की गई है।");
   return true;
+}
+
+function normalizeClassName(value) {
+  return String(value || "").toLowerCase().replace(/^(class|कक्षा)\s*/i, "").replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 async function setRole(uid, role, extra = {}) {
@@ -257,12 +264,22 @@ async function run(name, req) {
         resultsAt: resultsAt?.toDate().toISOString() || null };
     }
     case "startQuiz": {
+      if (await roleOf(uid) !== "student") fail("permission-denied", "केवल Student Quiz attempt कर सकता है।");
       const quizId = String(d.id || "");
       if (!quizId) fail("invalid-argument", "Quiz ID missing.");
       const quizRef = db.doc("quizzes/" + quizId);
       const quizSnap = await quizRef.get();
       if (!quizSnap.exists || quizSnap.data().status !== "published") fail("not-found", "Quiz उपलब्ध नहीं है।");
       const quiz = quizSnap.data();
+      if (await roleOf(uid) === "student") {
+        const profileSnap = await db.doc("roles/" + uid).get();
+        const studentClass = profileSnap.exists ? profileSnap.data().className : "";
+        const quizClass = String(quiz.className || "").trim();
+        const generalClass = !quizClass || ["all", "general", "सभी"].includes(quizClass.toLowerCase());
+        if (!generalClass && normalizeClassName(studentClass) !== normalizeClassName(quizClass)) {
+          fail("permission-denied", "यह Quiz आपकी कक्षा के लिए नहीं है।");
+        }
+      }
       const closesAtMs = quiz.closesAt?.toMillis?.() || (quiz.publishedAt?.toMillis?.() || 0) + 48 * 60 * 60 * 1000;
       const attemptRef = quizRef.collection("attempts").doc(uid);
       let attemptData = null;
@@ -284,11 +301,20 @@ async function run(name, req) {
         questions: questions.docs.map(x => ({ id: x.id, ...x.data() })) };
     }
     case "submitQuiz": {
+      if (await roleOf(uid) !== "student") fail("permission-denied", "केवल Student Quiz submit कर सकता है।");
       const quizId = String(d.id || "");
       const attemptId = String(d.attemptId || "");
       const answers = d.answers && typeof d.answers === "object" && !Array.isArray(d.answers) ? d.answers : {};
       if (!quizId || attemptId !== uid) fail("invalid-argument", "Quiz attempt मान्य नहीं है।");
       const quizRef = db.doc("quizzes/" + quizId);
+      const quizSnap = await quizRef.get();
+      if (!quizSnap.exists || quizSnap.data().status !== "published") fail("not-found", "Quiz उपलब्ध नहीं है।");
+      const quizData = quizSnap.data();
+      const profileSnap = await db.doc("roles/" + uid).get();
+      const studentClass = profileSnap.exists ? profileSnap.data().className : "";
+      const quizClass = String(quizData.className || "").trim();
+      const generalClass = !quizClass || ["all", "general", "सभी"].includes(quizClass.toLowerCase());
+      if (!generalClass && normalizeClassName(studentClass) !== normalizeClassName(quizClass)) fail("permission-denied", "यह Quiz आपकी कक्षा के लिए नहीं है।");
       const attemptRef = quizRef.collection("attempts").doc(uid);
       const [answerSnap, questionSnap] = await Promise.all([
         quizRef.collection("privateAnswers").get(),
@@ -310,7 +336,6 @@ async function run(name, req) {
         }
       });
       const userRecord = await auth.getUser(uid);
-      const quizData = (await quizRef.get()).data();
       const releaseAt = quizData.resultsAt || Timestamp.fromMillis((quizData.publishedAt?.toMillis?.() || Date.now()) + 72 * 60 * 60 * 1000);
       const totalMarks = Number(quizData.totalMarks || questionSnap.docs.reduce((n,x)=>n+Number(x.data().marks||1),0));
       await db.runTransaction(async tx => {
@@ -330,9 +355,22 @@ async function run(name, req) {
       const quizRef = db.doc("quizzes/" + String(d.id || ""));
       const quiz = await quizRef.get();
       if (!quiz.exists) fail("not-found", "Quiz नहीं मिला।");
-      const isAdmin = ["admin", "superadmin"].includes(await roleOf(uid));
-      const rankingType = d.rankingType === "subjective" ? "subjective" : "objective";
+      const requesterRole = await roleOf(uid);
+      const isAdmin = ["admin", "superadmin"].includes(requesterRole);
       const quizData = quiz.data();
+      if (requesterRole === "student" && quizData.status !== "published") fail("not-found", "Quiz उपलब्ध नहीं है।");
+      if (requesterRole === "student") {
+        const profile = await db.doc("roles/" + uid).get();
+        const studentClass = profile.exists ? profile.data().className : "";
+        const quizClass = String(quizData.className || "").trim();
+        const generalClass = !quizClass || ["all", "general", "सभी"].includes(quizClass.toLowerCase());
+        if (!generalClass && normalizeClassName(studentClass) !== normalizeClassName(quizClass)) fail("permission-denied", "यह Quiz आपकी कक्षा के लिए नहीं है।");
+      } else if (requesterRole === "teacher") {
+        await requireTeacher(req, quizData.subject, quizData.className);
+      } else if (!isAdmin) {
+        fail("permission-denied", "यह परिणाम देखने की अनुमति नहीं है।");
+      }
+      const rankingType = d.rankingType === "subjective" ? "subjective" : "objective";
       const releaseAt = quizData.resultsAt || Timestamp.fromMillis((quizData.publishedAt?.toMillis?.() || Date.now()) + 72 * 60 * 60 * 1000);
       const snap = await quizRef.collection("leaderboard").get();
       const allRows = snap.docs.map(x => x.data());
@@ -346,17 +384,32 @@ async function run(name, req) {
       const scoreOf = x => Number(rankingType === "subjective" ? (x.subjectiveScore||0) : (x.objectiveScore ?? x.score ?? 0));
       allRows.sort((a,b)=>scoreOf(b)-scoreOf(a)||(a.submittedAt?.toMillis()||0)-(b.submittedAt?.toMillis()||0));
       let previousScore = null, previousRank = 0;
-      const rows = allRows.map((x,i)=>{const value=scoreOf(x);if(previousScore===null||value!==previousScore)previousRank=i+1;previousScore=value;return {uid:x.uid,name:x.displayName||"Student",score:value,total:Number(rankingType==="subjective"?(x.subjectiveTotal||0):(x.objectiveTotal??x.total??0)),pendingReview:Number(x.pendingReview||0),rank:previousRank};});
+      const rows = await Promise.all(allRows.map(async (x,i)=>{
+        const value=scoreOf(x);
+        if(previousScore===null||value!==previousScore)previousRank=i+1;
+        previousScore=value;
+        let name=x.displayName||"";
+        if(!name||name==="Student"){
+          try { const profile=await db.doc("roles/"+x.uid).get(); name=profile.exists?(profile.data().displayName||"Student"):"Student"; } catch { name="Student"; }
+        }
+        return {uid:x.uid,name,score:value,total:Number(rankingType==="subjective"?(x.subjectiveTotal||0):(x.objectiveTotal??x.total??0)),pendingReview:Number(x.pendingReview||0),rank:previousRank};
+      }));
       return { released: isAdmin || (Date.now() >= releaseAt.toMillis() && (rankingType !== "subjective" || pendingReview === 0)), rankingType, releaseAt: releaseAt.toDate().toISOString(), pendingReview, rows };
     }
     case "getMyResults": {
+      if (await roleOf(uid) !== "student") fail("permission-denied", "यह सुविधा केवल Student के लिए है।");
+      const profile = await db.doc("roles/" + uid).get();
+      const studentClass = profile.exists ? profile.data().className : "";
       const quizzes = await db.collection("quizzes").get();
       const now = Date.now(), results = [];
       for (const q of quizzes.docs) {
+        const quizData = q.data();
+        const quizClass = String(quizData.className || "").trim();
+        const generalClass = !quizClass || ["all", "general", "सभी"].includes(quizClass.toLowerCase());
+        if (!generalClass && normalizeClassName(studentClass) !== normalizeClassName(quizClass)) continue;
         const snap = await q.ref.collection("leaderboard").doc(uid).get();
         if (!snap.exists) continue;
         const data = snap.data();
-        const quizData = q.data();
         const resultRelease = quizData.resultsAt || Timestamp.fromMillis((quizData.publishedAt?.toMillis?.() || Date.now()) + 72 * 60 * 60 * 1000);
         const released = now >= resultRelease.toMillis();
         let review = [];
@@ -510,25 +563,34 @@ async function run(name, req) {
       await requireAdmin(req);
       const email = String(d.email || "").trim().toLowerCase();
       const subjects = Array.isArray(d.subjects) ? [...new Set(d.subjects.map(x => String(x).trim()).filter(Boolean))].slice(0,30) : [];
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !subjects.length) fail("invalid-argument", "Teacher का registered email और कम-से-कम एक subject दें।");
+      const classes = Array.isArray(d.classes) ? [...new Set(d.classes.map(x => String(x).trim()).filter(Boolean))].slice(0,30) : [];
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !subjects.length || !classes.length) fail("invalid-argument", "Teacher का registered email, कम-से-कम एक subject और assigned class देना जरूरी है।");
       let target;
       try { target = await auth.getUserByEmail(email); } catch { fail("not-found", "पहले इस email से Teacher account बनवाएँ।"); }
       const targetRole = await roleOf(target.uid);
       if (["admin", "superadmin"].includes(targetRole)) fail("failed-precondition", "Admin या Super Admin को Teacher में नहीं बदला जा सकता।");
       await setRole(target.uid, "teacher", { assignedBy: uid });
-      await db.doc("teacherAssignments/" + target.uid).set({ subjects, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid }, { merge: true });
-      return { ok: true, uid: target.uid, subjects };
+      await db.doc("teacherAssignments/" + target.uid).set({ subjects, classes, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid }, { merge: true });
+      return { ok: true, uid: target.uid, subjects, classes };
     }
     case "createDoubt": {
+      if (await roleOf(uid) !== "student") fail("permission-denied", "केवल Student Teacher को Doubt भेज सकता है।");
       const question = String(d.question || "").trim();
       const subject = String(d.subject || "").trim();
+      const requestId = String(d.requestId || "");
+      if (!/^[A-Za-z0-9_-]{12,100}$/.test(requestId)) fail("invalid-argument", "Doubt request ID मान्य नहीं है।");
       if (!question || question.length > 5000 || !subject) fail("invalid-argument", "Subject और doubt लिखें (अधिकतम 5000 अक्षर)।");
       const profileSnap = await db.doc("roles/" + uid).get();
       const studentName = profileSnap.exists ? (profileSnap.data().displayName || req.user.name || req.user.email || "Student") : (req.user.name || req.user.email || "Student");
-      const ref = await db.collection("doubts").add({
-        uid, studentName, studentClass: profileSnap.exists ? (profileSnap.data().className || "") : "",
-        subject, topic: String(d.topic || "").trim(), question,
-        status: "open", createdAt: FieldValue.serverTimestamp()
+      const ref = db.collection("doubts").doc(uid + "_" + requestId);
+      await db.runTransaction(async tx => {
+        const existing = await tx.get(ref);
+        if (existing.exists) return;
+        tx.create(ref, {
+          uid, studentName, studentClass: profileSnap.exists ? (profileSnap.data().className || "") : "",
+          subject, topic: String(d.topic || "").trim(), question,
+          status: "open", createdAt: FieldValue.serverTimestamp()
+        });
       });
       return { id: ref.id };
     }
@@ -537,14 +599,18 @@ async function run(name, req) {
       let snap;
       if (role === "student") snap = await db.collection("doubts").where("uid", "==", uid).limit(100).get();
       else if (["teacher","admin","superadmin"].includes(role)) {
-        let subjects = [];
+        let subjects = [], classes = [];
         if (role === "teacher") {
           const a = await db.doc("teacherAssignments/" + uid).get();
           subjects = a.exists ? (a.data().subjects || []) : [];
-          if (!subjects.length) return { doubts: [] };
+          classes = a.exists ? (a.data().classes || []) : [];
+          if (!subjects.length || !classes.length) return { doubts: [] };
         }
         snap = await db.collection("doubts").limit(300).get();
-        if (role === "teacher") snap = { docs: snap.docs.filter(x => subjects.some(v => String(v).toLowerCase() === String(x.data().subject).toLowerCase())) };
+        if (role === "teacher") snap = { docs: snap.docs.filter(x =>
+          subjects.some(v => String(v).toLowerCase() === String(x.data().subject).toLowerCase()) &&
+          classes.some(v => normalizeClassName(v) === normalizeClassName(x.data().studentClass))
+        ) };
       } else fail("permission-denied", "Access denied.");
       return { doubts: snap.docs.map(x => ({ id:x.id, ...x.data(), createdAt:x.data().createdAt?.toDate().toISOString() || null })) };
     }
@@ -552,7 +618,7 @@ async function run(name, req) {
       const ref = db.doc("doubts/" + String(d.id || ""));
       const snap = await ref.get();
       if (!snap.exists) fail("not-found", "Doubt नहीं मिला।");
-      await requireTeacher(req, snap.data().subject);
+      await requireTeacher(req, snap.data().subject, snap.data().studentClass);
       const reply = String(d.reply || "").trim();
       if (!reply || reply.length > 5000) fail("invalid-argument", "Reply 1 से 5000 अक्षर का होना चाहिए।");
       await ref.update({ reply, repliedBy: uid, repliedAt: FieldValue.serverTimestamp(), status: "answered" });
@@ -560,16 +626,28 @@ async function run(name, req) {
     }
     case "listTeacherStudents": {
       await requireTeacher(req);
+      const currentRole = await roleOf(uid);
       const snap = await db.collection("roles").where("role","==","student").limit(500).get();
-      return { students: snap.docs.map(x=>({uid:x.id,email:x.data().email||"",displayName:x.data().displayName||"",className:x.data().className||""})) };
+      if (["admin", "superadmin"].includes(currentRole)) {
+        return { students: snap.docs.map(x=>({uid:x.id,email:x.data().email||"",displayName:x.data().displayName||"",className:x.data().className||""})), assignedClasses: [] };
+      }
+      const assignment = await db.doc("teacherAssignments/" + uid).get();
+      const assignedClasses = assignment.exists ? (assignment.data().classes || []) : [];
+      if (!assignedClasses.length) return { students: [], assignedClasses: [] };
+      const allowed = new Set(assignedClasses.map(normalizeClassName));
+      const students = snap.docs.filter(x => allowed.has(normalizeClassName(x.data().className)))
+        .map(x=>({uid:x.id,email:x.data().email||"",displayName:x.data().displayName||"",className:x.data().className||""}));
+      return { students, assignedClasses };
     }
     case "listSubjectiveSubmissions": {
       const role = await roleOf(uid);
       if (!["teacher","admin","superadmin"].includes(role)) fail("permission-denied", "केवल Teacher या Admin उपयोग कर सकता है।");
-      let subjects = [];
+      let subjects = [], classes = [];
       if (role === "teacher") {
         const assigned = await db.doc("teacherAssignments/" + uid).get();
         subjects = assigned.exists ? (assigned.data().subjects || []) : [];
+        classes = assigned.exists ? (assigned.data().classes || []) : [];
+        if (!subjects.length || !classes.length) return { submissions: [], quizCursor: null, hasMoreQuizzes: false };
       }
       const pageSize = Math.min(25, Math.max(5, Number(d.limit) || 20));
       const quizDocs = [];
@@ -591,7 +669,8 @@ async function run(name, req) {
       const items = [];
       for (const quizDoc of quizDocs) {
         const quiz = quizDoc.data();
-        if (role === "teacher" && !subjects.some(v => String(v).toLowerCase() === String(quiz.subject || "").toLowerCase())) continue;
+        if (role === "teacher" && (!subjects.some(v => String(v).toLowerCase() === String(quiz.subject || "").toLowerCase()) ||
+          !classes.some(v => normalizeClassName(v) === normalizeClassName(quiz.className)))) continue;
         const pageAttempts = Math.min(50, Math.max(5, Number(d.attemptLimit) || 25));
         let attemptsQuery = quizDoc.ref.collection("attempts").where("status","==","submitted").orderBy(FieldPath.documentId()).limit(pageAttempts + 1);
         if (d.quizId && d.attemptCursor) {
@@ -630,7 +709,7 @@ async function run(name, req) {
       const marks = Number(d.marks);
       const quizRef = db.doc("quizzes/" + quizId), quizSnap = await quizRef.get();
       if (!quizSnap.exists) fail("not-found", "Quiz नहीं मिला।");
-      await requireTeacher(req, quizSnap.data().subject);
+      await requireTeacher(req, quizSnap.data().subject, quizSnap.data().className);
       const maxSnap = await quizRef.collection("privateAnswers").doc(questionId).get();
       if (!maxSnap.exists || maxSnap.data().type !== "subjective") fail("invalid-argument", "Subjective question नहीं मिला।");
       if (!Number.isFinite(marks) || marks < 0 || marks > Number(maxSnap.data().marks || 1)) fail("invalid-argument", "दिए गए अंक प्रश्न के अधिकतम अंकों के भीतर रखें।");
@@ -680,21 +759,35 @@ async function run(name, req) {
           : "For each item, options must be an empty array, answer must be null, and modelAnswer must contain a concise correct reference answer.",
         "Use clear age-appropriate Hindi. Do not include markdown fences. Ensure the answer is factually accurate."
       ].join("\n");
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent?key=" + encodeURIComponent(apiKey), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0.35 }
-        })
-      });
-      const raw = await response.text();
-      let payload = {};
-      try { payload = raw ? JSON.parse(raw) : {}; } catch {}
+      const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent?key=" + encodeURIComponent(apiKey);
+      let response, raw = "", payload = {};
+      for (let attempt = 0; attempt < 4; attempt++) {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+          })
+        });
+        raw = await response.text();
+        payload = {};
+        try { payload = raw ? JSON.parse(raw) : {}; } catch {}
+        if (response.ok || ![429, 500, 502, 503, 504].includes(response.status) || attempt === 3) break;
+        const retryAfter = Number(response.headers.get("retry-after"));
+        const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+          ? Math.min(10000, retryAfter * 1000)
+          : Math.min(8000, 1000 * (2 ** attempt));
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+      }
       if (!response.ok) {
         const detail = payload.error?.message || "Gemini API request असफल रही (" + response.status + ").";
-        const err = new Error(detail.slice(0, 500));
-        err.code = response.status === 429 ? "resource-exhausted" : response.status === 400 ? "invalid-argument" : "failed-precondition";
+        const err = new Error(response.status === 503
+          ? "Gemini अभी अधिक व्यस्त है। Retry के बाद भी उत्तर नहीं मिला। थोड़ी देर बाद फिर कोशिश करें।"
+          : detail.slice(0, 500));
+        err.code = response.status === 429 ? "resource-exhausted"
+          : [500, 502, 503, 504].includes(response.status) ? "unavailable"
+          : response.status === 400 ? "invalid-argument" : "failed-precondition";
         throw err;
       }
       const generatedText = payload.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("") || "";
@@ -732,8 +825,10 @@ async function run(name, req) {
     }
     case "listQuestionBank": {
       await requireAdmin(req);
-      const snap = await db.collection("questionBank").where("status", "==", "approved").orderBy("approvedAt", "desc").limit(100).get();
-      return { questions: snap.docs.map(x => ({ id: x.id, ...x.data(), approvedAt: x.data().approvedAt?.toDate?.().toISOString?.() || null })) };
+      const snap = await db.collection("questionBank").where("status", "==", "approved").limit(100).get();
+      const questions = snap.docs.map(x => ({ id: x.id, ...x.data(), approvedAt: x.data().approvedAt?.toDate?.().toISOString?.() || null }));
+      questions.sort((a, b) => String(b.approvedAt || "").localeCompare(String(a.approvedAt || "")));
+      return { questions };
     }
     case "reviewQuestionDraft": {
       await requireAdmin(req);
@@ -867,10 +962,10 @@ app.post("/api/:name", authenticate, async (req, res) => {
     const data = await run(req.params.name, req);
     return res.json({ data });
   } catch (error) {
-    const known = new Set(["invalid-argument", "unauthenticated", "permission-denied", "not-found", "already-exists", "failed-precondition", "deadline-exceeded"]);
+    const known = new Set(["invalid-argument", "unauthenticated", "permission-denied", "not-found", "already-exists", "failed-precondition", "deadline-exceeded", "resource-exhausted", "unavailable"]);
     const code = known.has(error.code) ? error.code : "internal";
     if (code === "internal") console.error("API error:", error);
-    return res.status(code === "unauthenticated" ? 401 : code === "permission-denied" ? 403 : code === "not-found" ? 404 : code === "invalid-argument" ? 400 : code === "already-exists" ? 409 : code === "deadline-exceeded" ? 408 : 500)
+    return res.status(code === "unauthenticated" ? 401 : code === "permission-denied" ? 403 : code === "not-found" ? 404 : code === "invalid-argument" ? 400 : code === "already-exists" ? 409 : code === "deadline-exceeded" ? 408 : code === "unavailable" ? 503 : code === "resource-exhausted" ? 429 : 500)
       .json({ error: { code, message: code === "internal" ? "Server में समस्या आई। कृपया बाद में कोशिश करें।" : error.message } });
   }
 });
