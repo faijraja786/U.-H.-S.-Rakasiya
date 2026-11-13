@@ -261,7 +261,7 @@ async function leaderboardPage(){
       if(!r.rows.length){out.innerHTML='<p>अभी कोई result उपलब्ध नहीं है।</p>';return}
       const medals=["🥇","🥈","🥉"];
       const mine=r.rows.find(x=>x.uid===user.uid);
-      const rankSummary='<div class="rank-summary"><b>कुल विद्यार्थी: '+r.rows.length+'</b>'+(mine?'<span>आपकी रैंक: #'+mine.rank+' / '+r.rows.length+'</span>':'<span>आपने अभी यह Quiz Attempt नहीं किया है।</span>')+'</div>';
+      const rankSummary='<div class="rank-summary"><b>कुल प्रतिभागी: '+r.rows.length+'</b>'+(mine?'<span>आपकी रैंक: #'+mine.rank+' / '+r.rows.length+'</span>':'<span>आपने अभी यह Quiz Attempt नहीं किया है।</span>')+'</div>';
       out.innerHTML=rankSummary+'<h4>'+(type==="objective"?"Objective Ranking":"Subjective Ranking")+'</h4><div class="podium">'+r.rows.slice(0,3).map((x,i)=>'<div class="podium-card podium-'+(i+1)+'"><span class="medal">'+medals[i]+'</span><strong>#'+x.rank+'</strong><b>'+esc(x.name)+'</b><small>'+x.score+'/'+x.total+' अंक</small></div>').join("")+'</div><div class="rank-table">'+r.rows.map(x=>'<div class="rank-row '+(x.uid===user.uid?'my-rank':'')+'"><b class="rank-number">#'+x.rank+'</b><span class="rank-name">'+esc(x.name)+(x.uid===user.uid?' <em>YOU</em>':'')+'</span><strong>'+x.score+'/'+x.total+'</strong><span class="rank-percent">'+Math.round(x.total?x.score/x.total*100:0)+'%</span></div>').join("")+'</div>';
     }catch(e){out.textContent=e.message}
   });
@@ -329,6 +329,7 @@ async function adminPage(){
   $("view").querySelectorAll("[data-admin-go]").forEach(b=>b.onclick=()=>{tab=b.dataset.adminGo;render()});
   $("assignTeacher").onclick=async()=>{try{const subjects=$("teacherSubjects").value.split(",").map(x=>x.trim()).filter(Boolean);await call("assignTeacher",{email:$("teacherEmail").value.trim(),subjects});alertMsg("Teacher assign हो गया।");$("teacherEmail").value="";$("teacherSubjects").value=""}catch(e){alertMsg(e.message)}};
   $("loadStudents").onclick=async()=>{try{const r=await call("listStudents");$("studentList").innerHTML=r.students.length?r.students.map(x=>"<p>"+esc(x.displayName||x.email||x.uid)+" • "+esc(x.className||"कक्षा नहीं भरी")+"</p>").join(""):"<p>कोई student record नहीं मिला।</p>"}catch(e){$("studentList").textContent=e.message}};
+  $("loadStudents").click();
   const snap=await getDocs(collection(db,"quizzes"));
   $("adminResults").innerHTML=snap.empty?"<p>अभी कोई Quiz नहीं है।</p>":snap.docs.map(d=>'<div class="admin-row"><span>'+esc(d.data().title)+'</span><button data-admin-result="'+d.id+'">View Results</button></div><div id="admin-result-'+d.id+'"></div>').join("");
   $("adminResults").querySelectorAll("[data-admin-result]").forEach(b=>b.onclick=async()=>{const out=$("admin-result-"+b.dataset.adminResult);out.textContent="Loading…";try{const r=await call("getLeaderboard",{id:b.dataset.adminResult});out.innerHTML=r.rows.length?"<ol>"+r.rows.map(x=>"<li>"+esc(x.name)+" — "+x.score+"/"+x.total+(x.pendingReview?" • Subjective pending":"")+"</li>").join("")+"</ol>":"<p>अभी कोई submitted result नहीं है।</p>"}catch(e){out.textContent=e.message}});
