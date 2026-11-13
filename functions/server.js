@@ -748,7 +748,7 @@ async function run(name, req) {
       const difficulty = ["easy","medium","hard"].includes(d.difficulty) ? d.difficulty : "medium";
       const count = Math.min(15, Math.max(1, Number(d.count) || 5));
       if (!className || !subject || !topic) fail("invalid-argument", "Class, Subject और Chapter/Topic भरना जरूरी है।");
-      const model = "gemini-3.8-flash";
+      const model = "gemini-3.5-flash-lite";
       const prompt = [
         "Create exactly " + count + " original school-level practice questions.",
         "Class: " + className, "Subject: " + subject, "Chapter/topic: " + topic,
@@ -761,24 +761,30 @@ async function run(name, req) {
       ].join("\n");
       const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent?key=" + encodeURIComponent(apiKey);
       let response, raw = "", payload = {};
-      for (let attempt = 0; attempt < 4; attempt++) {
-        response = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: "application/json" }
-          })
-        });
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          response = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: prompt }] }],
+              generationConfig: { responseMimeType: "application/json", maxOutputTokens: 4096 }
+            }),
+            signal: AbortSignal.timeout(45000)
+          });
+        } catch (error) {
+          const timedOut = error && (error.name === "TimeoutError" || error.name === "AbortError");
+          const timeoutError = new Error(timedOut
+            ? "AI को 45 सेकंड में उत्तर नहीं मिला। कृपया कम प्रश्नों के साथ फिर कोशिश करें।"
+            : "Gemini से संपर्क नहीं हो पाया। थोड़ी देर बाद फिर कोशिश करें।");
+          timeoutError.code = timedOut ? "deadline-exceeded" : "unavailable";
+          throw timeoutError;
+        }
         raw = await response.text();
         payload = {};
         try { payload = raw ? JSON.parse(raw) : {}; } catch {}
-        if (response.ok || ![429, 500, 502, 503, 504].includes(response.status) || attempt === 3) break;
-        const retryAfter = Number(response.headers.get("retry-after"));
-        const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
-          ? Math.min(10000, retryAfter * 1000)
-          : Math.min(8000, 1000 * (2 ** attempt));
-        await new Promise(resolve => setTimeout(resolve, waitMs));
+        if (response.ok || ![429, 500, 502, 503, 504].includes(response.status) || attempt === 1) break;
+        await new Promise(resolve => setTimeout(resolve, 1200));
       }
       if (!response.ok) {
         const detail = payload.error?.message || "Gemini API request असफल रही (" + response.status + ").";
