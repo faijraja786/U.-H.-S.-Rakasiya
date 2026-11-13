@@ -362,7 +362,16 @@ async function run(name, req) {
       const scoreOf = x => Number(rankingType === "subjective" ? (x.subjectiveScore||0) : (x.objectiveScore ?? x.score ?? 0));
       allRows.sort((a,b)=>scoreOf(b)-scoreOf(a)||(a.submittedAt?.toMillis()||0)-(b.submittedAt?.toMillis()||0));
       let previousScore = null, previousRank = 0;
-      const rows = allRows.map((x,i)=>{const value=scoreOf(x);if(previousScore===null||value!==previousScore)previousRank=i+1;previousScore=value;return {uid:x.uid,name:x.displayName||"Student",score:value,total:Number(rankingType==="subjective"?(x.subjectiveTotal||0):(x.objectiveTotal??x.total??0)),pendingReview:Number(x.pendingReview||0),rank:previousRank};});
+      const rows = await Promise.all(allRows.map(async (x,i)=>{
+        const value=scoreOf(x);
+        if(previousScore===null||value!==previousScore)previousRank=i+1;
+        previousScore=value;
+        let name=x.displayName||"";
+        if(!name||name==="Student"){
+          try { const profile=await db.doc("roles/"+x.uid).get(); name=profile.exists?(profile.data().displayName||"Student"):"Student"; } catch { name="Student"; }
+        }
+        return {uid:x.uid,name,score:value,total:Number(rankingType==="subjective"?(x.subjectiveTotal||0):(x.objectiveTotal??x.total??0)),pendingReview:Number(x.pendingReview||0),rank:previousRank};
+      }));
       return { released: isAdmin || (Date.now() >= releaseAt.toMillis() && (rankingType !== "subjective" || pendingReview === 0)), rankingType, releaseAt: releaseAt.toDate().toISOString(), pendingReview, rows };
     }
     case "getMyResults": {
