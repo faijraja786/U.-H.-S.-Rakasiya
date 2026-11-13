@@ -147,7 +147,7 @@ async function run(name, req) {
     case "saveStudentProfile": {
       const currentRole = await roleOf(uid);
       if (currentRole !== "student") fail("permission-denied", "केवल Student अपना profile पूरा कर सकता है।");
-      const displayName = String(d.displayName || "").trim().replace(/\\s+/g, " ").slice(0, 80);
+      const displayName = String(d.displayName || "").trim().replace(/\s+/g, " ").slice(0, 80);
       const className = String(d.className || "").trim().slice(0, 30);
       if (displayName.length < 2 || !className) fail("invalid-argument", "पूरा नाम और कक्षा भरना जरूरी है।");
       await auth.updateUser(uid, { displayName });
