@@ -178,11 +178,19 @@ async function homePage(){
   $("view").querySelector("[data-open-notices]")?.addEventListener("click",()=>{tab="notices";render()});
 }
 async function quizPage(){
-  const s=await getDocs(query(collection(db,"quizzes"),where("status","==","published")));
+  const [s,profileSnap]=await Promise.all([
+    getDocs(query(collection(db,"quizzes"),where("status","==","published"))),
+    getDoc(doc(db,"roles",user.uid))
+  ]);
+  const studentClass=String(profileSnap.exists()?profileSnap.data().className||"": "").toLowerCase().replace(/^(class|कक्षा)\s*/i,"").replace(/[^\p{L}\p{N}]/gu,"");
   const activeDocs=s.docs.filter(d=>{
     const q=d.data(), published=q.publishedAt?.toMillis?.()||0;
     const release=q.resultsAt?.toMillis?.()||published+72*60*60*1000;
-    return !release||Date.now()<release;
+    const quizClass=String(q.className||"").trim();
+    const generalClass=!quizClass||["all","general","सभी"].includes(quizClass.toLowerCase());
+    const normalizedQuizClass=quizClass.toLowerCase().replace(/^(class|कक्षा)\s*/i,"").replace(/[^\p{L}\p{N}]/gu,"");
+    const matchesClass=generalClass||(studentClass&&studentClass===normalizedQuizClass);
+    return matchesClass&&(!release||Date.now()<release);
   });
   const cards=await Promise.all(activeDocs.map(async d=>{
     const q=d.data(), attemptSnap=await getDoc(doc(db,"quizzes",d.id,"attempts",user.uid));
