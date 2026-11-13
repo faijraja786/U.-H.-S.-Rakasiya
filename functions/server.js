@@ -526,7 +526,7 @@ async function run(name, req) {
       const profileSnap = await db.doc("roles/" + uid).get();
       const studentName = profileSnap.exists ? (profileSnap.data().displayName || req.user.name || req.user.email || "Student") : (req.user.name || req.user.email || "Student");
       const ref = await db.collection("doubts").add({
-        uid, studentName,
+        uid, studentName, studentClass: profileSnap.exists ? (profileSnap.data().className || "") : "",
         subject, topic: String(d.topic || "").trim(), question,
         status: "open", createdAt: FieldValue.serverTimestamp()
       });
