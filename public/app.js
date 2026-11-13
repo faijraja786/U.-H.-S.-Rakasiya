@@ -136,6 +136,11 @@ async function superHomePage(){
 }
 async function homePage(){
   const [quizSnap,resultData]=await Promise.all([getDocs(query(collection(db,"quizzes"),where("status","==","published"))),call("getMyResults").catch(()=>({results:[]}))]);
+  const activeQuizCount=quizSnap.docs.filter(d=>{
+    const q=d.data(),published=q.publishedAt?.toMillis?.()||0;
+    const release=q.resultsAt?.toMillis?.()||published+72*60*60*1000;
+    return !release||Date.now()<release;
+  }).length;
   const myResults=resultData.results||[];
   const released=myResults.filter(x=>x.released).sort((a,b)=>new Date(b.releaseAt||0)-new Date(a.releaseAt||0)), tests=myResults.length;
   const marks=released.reduce((n,x)=>n+Number(x.score||0),0), total=released.reduce((n,x)=>n+Number(x.total||0),0);
