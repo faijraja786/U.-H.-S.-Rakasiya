@@ -380,9 +380,60 @@ async function aiQuestionBankPage(){
 }
 async function createQuizPage(){
   if(role!=="admin"&&role!=="superadmin")return;
-  panel("Create Quiz",'<button class="text-button" data-admin-back>← Admin Dashboard</button><div class="quiz-choice-intro"><span class="eyebrow">CHOOSE QUIZ FORMAT</span><h2>किस प्रकार का Quiz बनाना है?</h2><p>दोनों प्रकार के लिए अलग-अलग builder और student experience होगा।</p></div><div class="quiz-choice-grid"><button class="quiz-choice-card objective-choice" data-quiz-kind="objective"><span class="choice-icon">✓</span><b>Objective Quiz</b><small>चार विकल्प, सही उत्तर चुनें और automatic checking</small><span class="choice-link">Create Objective Quiz →</span></button><button class="quiz-choice-card subjective-choice" data-quiz-kind="subjective"><span class="choice-icon">✎</span><b>Subjective Quiz</b><small>लिखित उत्तर, Teacher checking और marks</small><span class="choice-link">Create Subjective Quiz →</span></button></div>');
-  $("view").querySelector("[data-admin-back]").onclick=()=>{tab="admin";render()};
-  $("view").querySelectorAll("[data-quiz-kind]").forEach(b=>b.onclick=()=>{tab=b.dataset.quizKind==="objective"?"objectivebuilder":"subjectivebuilder";render()});
+  let step=1,quizType="",questions=[];
+  const meta={className:"",subject:"",topic:"",duration:30};
+  const blank=()=>({text:"",type:"",options:["","","",""],answer:null,marks:1,modelAnswer:"",difficulty:"medium",explanation:""});
+  const shell=(content)=>panel("Create Quiz",'<div class="quiz-wizard"><div class="wizard-progress"><span class="'+(step>=1?"done":"")+'">1. विषय</span><i></i><span class="'+(step>=2?"done":"")+'">2. प्रकार</span><i></i><span class="'+(step>=3?"done":"")+'">3. प्रश्न</span></div>'+content+'</div>');
+  function draw(){
+    if(step===1){
+      shell('<div class="wizard-heading"><span class="eyebrow">STEP 1 OF 3</span><h2>Quiz की जानकारी भरें</h2><p>कक्षा, विषय और अध्याय चुनें।</p></div><section class="item wizard-form"><label>कक्षा</label><input id="quizClass" value="'+esc(meta.className)+'" placeholder="जैसे Class 10"><label>विषय</label><input id="quizSubject" value="'+esc(meta.subject)+'" placeholder="जैसे Science"><label>Topic / Chapter</label><input id="quizTopic" value="'+esc(meta.topic)+'" placeholder="जैसे प्रकाश और परावर्तन"><label>समय सीमा (मिनट)</label><input id="quizDuration" type="number" min="1" max="600" value="'+Number(meta.duration)+'"><button id="quizStep1Next" class="success-action">आगे बढ़ें →</button></section>');
+      $("quizStep1Next").onclick=()=>{
+        meta.className=$("quizClass").value.trim();meta.subject=$("quizSubject").value.trim();meta.topic=$("quizTopic").value.trim();meta.duration=Number($("quizDuration").value);
+        if(!meta.className||!meta.subject||!meta.topic) return alertMsg("कक्षा, विषय और Topic भरना जरूरी है।");
+        if(!Number.isInteger(meta.duration)||meta.duration<1||meta.duration>600)return alertMsg("समय 1 से 600 मिनट के बीच रखें।");
+        step=2;draw();
+      };
+    }else if(step===2){
+      shell('<div class="wizard-heading"><span class="eyebrow">STEP 2 OF 3</span><h2>प्रश्नों का प्रकार चुनें</h2><p>इस Quiz में किस प्रकार के प्रश्न होंगे?</p></div><div class="quiz-choice-grid"><button class="quiz-choice-card objective-choice" data-kind="objective"><span class="choice-icon">✓</span><b>Objective</b><small>चार विकल्प और सही उत्तर चुनें</small><span class="choice-link">Objective चुनें</span></button><button class="quiz-choice-card subjective-choice" data-kind="subjective"><span class="choice-icon">✎</span><b>Subjective</b><small>लिखित उत्तर और Teacher checking</small><span class="choice-link">Subjective चुनें</span></button></div><div class="wizard-actions"><button id="quizStep2Back" class="secondary">← पीछे</button><span class="hint">'+esc(meta.className)+' • '+esc(meta.subject)+' • '+esc(meta.topic)+'</span></div>');
+      $("quizStep2Back").onclick=()=>{step=1;draw()};
+      $("view").querySelectorAll("[data-kind]").forEach(b=>b.onclick=()=>{quizType=b.dataset.kind;questions=[blank()];step=3;draw()});
+    }else{
+      const objective=quizType==="objective";
+      const questionCards=questions.map((q,i)=>{
+        const answerFields=objective?'<div class="mcq-option-grid">'+q.options.map((v,j)=>'<label class="mcq-option"><span class="option-letter">'+String.fromCharCode(65+j)+'</span><input data-option="'+i+'" data-option-index="'+j+'" value="'+esc(v)+'" placeholder="विकल्प '+String.fromCharCode(65+j)+'"><input class="correct-radio" type="radio" name="correct-'+i+'" data-answer="'+i+'" value="'+j+'" '+(q.answer===j?"checked":"")+' aria-label="सही उत्तर चुनें"></label>').join("")+'</div><p class="hint">सही विकल्प के सामने गोल बटन चुनें।</p>':'<label>Model Answer (वैकल्पिक)</label><textarea rows="3" data-model="'+i+'" placeholder="Teacher के लिए reference answer">'+esc(q.modelAnswer)+'</textarea>';
+        return '<article class="question builder-question"><div class="question-head"><h3>प्रश्न '+(i+1)+'</h3>'+(questions.length>1?'<button type="button" class="danger" data-remove="'+i+'">हटाएँ</button>':'')+'</div><label>प्रश्न लिखें</label><textarea rows="3" data-question="'+i+'" placeholder="पूरा प्रश्न यहाँ लिखें">'+esc(q.text)+'</textarea>'+answerFields+'<div class="builder-marks"><label>अंक</label><input type="number" min="1" max="100" data-marks="'+i+'" value="'+Number(q.marks||1)+'"></div></article>';
+      }).join("");
+      shell('<div class="wizard-heading"><span class="eyebrow">STEP 3 OF 3</span><h2>'+ (objective?"Objective":"Subjective") +' प्रश्न जोड़ें</h2><p>'+esc(meta.className)+' • '+esc(meta.subject)+' • '+esc(meta.topic)+' • '+Number(meta.duration)+' मिनट</p></div><div class="question-stack">'+questionCards+'</div><div class="question-add-area"><button id="addQuestion" class="secondary">＋ Add Question</button><p class="hint">हर प्रश्न भरने के बाद नीचे Add Question दबाएँ। सभी प्रश्न जुड़ने के बाद Publish करें।</p></div><div class="wizard-actions"><button id="quizStep3Back" class="secondary">← पीछे</button><button id="publishQuiz" class="success-action">Publish Quiz</button></div><p class="hint" id="publishStatus" role="status"></p>');
+      $("quizStep3Back").onclick=()=>{step=2;draw()};
+      $("view").querySelectorAll("[data-question]").forEach(x=>x.oninput=()=>questions[Number(x.dataset.question)].text=x.value);
+      $("view").querySelectorAll("[data-option]").forEach(x=>x.oninput=()=>questions[Number(x.dataset.option)].options[Number(x.dataset.optionIndex)]=x.value);
+      $("view").querySelectorAll("[data-answer]").forEach(x=>x.onchange=()=>questions[Number(x.dataset.answer)].answer=Number(x.value));
+      $("view").querySelectorAll("[data-model]").forEach(x=>x.oninput=()=>questions[Number(x.dataset.model)].modelAnswer=x.value);
+      $("view").querySelectorAll("[data-marks]").forEach(x=>x.onchange=()=>questions[Number(x.dataset.marks)].marks=Number(x.value));
+      $("view").querySelectorAll("[data-remove]").forEach(x=>x.onclick=()=>{questions.splice(Number(x.dataset.remove),1);if(!questions.length)questions=[blank()];draw()});
+      $("addQuestion").onclick=()=>{if(questions.length>=2000)return alertMsg("एक Quiz में अधिकतम 2000 प्रश्न जोड़ सकते हैं।");questions.push(blank());draw();$("view").querySelector(".question-stack .builder-question:last-child")?.scrollIntoView({behavior:"smooth",block:"start"})};
+      $("publishQuiz").onclick=async()=>{
+        const button=$("publishQuiz"),status=$("publishStatus");
+        const cleaned=questions.map((q,i)=>{
+          if(!q.text.trim())throw new Error("प्रश्न "+(i+1)+" खाली है।");
+          if(!Number.isInteger(Number(q.marks))||Number(q.marks)<1||Number(q.marks)>100)throw new Error("प्रश्न "+(i+1)+" के अंक जाँचें।");
+          if(objective&&(q.options.length!==4||q.options.some(v=>!String(v).trim())))throw new Error("प्रश्न "+(i+1)+" के चारों विकल्प भरें।");
+          if(objective&&(!Number.isInteger(q.answer)||q.answer<0||q.answer>3))throw new Error("प्रश्न "+(i+1)+" का सही उत्तर चुनें।");
+          return {...q,type:quizType,options:objective?q.options:[],answer:objective?q.answer:null,marks:Number(q.marks)};
+        });
+        if(!cleaned.length)return alertMsg("कम-से-कम एक प्रश्न जोड़ें।");
+        if(!window.confirm("क्या आप "+cleaned.length+" प्रश्नों वाला यह Quiz Publish करना चाहते हैं?"))return;
+        if(!window.confirm("अंतिम पुष्टि: Publish होने के बाद विद्यार्थी इसे देख और निर्धारित समय में Attempt कर सकेंगे। क्या आप निश्चित हैं?"))return;
+        button.disabled=true;status.textContent="Quiz सुरक्षित रूप से publish हो रहा है…";
+        try{
+          const result=await call("saveQuiz",{title:meta.topic+" - "+(objective?"Objective":"Subjective")+" Quiz",className:meta.className,subject:meta.subject,topic:meta.topic,duration:meta.duration,questions:cleaned,quizType,publish:true});
+          alertMsg("Quiz Publish हो गया। "+result.questionCount+" प्रश्न • कुल "+result.totalMarks+" अंक");
+          tab="admin";render();
+        }catch(e){status.textContent=e.message;button.disabled=false}
+      };
+    }
+  }
+  draw();
 }
 async function quizBuilderPage(mode){
   if(role!=="admin"&&role!=="superadmin")return;
