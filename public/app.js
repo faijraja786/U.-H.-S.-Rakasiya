@@ -340,14 +340,16 @@ async function aiQuestionBankPage(){
   panel("AI Question Generator",'<button class="text-button" id="aiBack">← Admin Dashboard</button><div class="dashboard-hero"><span class="eyebrow">EDUFUTURE • GEMINI AI</span><h2>AI से प्रश्न बनाएं</h2><p>AI के बनाए प्रश्न पहले Pending में आएँगे। जाँच और Approve करने के बाद ही वे Question Bank में जुड़ेंगे।</p></div><section class="item"><div class="builder-meta-grid"><div><label>Class</label><input id="aiClass" placeholder="जैसे Class 10"></div><div><label>Subject</label><input id="aiSubject" placeholder="जैसे Science"></div><div><label>Chapter / Topic</label><input id="aiTopic" placeholder="जैसे प्रकाश और परावर्तन"></div><div><label>Question Type</label><select id="aiType"><option value="objective">MCQ</option><option value="subjective">Subjective</option></select></div><div><label>Difficulty</label><select id="aiDifficulty"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select></div><div><label>Number of Questions (1–15)</label><input id="aiCount" type="number" min="1" max="15" value="5"></div></div><button id="aiGenerate" class="success-action">✦ Generate Questions</button><span id="aiStatus" class="hint"></span></section><h3>Pending Review</h3><div id="aiPending">Loading pending questions…</div><h3>Approved Question Bank</h3><div id="aiApproved">Loading approved questions…</div>');
   $("aiBack").onclick=()=>{tab="admin";render()};
   async function loadLists(){
-    const [pending,approved]=await Promise.all([call("listQuestionDrafts"),call("listQuestionBank")]);
-    $("aiPending").innerHTML=pending.drafts.length?pending.drafts.filter(x=>x.status==="pending").map(q=>{
+    const [pendingResult,approvedResult]=await Promise.allSettled([call("listQuestionDrafts"),call("listQuestionBank")]);
+    const pending=pendingResult.status==="fulfilled"?pendingResult.value:null;
+    const approved=approvedResult.status==="fulfilled"?approvedResult.value:null;
+    $("aiPending").innerHTML=pending?(pending.drafts||[]).filter(x=>x.status==="pending").map(q=>{
       const id=esc(q.id), mcq=q.type==="objective";
       return '<article class="item"><div class="question-meta"><span>'+esc(q.className)+'</span><span>'+esc(q.subject)+'</span><span>'+esc(q.difficulty)+'</span></div><p class="hint">'+esc(q.topic)+' • '+(mcq?"MCQ":"Subjective")+'</p><label>Question (review/edit)</label><textarea rows="3" data-ai-text="'+id+'">'+esc(q.text)+'</textarea>'+
         (mcq?'<label>Options (one per line)</label><textarea rows="4" data-ai-options="'+id+'">'+esc((q.options||[]).join("\n"))+'</textarea><label>Correct Option</label><select data-ai-answer="'+id+'">'+(q.options||[]).map((v,i)=>'<option value="'+i+'" '+(Number(q.answer)===i?"selected":"")+'>'+String.fromCharCode(65+i)+' — '+esc(v)+'</option>').join("")+'</select>':'<label>Model Answer (review/edit)</label><textarea rows="3" data-ai-model="'+id+'">'+esc(q.modelAnswer||"")+'</textarea>')+
         '<label>Explanation (optional)</label><textarea rows="2" data-ai-explanation="'+id+'">'+esc(q.explanation||"")+'</textarea><div class="overview-actions"><button data-ai-approve="'+id+'">Approve to Question Bank</button><button class="secondary" data-ai-reject="'+id+'">Reject</button></div></article>';
-    }).join(""):'<div class="empty-state">अभी कोई Pending AI प्रश्न नहीं है।</div>';
-    $("aiApproved").innerHTML=approved.questions.length?approved.questions.map(q=>'<article class="item"><div class="question-meta"><span>'+esc(q.className)+'</span><span>'+esc(q.subject)+'</span><span>'+esc(q.difficulty)+'</span></div><b>'+esc(q.text)+'</b><p class="hint">'+esc(q.topic)+' • '+(q.type==="objective"?"MCQ":"Subjective")+'</p>'+(q.type==="objective"?'<ol type="A">'+(q.options||[]).map((x,i)=>'<li>'+esc(x)+(i===q.answer?' ✓ सही उत्तर':'')+'</li>').join("")+'</ol>':'<p><b>Model Answer:</b> '+esc(q.modelAnswer||"")+'</p>')+'</article>').join(""):'<div class="empty-state">अभी Question Bank में कोई approved प्रश्न नहीं है।</div>';
+    }).join(""):'<div class="empty-state">अभी कोई Pending AI प्रश्न नहीं है।</div>':'<div class="error">Pending Draft लोड नहीं हुए: '+esc(pendingResult.reason?.message||"अज्ञात त्रुटि")+'</div>';
+    $("aiApproved").innerHTML=approved?(approved.questions||[]).length?approved.questions.map(q=>'<article class="item"><div class="question-meta"><span>'+esc(q.className)+'</span><span>'+esc(q.subject)+'</span><span>'+esc(q.difficulty)+'</span></div><b>'+esc(q.text)+'</b><p class="hint">'+esc(q.topic)+' • '+(q.type==="objective"?"MCQ":"Subjective")+'</p>'+(q.type==="objective"?'<ol type="A">'+(q.options||[]).map((x,i)=>'<li>'+esc(x)+(i===q.answer?' ✓ सही उत्तर':'')+'</li>').join("")+'</ol>':'<p><b>Model Answer:</b> '+esc(q.modelAnswer||"")+'</p>')+'</article>').join(""):'<div class="empty-state">अभी Question Bank में कोई approved प्रश्न नहीं है।</div>':'<div class="error">Question Bank लोड नहीं हुआ: '+esc(approvedResult.reason?.message||"अज्ञात त्रुटि")+'</div>';
     $("view").querySelectorAll("[data-ai-approve]").forEach(b=>b.onclick=async()=>{
       const id=b.dataset.aiApprove;
       try{
@@ -379,7 +381,7 @@ async function aiQuestionBankPage(){
     }catch(e){status.textContent=e.message}
     finally{button.disabled=false}
   };
-  try{await loadLists()}catch(e){$("aiPending").textContent=e.message;$("aiApproved").textContent="Question Bank लोड नहीं हो सका।"}
+  await loadLists()
 }
 async function createQuizPage(){
   if(role!=="admin"&&role!=="superadmin")return;
