@@ -112,7 +112,7 @@ async function requireTeacher(req, subject, className) {
   const subjects = assignment.subjects || [];
   const classes = assignment.classes || [];
   if (subject && !subjects.some(x => String(x).toLowerCase() === String(subject).toLowerCase())) fail("permission-denied", "यह विषय आपको assign नहीं किया गया है।");
-  if (className && !classes.some(x => normalizeClassName(x) === normalizeClassName(className))) fail("permission-denied", "यह कक्षा आपको assign नहीं की गई है।");
+  if (subject && (!className || !classes.length || !classes.some(x => normalizeClassName(x) === normalizeClassName(className)))) fail("permission-denied", "यह कक्षा आपको assign नहीं की गई है।");
   return true;
 }
 
@@ -605,7 +605,7 @@ async function run(name, req) {
         const assigned = await db.doc("teacherAssignments/" + uid).get();
         subjects = assigned.exists ? (assigned.data().subjects || []) : [];
         classes = assigned.exists ? (assigned.data().classes || []) : [];
-        if (!subjects.length || !classes.length) return { submissions: [], nextCursor: null, hasMore: false };
+        if (!subjects.length || !classes.length) return { submissions: [], quizCursor: null, hasMoreQuizzes: false };
       }
       const pageSize = Math.min(25, Math.max(5, Number(d.limit) || 20));
       const quizDocs = [];
@@ -667,7 +667,7 @@ async function run(name, req) {
       const marks = Number(d.marks);
       const quizRef = db.doc("quizzes/" + quizId), quizSnap = await quizRef.get();
       if (!quizSnap.exists) fail("not-found", "Quiz नहीं मिला।");
-      await requireTeacher(req, quizSnap.data().subject);
+      await requireTeacher(req, quizSnap.data().subject, quizSnap.data().className);
       const maxSnap = await quizRef.collection("privateAnswers").doc(questionId).get();
       if (!maxSnap.exists || maxSnap.data().type !== "subjective") fail("invalid-argument", "Subjective question नहीं मिला।");
       if (!Number.isFinite(marks) || marks < 0 || marks > Number(maxSnap.data().marks || 1)) fail("invalid-argument", "दिए गए अंक प्रश्न के अधिकतम अंकों के भीतर रखें।");
