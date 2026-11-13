@@ -37,6 +37,16 @@ async function uploadContentFile(contentId, file) {
   if (!response.ok) throw new Error(result.error?.message || "फ़ाइल upload नहीं हो सकी।");
   return result.data;
 }
+async function uploadNoticeFile(id,file){
+  const current=auth.currentUser;if(!current)throw new Error("कृपया पहले login करें।");
+  const token=await current.getIdToken();
+  const response=await fetch(API_BASE.replace(/\/+$/,"")+"/api/notice-upload/"+encodeURIComponent(id),{
+    method:"POST",headers:{"Authorization":"Bearer "+token,"Content-Type":"application/octet-stream","X-File-Name":encodeURIComponent(file.name),"X-File-Type":file.type||""},body:file
+  });
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(result.error?.message||"Notice media upload नहीं हो सका।");
+  return result.data;
+}
 const esc = v => String(v ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 await setPersistence(auth,browserLocalPersistence);
 let user=null, role="student", tab="home", activeQuiz=null, answers={}, timer=null;
@@ -90,20 +100,20 @@ onAuthStateChanged(auth,async u=>{
   }catch(e){await signOut(u).catch(()=>{});openLogin();msg("Role verification नहीं हो सकी: "+e.message)}
 });
 
-const studentTabs=[["home","Home"],["quiz","Available Quizzes"],["notes","Study Notes"],["pyq","Previous Year Questions"],["leaderboard","Leaderboard"],["results","My Results"],["doubts","Doubt Solving"],["tasks","Daily Targets"],["planner","Study Routine"],["cards","Flashcards"]];
+const studentTabs=[["home","Home"],["notices","Important Notice"],["quiz","Available Quizzes"],["notes","Study Notes"],["pyq","Previous Year Questions"],["leaderboard","Leaderboard"],["results","My Results"],["doubts","Doubt Solving"],["tasks","Daily Targets"],["planner","Study Routine"],["cards","Flashcards"]];
 function closeWorkspaceMenu(){
   $("app").classList.remove("menu-open");
   $("menuToggle").setAttribute("aria-expanded","false");
 }
 function render(){
   let tabs=studentTabs;
-  if(role==="teacher")tabs=[["home","Home"],["teacher","Teacher Workspace"]];
-  if(role==="admin")tabs=[["home","Home"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"]];
-  if(role==="superadmin")tabs=[["home","Home"],["overview","Overview"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"],["super","Super Admin"]];
-  const pages={overview:superOverviewPage,home:role==="superadmin"?superHomePage:homePage,quiz:quizPage,notes:notesPage,pyq:pyqPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,admin:adminPage,createquiz:createQuizPage,objectivebuilder:()=>quizBuilderPage("objective"),subjectivebuilder:()=>quizBuilderPage("subjective"),notesupload:()=>contentUploadPage("note"),pyqupload:()=>contentUploadPage("pyq"),super:superPage};
+  if(role==="teacher")tabs=[["home","Home"],["notices","Important Notice"],["teacher","Teacher Workspace"]];
+  if(role==="admin")tabs=[["home","Home"],["notices","Important Notice"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"]];
+  if(role==="superadmin")tabs=[["home","Home"],["notices","Important Notice"],["overview","Overview"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"],["super","Super Admin"]];
+  const pages={overview:superOverviewPage,home:role==="superadmin"?superHomePage:homePage,notices:importantNoticesPage,quiz:quizPage,notes:notesPage,pyq:pyqPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,admin:adminPage,createquiz:createQuizPage,objectivebuilder:()=>quizBuilderPage("objective"),subjectivebuilder:()=>quizBuilderPage("subjective"),notesupload:()=>contentUploadPage("note"),pyqupload:()=>contentUploadPage("pyq"),super:superPage};
   // Internal workflow pages are intentionally not sidebar items. Keep them routable.
   if(!tabs.some(x=>x[0]===tab)&&!pages[tab])tab=tabs[0][0];
-  $("nav").innerHTML='<div class="nav-section-label">MENU</div>'+tabs.map(x=>'<button data-tab="'+x[0]+'" class="nav-link '+(tab===x[0]?"active":"")+'"><span class="nav-icon">'+({overview:"◈",home:"⌂",quiz:"▤",notes:"▧",leaderboard:"♛",results:"◷",doubts:"✉",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜"}[x[0]]||"•")+'</span><span>'+x[1]+"</span></button>").join("");
+  $("nav").innerHTML='<div class="nav-section-label">MENU</div>'+tabs.map(x=>'<button data-tab="'+x[0]+'" class="nav-link '+(tab===x[0]?"active":"")+'"><span class="nav-icon">'+({overview:"◈",home:"⌂",notices:"📢",quiz:"▤",notes:"▧",leaderboard:"♛",results:"◷",doubts:"✉",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜"}[x[0]]||"•")+'</span><span>'+x[1]+"</span></button>").join("");
   $("nav").querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render();closeWorkspaceMenu()});
   (pages[tab]||homePage)().catch(e=>panel("त्रुटि",'<p class="error">'+esc(e.message)+"</p>"));
 }
@@ -132,15 +142,24 @@ async function homePage(){
   const accuracy=total?Math.round(marks/total*100):0;
   let rankText="—";
   if(released.length){try{const board=await call("getLeaderboard",{id:released[0].quizId});const mine=board.rows.find(x=>x.uid===user.uid);if(mine)rankText="#"+mine.rank}catch{}}
+  const noticePreview=await call("listNotices").catch(()=>({notices:[]}));
+  const noticeHtml=noticePreview.notices?.length?'<section class="item"><div class="question-head"><h3>📢 Important Notice</h3><button data-open-notices>सभी देखें</button></div>'+noticePreview.notices.slice(0,2).map(n=>'<article><b>'+esc(n.title||"School Notice")+'</b><p>'+esc(n.body||"")+'</p><small>'+dateText(n.createdAt)+'</small></article>').join("")+'</section>':'<section class="item"><h3>📢 Important Notice</h3><p>अभी कोई नया Notice नहीं है।</p></section>';
   panel("स्वागत है, "+(user.displayName||"EduFuture User"),'<div class="dashboard-hero"><span class="eyebrow">EDUFUTURE • YOUR WORKSPACE</span><h2>आज सीखें, कल आगे बढ़ें।</h2><p>अपनी पढ़ाई और स्कूल के सभी उपलब्ध काम एक ही जगह से शुरू करें।</p><button data-goquiz>नया टेस्ट शुरू करें</button></div><div class="grid"><div class="stat"><strong>'+quizSnap.size+'</strong><span>Available Quizzes</span></div><div class="stat"><strong>'+tests+'</strong><span>Tests Attempted</span></div><div class="stat"><strong>'+marks+'/'+total+'</strong><span>Marks Earned</span></div><div class="stat"><strong>'+accuracy+'%</strong><span>Accuracy</span></div><div class="stat"><strong>'+rankText+'</strong><span>Latest Quiz Rank</span></div></div><div class="dashboard-shortcuts"><button data-godoubts>Ask a Doubt</button><button data-goresults>Test History</button><button data-gonotes>Study Notes</button></div>');
   $("view").querySelector("[data-goquiz]").onclick=()=>{tab="quiz";render()};
   $("view").querySelector("[data-godoubts]").onclick=()=>{tab="doubts";render()};
   $("view").querySelector("[data-goresults]").onclick=()=>{tab="results";render()};
   $("view").querySelector("[data-gonotes]").onclick=()=>{tab="notes";render()};
+  $("view").insertAdjacentHTML("beforeend",noticeHtml);
+  $("view").querySelector("[data-open-notices]")?.addEventListener("click",()=>{tab="notices";render()});
 }
 async function quizPage(){
   const s=await getDocs(query(collection(db,"quizzes"),where("status","==","published")));
-  const cards=await Promise.all(s.docs.map(async d=>{
+  const activeDocs=s.docs.filter(d=>{
+    const q=d.data(), published=q.publishedAt?.toMillis?.()||0;
+    const release=q.resultsAt?.toMillis?.()||published+72*60*60*1000;
+    return !release||Date.now()<release;
+  });
+  const cards=await Promise.all(activeDocs.map(async d=>{
     const q=d.data(), attemptSnap=await getDoc(doc(db,"quizzes",d.id,"attempts",user.uid));
     const attempt=attemptSnap.exists()?attemptSnap.data():null;
     const closeMs=q.closesAt?.toMillis?.() || (q.publishedAt?.toMillis?.()||0)+48*60*60*1000;
@@ -157,7 +176,7 @@ async function quizPage(){
     }
     return '<article class="item quiz-window-card"><div class="question-meta"><span>'+esc(q.subject||"General")+'</span><span>'+(q.quizType==="subjective"?"SUBJECTIVE":q.quizType==="objective"?"OBJECTIVE":"MIXED TEST")+'</span><span>'+Number(q.questionCount||0)+' प्रश्न</span><span>'+Number(q.duration||0)+' मिनट</span></div><h3>'+esc(q.title)+'</h3>'+action+'</article>';
   }));
-  panel("Available Quizzes",'<div class="quiz-window-banner"><span class="eyebrow">EDUFUTURE • LIMITED ATTEMPT WINDOW</span><h2>हर प्रश्नपत्र के लिए 48 घंटे</h2><p>पहले 48 घंटे में attempt करें। Result और सभी की Rank प्रश्नपत्र upload होने के 72 घंटे बाद खुलेंगे।</p></div>'+(cards.length?cards.join(""):"<p>अभी कोई quiz प्रकाशित नहीं है।</p>"));
+  panel("Available Quizzes",'<div class="quiz-window-banner"><span class="eyebrow">EDUFUTURE • LIMITED ATTEMPT WINDOW</span><h2>हर प्रश्नपत्र के लिए 48 घंटे</h2><p>पहले 48 घंटे में attempt करें। Result और सभी की Rank प्रश्नपत्र upload होने के 72 घंटे बाद खुलेंगे।</p></div>'+(cards.length?cards.join(""):"<p>अभी कोई उपलब्ध Quiz नहीं है। 72 घंटे पूरे होने वाले प्रश्नपत्र Archive हो चुके हैं। पुराने परिणाम My Results में सुरक्षित हैं।</p>"));
   const tick=()=>{$("view").querySelectorAll("[data-countdown]").forEach(el=>{const ms=Number(el.dataset.countdown)-Date.now();if(ms<=0){el.textContent="अब उपलब्ध है — पेज refresh करें";return}const h=Math.floor(ms/3600000),m=Math.floor(ms%3600000/60000),sec=Math.floor(ms%60000/1000);el.textContent=h+"घं "+m+"मि "+sec+"से"});};
   tick();clearInterval(window.quizCountdownTimer);window.quizCountdownTimer=setInterval(tick,1000);
   $("view").querySelectorAll("[data-start]").forEach(b=>b.onclick=()=>startQuiz(b.dataset.start));
@@ -326,26 +345,72 @@ async function quizBuilderPage(mode){
   };
   draw();
 }
+
+async function importantNoticesPage(){
+  const canPost=["teacher","admin","superadmin"].includes(role);
+  panel("Important Notice",'<div class="builder-heading"><span class="eyebrow">EDUFUTURE • SCHOOL UPDATES</span><h2>Important Notice</h2><p>परीक्षा, Admit Card और जरूरी निर्देश। पुराने Notice 30 दिन बाद सूची से छिप जाते हैं। Delete करने पर Storage media भी हटेगा।</p></div>'+
+    (canPost?'<section class="item"><h3>नया Notice बनाएँ</h3><label>शीर्षक (वैकल्पिक)</label><input id="noticeTitle" maxlength="140" placeholder="जैसे: वार्षिक परीक्षा सूचना"><label>जानकारी / निर्देश</label><textarea id="noticeBody" rows="4" maxlength="5000" placeholder="Notice की जानकारी लिखें…"></textarea><label>Photo या Video (अधिकतम 50 MB)</label><input id="noticeMedia" type="file" accept="image/*,video/mp4,video/webm,video/quicktime"><p class="hint">मोबाइल पर Gallery या उपलब्ध media picker खुलेगा। Text, photo, video या combination भेजें।</p><button id="publishNotice" class="success-action">Publish Notice</button><span id="noticeStatus" class="hint"></span></section>':'')+'<div id="noticeList">Notices लोड हो रहे हैं…</div>');
+  async function refresh(){
+    const out=$("noticeList");
+    try{
+      const items=(await call("listNotices")).notices||[];
+      out.innerHTML=items.length?items.map(n=>'<article class="item notice-card"><div class="question-meta"><span>IMPORTANT NOTICE</span><span>'+dateText(n.createdAt)+'</span></div>'+(n.title?'<h3>'+esc(n.title)+'</h3>':'')+(n.body?'<p style="white-space:pre-wrap">'+esc(n.body)+'</p>':'')+(n.mediaUrl?(n.mediaType==="video"?'<video controls playsinline preload="metadata" style="max-width:100%;border-radius:12px"><source src="'+esc(n.mediaUrl)+'"></video>':'<img loading="lazy" src="'+esc(n.mediaUrl)+'" alt="Notice photo" style="max-width:100%;height:auto;border-radius:12px">'):'')+(n.canDelete?'<button class="danger" data-delete-notice="'+esc(n.id)+'">Delete Notice</button>':'')+'</article>').join(""):'<div class="empty-state"><b>अभी कोई Important Notice नहीं है।</b></div>';
+      out.querySelectorAll("[data-delete-notice]").forEach(b=>b.onclick=async()=>{if(!confirm("क्या Notice और उसकी photo/video स्थायी रूप से हटानी है?"))return;try{b.disabled=true;await call("deleteNotice",{id:b.dataset.deleteNotice});await refresh()}catch(e){b.disabled=false;alertMsg(e.message)}});
+    }catch(e){out.textContent=e.message}
+  }
+  if(canPost)$("publishNotice").onclick=async()=>{
+    const b=$("publishNotice"),file=$("noticeMedia").files[0],id=doc(collection(db,"notices")).id;b.disabled=true;$("noticeStatus").textContent="Publish हो रहा है…";
+    try{
+      const title=$("noticeTitle").value.trim(),body=$("noticeBody").value.trim();
+      if(!title&&!body&&!file)throw Error("Text, photo या video जोड़ें।");
+      if(file&&file.size>50*1024*1024)throw Error("Media 50 MB से छोटी होनी चाहिए।");
+      let mediaPath="",mediaType="";
+      if(file){const up=await uploadNoticeFile(id,file);mediaPath=up.storagePath;mediaType=up.mediaType}
+      await call("createNotice",{id,title,body,mediaPath,mediaType});
+      $("noticeTitle").value="";$("noticeBody").value="";$("noticeMedia").value="";$("noticeStatus").textContent="Notice publish हो गया।";await refresh();
+    }catch(e){$("noticeStatus").textContent=e.message;alertMsg(e.message)}finally{b.disabled=false}
+  };
+  await refresh();
+}
+
 async function contentUploadPage(kind){
   if(role!=="admin"&&role!=="superadmin")return;
   const isPyq=kind==="pyq",prefix=isPyq?"pyq":"note",title=isPyq?"PYQ":"Notes";
-  panel("Upload "+title,'<button class="text-button" id="backContent">← Admin Dashboard</button><div class="builder-heading"><span class="eyebrow">EDUFUTURE • CONTENT LIBRARY</span><h2>'+title+' Upload</h2><p>इस पेज पर केवल '+title+' upload और manage होंगे।</p></div><label>'+title+' Title</label><input id="'+prefix+'Title" placeholder="'+title+' title"><label>Subject</label><input id="'+prefix+'Subject" placeholder="जैसे Science"><label>Description</label><textarea id="'+prefix+'Description" rows="3"></textarea><label>PDF / DOC / DOCX / PPT / Image (अधिकतम 30 MB)</label><input id="'+prefix+'File" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp"><label>या Hosted File URL</label><input id="'+prefix+'Url" type="url" placeholder="https://..."><p id="'+prefix+'Status" class="hint">फ़ाइल चुनें या Hosted URL डालें।</p><button id="'+prefix+'Save" class="success-action">Upload '+title+'</button><section class="item"><h3>Manage '+title+'</h3><div id="'+prefix+'List">Loading…</div></section>');
+  panel("Upload "+title,'<button class="text-button" id="backContent">← Admin Dashboard</button><div class="builder-heading"><span class="eyebrow">EDUFUTURE • CONTENT LIBRARY</span><h2>'+title+' Upload</h2><p>एक बार में कई PDF / documents चुनें। हर फ़ाइल अलग item बनेगी।</p></div><label>'+title+' Title (एकाधिक फ़ाइलों के लिए आधार नाम)</label><input id="'+prefix+'Title" placeholder="'+title+' title"><label>Subject</label><input id="'+prefix+'Subject" placeholder="जैसे Science"><label>Description</label><textarea id="'+prefix+'Description" rows="3"></textarea><label>एक या अधिक PDF / DOC / PPT / Image (प्रति फ़ाइल अधिकतम 30 MB)</label><input id="'+prefix+'File" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp"><label>या एक Hosted File URL</label><input id="'+prefix+'Url" type="url" placeholder="https://..."><p id="'+prefix+'Status" class="hint">एकाधिक फ़ाइलें चुन सकते हैं।</p><button id="'+prefix+'Save" class="success-action">Upload '+title+'</button><section class="item"><h3>Manage '+title+'</h3><div id="'+prefix+'List">Loading…</div></section>');
   $("backContent").onclick=()=>{tab="admin";render()};
   async function refresh(){
-    try{const snap=await getDocs(collection(db,"content")),items=snap.docs.map(d=>({id:d.id,...d.data()})).filter(x=>x.type===kind);
-      $(prefix+"List").innerHTML=items.length?items.map(x=>'<div class="admin-row"><span>'+esc(x.title)+' • '+(x.published?"Published":"Hidden")+'</span><button data-toggle-content="'+x.id+'" data-next="'+(!x.published)+'">'+(x.published?"Hide":"Publish")+'</button></div>').join(""):'<p>अभी कोई '+title+' नहीं है।</p>';
-      $(prefix+"List").querySelectorAll("[data-toggle-content]").forEach(b=>b.onclick=async()=>{try{await call("setContentPublished",{id:b.dataset.toggleContent,published:b.dataset.next==="true"});refresh()}catch(err){alertMsg(err.message)}});
-    }catch(err){$(prefix+"List").textContent=err.message}
+    try{
+      const snap=await getDocs(collection(db,"content")),items=snap.docs.map(d=>({id:d.id,...d.data()})).filter(x=>x.type===kind);
+      $(prefix+"List").innerHTML=items.length?items.map(x=>'<div class="admin-row"><span>'+esc(x.title)+' • '+(x.published?"Published":"Hidden")+'</span><div><button data-toggle-content="'+esc(x.id)+'" data-next="'+(!x.published)+'">'+(x.published?"Hide":"Publish")+'</button> <button class="danger" data-delete-content="'+esc(x.id)+'">Delete</button></div></div>').join(""):'<p>अभी कोई '+title+' नहीं है।</p>';
+      $(prefix+"List").querySelectorAll("[data-toggle-content]").forEach(b=>b.onclick=async()=>{try{await call("setContentPublished",{id:b.dataset.toggleContent,published:b.dataset.next==="true"});await refresh()}catch(e){alertMsg(e.message)}});
+      $(prefix+"List").querySelectorAll("[data-delete-content]").forEach(b=>b.onclick=async()=>{if(!confirm("यह सामग्री और Supabase Storage की असली फ़ाइल स्थायी रूप से हटेगी। जारी रखें?"))return;try{b.disabled=true;await call("deleteContent",{id:b.dataset.deleteContent});await refresh()}catch(e){b.disabled=false;alertMsg(e.message)}});
+    }catch(e){$(prefix+"List").textContent=e.message}
   }
   $(prefix+"Save").onclick=async()=>{
-    const button=$(prefix+"Save"),file=$(prefix+"File").files[0];button.disabled=true;
-    try{const name=$(prefix+"Title").value.trim(),subject=$(prefix+"Subject").value.trim();if(!name||!subject)throw Error("Title और Subject भरना जरूरी है।");let url=$(prefix+"Url").value.trim();const contentId=doc(collection(db,"content")).id;let storagePath="";
-      if(file){if(file.size>30*1024*1024)throw Error("फ़ाइल 30 MB से छोटी होनी चाहिए।");if(!/\.(pdf|doc|docx|ppt|pptx|png|jpe?g|webp)$/i.test(file.name))throw Error("यह file type supported नहीं है।");$(prefix+"Status").textContent="फ़ाइल upload हो रही है…";const uploaded=await uploadContentFile(contentId,file);storagePath=uploaded.storagePath;url="";}
-      if(!url&&!storagePath)throw Error("फ़ाइल चुनें या Hosted URL डालें।");await call("addContent",{id:contentId,storagePath,title:name,subject,type:kind,description:$(prefix+"Description").value,url,published:true});alertMsg(title+" upload और publish हो गया।");$(prefix+"Title").value="";$(prefix+"Subject").value="";$(prefix+"Description").value="";$(prefix+"Url").value="";$(prefix+"File").value="";$(prefix+"Status").textContent="अगली फ़ाइल चुन सकते हैं।";refresh();
-    }catch(err){$(prefix+"Status").textContent=err.message;alertMsg(err.message)}finally{button.disabled=false}
-  };refresh();
+    const b=$(prefix+"Save"),files=Array.from($(prefix+"File").files||[]),url=$(prefix+"Url").value.trim();b.disabled=true;
+    try{
+      const base=$(prefix+"Title").value.trim(),subject=$(prefix+"Subject").value.trim();
+      if(!base||!subject)throw Error("Title और Subject भरना जरूरी है।");
+      if(files.length&&url)throw Error("एक साथ files और Hosted URL न दें।");
+      if(!files.length&&!url)throw Error("कम-से-कम एक फ़ाइल या Hosted URL चुनें।");
+      if(files.length>20)throw Error("एक बार में अधिकतम 20 फ़ाइलें upload करें।");
+      const allowed=/\.(pdf|doc|docx|ppt|pptx|png|jpe?g|webp)$/i;
+      for(const f of files){if(f.size>30*1024*1024)throw Error(f.name+" 30 MB से बड़ी है।");if(!allowed.test(f.name))throw Error(f.name+" का file type supported नहीं है।")}
+      if(!files.length){const id=doc(collection(db,"content")).id;await call("addContent",{id,title:base,subject,type:kind,description:$(prefix+"Description").value,url,published:true})}
+      else{
+        for(let i=0;i<files.length;i++){
+          const file=files[i],id=doc(collection(db,"content")).id;
+          $(prefix+"Status").textContent="Upload "+(i+1)+"/"+files.length+": "+file.name;
+          const uploaded=await uploadContentFile(id,file),fileTitle=files.length===1?base:base+" - "+file.name.replace(/\.[^.]+$/,"");
+          await call("addContent",{id,storagePath:uploaded.storagePath,title:fileTitle,subject,type:kind,description:$(prefix+"Description").value,url:"",published:true});
+        }
+      }
+      alertMsg(files.length?files.length+" "+title+" files upload हो गईं।":title+" link publish हो गया।");
+      $(prefix+"Title").value="";$(prefix+"Subject").value="";$(prefix+"Description").value="";$(prefix+"Url").value="";$(prefix+"File").value="";$(prefix+"Status").textContent="Upload पूरा हुआ।";await refresh();
+    }catch(e){$(prefix+"Status").textContent=e.message;alertMsg(e.message)}finally{b.disabled=false}
+  };
+  refresh();
 }
-
 async function superPage(){
   if(role!=="superadmin")return;
   panel("Super Admin Controls",'<div class="item"><h3>Create Admin</h3><p class="hint">Admin का account पहले से बना होना चाहिए।</p><input id="adminEmail" type="email" placeholder="Registered admin email"><button id="createAdmin">Create Admin</button></div><div class="item"><h3>Manage All Admins</h3><button id="refreshAdmins">Refresh List</button><div id="adminList"></div></div>');
