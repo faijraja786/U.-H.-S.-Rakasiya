@@ -684,21 +684,35 @@ async function run(name, req) {
           : "For each item, options must be an empty array, answer must be null, and modelAnswer must contain a concise correct reference answer.",
         "Use clear age-appropriate Hindi. Do not include markdown fences. Ensure the answer is factually accurate."
       ].join("\n");
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent?key=" + encodeURIComponent(apiKey), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0.35 }
-        })
-      });
-      const raw = await response.text();
-      let payload = {};
-      try { payload = raw ? JSON.parse(raw) : {}; } catch {}
+      const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent?key=" + encodeURIComponent(apiKey);
+      let response, raw = "", payload = {};
+      for (let attempt = 0; attempt < 4; attempt++) {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+          })
+        });
+        raw = await response.text();
+        payload = {};
+        try { payload = raw ? JSON.parse(raw) : {}; } catch {}
+        if (response.ok || ![429, 500, 502, 503, 504].includes(response.status) || attempt === 3) break;
+        const retryAfter = Number(response.headers.get("retry-after"));
+        const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+          ? Math.min(10000, retryAfter * 1000)
+          : Math.min(8000, 1000 * (2 ** attempt));
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+      }
       if (!response.ok) {
         const detail = payload.error?.message || "Gemini API request असफल रही (" + response.status + ").";
-        const err = new Error(detail.slice(0, 500));
-        err.code = response.status === 429 ? "resource-exhausted" : response.status === 400 ? "invalid-argument" : "failed-precondition";
+        const err = new Error(response.status === 503
+          ? "Gemini अभी अधिक व्यस्त है। Retry के बाद भी उत्तर नहीं मिला। थोड़ी देर बाद फिर कोशिश करें।"
+          : detail.slice(0, 500));
+        err.code = response.status === 429 ? "resource-exhausted"
+          : [500, 502, 503, 504].includes(response.status) ? "unavailable"
+          : response.status === 400 ? "invalid-argument" : "failed-precondition";
         throw err;
       }
       const generatedText = payload.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("") || "";
@@ -873,10 +887,10 @@ app.post("/api/:name", authenticate, async (req, res) => {
     const data = await run(req.params.name, req);
     return res.json({ data });
   } catch (error) {
-    const known = new Set(["invalid-argument", "unauthenticated", "permission-denied", "not-found", "already-exists", "failed-precondition", "deadline-exceeded"]);
+    const known = new Set(["invalid-argument", "unauthenticated", "permission-denied", "not-found", "already-exists", "failed-precondition", "deadline-exceeded", "resource-exhausted", "unavailable"]);
     const code = known.has(error.code) ? error.code : "internal";
     if (code === "internal") console.error("API error:", error);
-    return res.status(code === "unauthenticated" ? 401 : code === "permission-denied" ? 403 : code === "not-found" ? 404 : code === "invalid-argument" ? 400 : code === "already-exists" ? 409 : code === "deadline-exceeded" ? 408 : 500)
+    return res.status(code === "unauthenticated" ? 401 : code === "permission-denied" ? 403 : code === "not-found" ? 404 : code === "invalid-argument" ? 400 : code === "already-exists" ? 409 : code === "deadline-exceeded" ? 408 : code === "unavailable" ? 503 : code === "resource-exhausted" ? 429 : 500)
       .json({ error: { code, message: code === "internal" ? "Server में समस्या आई। कृपया बाद में कोशिश करें।" : error.message } });
   }
 });
