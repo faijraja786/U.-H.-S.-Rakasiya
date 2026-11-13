@@ -188,16 +188,35 @@ async function quizPage(){
 }
 async function startQuiz(id){
   try{
-    const d=await call("startQuiz",{id});activeQuiz={id:id,...d};answers={};const deadline=new Date(d.expiresAt).getTime();
+    const d=await call("startQuiz",{id});
+    activeQuiz={id:id,...d};answers={};
+    const deadline=new Date(d.expiresAt).getTime();
+    let currentQuestion=0;
     function draw(){
+      const questions=activeQuiz.questions||[];
+      if(!questions.length)throw new Error("इस Quiz में कोई प्रश्न उपलब्ध नहीं है।");
+      const q=questions[currentQuestion];
       const left=Math.max(0,Math.ceil((deadline-Date.now())/1000));
-      $("view").innerHTML='<section class="panel"><h2>'+esc(activeQuiz.title)+'</h2><div class="timer" id="quizClock">'+Math.floor(left/60)+':'+String(left%60).padStart(2,"0")+'</div>'+
-      activeQuiz.questions.map((q,i)=>'<article class="question"><div class="question-meta"><span>'+esc(q.type==="subjective"?"SUBJECTIVE":"OBJECTIVE")+'</span><span>'+esc(q.difficulty||"medium")+'</span><span>'+Number(q.marks||1)+' अंक</span></div><h3>'+(i+1)+'. '+esc(q.text)+'</h3>'+(q.type==="subjective"?'<textarea class="subjective-answer" data-answer="'+esc(q.id)+'" placeholder="अपना उत्तर लिखें" maxlength="5000">'+esc(answers[q.id]||"")+'</textarea>':q.options.map((o,j)=>'<label class="option"><input type="radio" name="q'+i+'" value="'+j+'" '+(answers[q.id]===j?"checked":"")+' > '+esc(o)+'</label>').join(""))+'</article>').join("")+'<button id="submitQuiz">Submit Quiz</button></section>';
-      $("view").querySelectorAll('input[type="radio"]').forEach(x=>x.onchange=()=>{const i=Number(x.name.slice(1));answers[activeQuiz.questions[i].id]=Number(x.value)});
-      $("view").querySelectorAll(".subjective-answer").forEach(x=>x.oninput=()=>{answers[x.dataset.answer]=x.value});
-      $("submitQuiz").onclick=submitQuiz;
+      const progress=Math.round(((currentQuestion+1)/questions.length)*100);
+      const answer=answers[q.id];
+      const questionBody=q.type==="subjective"
+        ? '<label class="question-label" for="currentSubjectiveAnswer">अपना उत्तर लिखें</label><textarea id="currentSubjectiveAnswer" class="subjective-answer" maxlength="5000" rows="7" placeholder="यहाँ अपना उत्तर लिखें">'+esc(answer||"")+'</textarea>'
+        : '<div class="quiz-options">'+q.options.map((o,j)=>'<label class="option"><input type="radio" name="currentQuestionOption" value="'+j+'" '+(answer===j?"checked":"")+'> <span>'+esc(o)+'</span></label>').join("")+'</div>';
+      $("view").innerHTML='<section class="panel quiz-attempt-panel"><div class="quiz-attempt-top"><div><span class="eyebrow">EDUFUTURE • ONLINE EXAM</span><h2>'+esc(activeQuiz.title)+'</h2></div><div class="timer" id="quizClock">'+Math.floor(left/60)+':'+String(left%60).padStart(2,"0")+'</div></div><div class="quiz-progress-meta"><b>प्रश्न '+(currentQuestion+1)+' / '+questions.length+'</b><span>'+progress+'% पूरा</span></div><div class="quiz-progress-track"><i style="width:'+progress+'%"></i></div><article class="question quiz-single-question"><div class="question-meta"><span>'+(q.type==="subjective"?"SUBJECTIVE":"OBJECTIVE")+'</span><span>'+esc(q.difficulty||"medium").toUpperCase()+'</span><span>'+Number(q.marks||1)+' अंक</span></div><h3>'+esc(q.text)+'</h3>'+questionBody+'</article><div class="quiz-step-actions"><button id="previousQuestion" class="secondary" '+(currentQuestion===0?"disabled":"")+'>← पिछला प्रश्न</button>'+(currentQuestion<questions.length-1?'<button id="nextQuestion" class="primary">अगला प्रश्न →</button>':'<button id="submitQuiz" class="success-action">Submit Quiz</button>')+'</div><div class="quiz-question-jump"><span>प्रश्न सूची</span><div>'+questions.map((item,i)=>'<button type="button" data-question-index="'+i+'" class="'+(i===currentQuestion?"active ":"")+(Object.prototype.hasOwnProperty.call(answers,item.id)?"answered":"")+'" aria-label="प्रश्न '+(i+1)+'">'+(i+1)+'</button>').join("")+'</div></div><p class="hint">आप प्रश्नों के बीच आगे-पीछे जा सकते हैं। उत्तर अपने-आप सुरक्षित रहेंगे।</p></section>';
+      $("view").querySelectorAll('input[name="currentQuestionOption"]').forEach(x=>x.onchange=()=>{answers[q.id]=Number(x.value);drawKeepFocus();});
+      const area=$("currentSubjectiveAnswer");
+      if(area)area.oninput=()=>{answers[q.id]=area.value;};
+      $("previousQuestion").onclick=()=>{if(currentQuestion>0){currentQuestion--;draw()}};
+      $("nextQuestion")?.addEventListener("click",()=>{if(currentQuestion<questions.length-1){currentQuestion++;draw()}});
+      $("submitQuiz")?.addEventListener("click",()=>{const unanswered=questions.filter(item=>!Object.prototype.hasOwnProperty.call(answers,item.id)||answers[item.id]==="").length;if(unanswered&&!confirm(unanswered+" प्रश्नों के उत्तर बाकी हैं। क्या फिर भी Quiz Submit करना है?"))return;submitQuiz()});
+      $("view").querySelectorAll("[data-question-index]").forEach(b=>b.onclick=()=>{currentQuestion=Number(b.dataset.questionIndex);draw()});
     }
-    draw();clearInterval(timer);timer=setInterval(()=>{const n=Math.max(0,Math.ceil((deadline-Date.now())/1000));if($("quizClock"))$("quizClock").textContent=Math.floor(n/60)+":"+String(n%60).padStart(2,"0");if(!n)submitQuiz()},1000);
+    function drawKeepFocus(){
+      // Update progress badges without rebuilding the selected answer control.
+      $("view").querySelectorAll("[data-question-index]").forEach((b,i)=>{b.classList.toggle("answered",Object.prototype.hasOwnProperty.call(answers,activeQuiz.questions[i].id));});
+    }
+    draw();clearInterval(timer);
+    timer=setInterval(()=>{const n=Math.max(0,Math.ceil((deadline-Date.now())/1000));if($("quizClock"))$("quizClock").textContent=Math.floor(n/60)+":"+String(n%60).padStart(2,"0");if(!n)submitQuiz()},1000);
   }catch(e){alertMsg(e.message)}
 }
 async function submitQuiz(){
