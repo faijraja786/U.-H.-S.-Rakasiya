@@ -315,3 +315,43 @@ input,textarea,select{color:#111827;background:#fff}
 .quiz-question-jump button.answered:not(.active){background:#dcfce7;border-color:#86efac;color:#166534}
 .quiz-step-actions button:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:600px){.quiz-attempt-top{align-items:center}.quiz-attempt-top h2{font-size:1.2rem}.quiz-single-question{padding:16px;min-height:240px}.quiz-step-actions{position:sticky;bottom:0;background:#fff;padding:10px 0;z-index:2}.quiz-step-actions button{flex:1;padding:10px 8px}.quiz-options .option{padding:13px}}
+
+
+/* EduFuture 2026 • profile, quiz wizard, teacher desk and rank polish */
+.profile-setup-card{max-width:680px;margin:24px auto;padding:clamp(20px,4vw,34px);border:1px solid #dbeafe;border-radius:22px;background:linear-gradient(145deg,#f8fbff,#fff);box-shadow:0 18px 45px #0b234012}
+.profile-setup-card h2{margin:10px 0;color:#10213d;font-size:clamp(23px,4vw,32px)}
+.profile-setup-card p{color:#52657d;line-height:1.7}
+.profile-setup-card input{margin-bottom:14px}
+.profile-menu-head small{display:block;margin-top:5px;color:#64748b}
+.quiz-wizard{max-width:980px;margin:0 auto}
+.wizard-progress{display:flex;align-items:center;gap:9px;margin:8px 0 26px;padding:14px;border:1px solid #dce8f7;border-radius:16px;background:#f8fbff}
+.wizard-progress span{font-size:12px;font-weight:800;color:#94a3b8;white-space:nowrap}
+.wizard-progress span.done{color:#1d4ed8}
+.wizard-progress i{height:2px;flex:1;background:#dbeafe}
+.wizard-heading{padding:clamp(20px,4vw,30px);margin-bottom:20px;border-radius:20px;background:radial-gradient(circle at 95% 0%,#dbeafe,transparent 36%),linear-gradient(120deg,#f0f7ff,#fff);border:1px solid #dbeafe}
+.wizard-heading h2{font-size:clamp(23px,4vw,31px);margin:8px 0;color:#10213d}
+.wizard-heading p{margin:0;color:#52657d;line-height:1.6}
+.wizard-form{max-width:760px;margin:0 auto;padding:clamp(18px,3vw,28px)}
+.wizard-form input{margin-bottom:13px}
+.wizard-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:20px 0}
+.wizard-actions button{min-width:145px}
+.question-stack{display:grid;gap:17px}
+.question-stack .builder-question{padding:clamp(17px,3vw,25px);border:1px solid #dbe5f2;border-radius:18px;background:#fff;box-shadow:0 8px 25px #0b234008}
+.question-stack .builder-question h3{margin:0}
+.question-stack .builder-question textarea{width:100%;min-height:94px}
+.question-add-area{margin:20px 0;padding:20px;border:1px dashed #93c5fd;border-radius:18px;background:#f8fbff}
+.question-add-area button{min-width:190px}
+.question-add-area p{margin-bottom:0}
+.doubt-student-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.doubt-student-head h3{margin:4px 0}
+.doubt-student-head span{padding:6px 10px;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:12px;font-weight:800}
+.teacher-doubt-card{padding:20px;border:1px solid #dbeafe;border-radius:18px;background:linear-gradient(145deg,#fff,#f8fbff)}
+.student-roster{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:12px 0 25px}
+.student-roster .admin-row{margin:0;display:block;padding:14px;border:1px solid #dbe5f2;border-radius:14px;background:#fff}
+.student-roster .admin-row span{display:block;font-weight:800}
+.student-roster .admin-row small{display:block;margin-top:5px;color:#64748b}
+.rank-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0 18px;padding:16px 18px;border:1px solid #bfdbfe;border-radius:16px;background:linear-gradient(110deg,#eff6ff,#f0fdfa);color:#12324f}
+.rank-summary b{font-size:16px}.rank-summary span{font-weight:800;color:#1d4ed8}
+.leaderboard-quiz{padding:clamp(17px,3vw,24px);border:1px solid #dbe5f2;border-radius:20px;background:#fff;box-shadow:0 10px 28px #0b23400a}
+.leaderboard-quiz h3{margin-top:0}
+@media(max-width:620px){.wizard-progress{gap:5px;padding:10px}.wizard-progress span{font-size:10px}.wizard-actions{flex-direction:column;align-items:stretch}.wizard-actions button{width:100%}.rank-summary{align-items:flex-start;flex-direction:column}}
