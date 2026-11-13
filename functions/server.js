@@ -264,6 +264,7 @@ async function run(name, req) {
         resultsAt: resultsAt?.toDate().toISOString() || null };
     }
     case "startQuiz": {
+      if (await roleOf(uid) !== "student") fail("permission-denied", "केवल Student Quiz attempt कर सकता है।");
       const quizId = String(d.id || "");
       if (!quizId) fail("invalid-argument", "Quiz ID missing.");
       const quizRef = db.doc("quizzes/" + quizId);
@@ -300,6 +301,7 @@ async function run(name, req) {
         questions: questions.docs.map(x => ({ id: x.id, ...x.data() })) };
     }
     case "submitQuiz": {
+      if (await roleOf(uid) !== "student") fail("permission-denied", "केवल Student Quiz submit कर सकता है।");
       const quizId = String(d.id || "");
       const attemptId = String(d.attemptId || "");
       const answers = d.answers && typeof d.answers === "object" && !Array.isArray(d.answers) ? d.answers : {};
@@ -346,9 +348,21 @@ async function run(name, req) {
       const quizRef = db.doc("quizzes/" + String(d.id || ""));
       const quiz = await quizRef.get();
       if (!quiz.exists) fail("not-found", "Quiz नहीं मिला।");
-      const isAdmin = ["admin", "superadmin"].includes(await roleOf(uid));
-      const rankingType = d.rankingType === "subjective" ? "subjective" : "objective";
+      const requesterRole = await roleOf(uid);
+      const isAdmin = ["admin", "superadmin"].includes(requesterRole);
       const quizData = quiz.data();
+      if (requesterRole === "student") {
+        const profile = await db.doc("roles/" + uid).get();
+        const studentClass = profile.exists ? profile.data().className : "";
+        const quizClass = String(quizData.className || "").trim();
+        const generalClass = !quizClass || ["all", "general", "सभी"].includes(quizClass.toLowerCase());
+        if (!generalClass && normalizeClassName(studentClass) !== normalizeClassName(quizClass)) fail("permission-denied", "यह Quiz आपकी कक्षा के लिए नहीं है।");
+      } else if (requesterRole === "teacher") {
+        await requireTeacher(req, quizData.subject, quizData.className);
+      } else if (!isAdmin) {
+        fail("permission-denied", "यह परिणाम देखने की अनुमति नहीं है।");
+      }
+      const rankingType = d.rankingType === "subjective" ? "subjective" : "objective";
       const releaseAt = quizData.resultsAt || Timestamp.fromMillis((quizData.publishedAt?.toMillis?.() || Date.now()) + 72 * 60 * 60 * 1000);
       const snap = await quizRef.collection("leaderboard").get();
       const allRows = snap.docs.map(x => x.data());
@@ -375,13 +389,19 @@ async function run(name, req) {
       return { released: isAdmin || (Date.now() >= releaseAt.toMillis() && (rankingType !== "subjective" || pendingReview === 0)), rankingType, releaseAt: releaseAt.toDate().toISOString(), pendingReview, rows };
     }
     case "getMyResults": {
+      if (await roleOf(uid) !== "student") fail("permission-denied", "यह सुविधा केवल Student के लिए है।");
+      const profile = await db.doc("roles/" + uid).get();
+      const studentClass = profile.exists ? profile.data().className : "";
       const quizzes = await db.collection("quizzes").get();
       const now = Date.now(), results = [];
       for (const q of quizzes.docs) {
+        const quizData = q.data();
+        const quizClass = String(quizData.className || "").trim();
+        const generalClass = !quizClass || ["all", "general", "सभी"].includes(quizClass.toLowerCase());
+        if (!generalClass && normalizeClassName(studentClass) !== normalizeClassName(quizClass)) continue;
         const snap = await q.ref.collection("leaderboard").doc(uid).get();
         if (!snap.exists) continue;
         const data = snap.data();
-        const quizData = q.data();
         const resultRelease = quizData.resultsAt || Timestamp.fromMillis((quizData.publishedAt?.toMillis?.() || Date.now()) + 72 * 60 * 60 * 1000);
         const released = now >= resultRelease.toMillis();
         let review = [];
@@ -546,6 +566,7 @@ async function run(name, req) {
       return { ok: true, uid: target.uid, subjects, classes };
     }
     case "createDoubt": {
+      if (await roleOf(uid) !== "student") fail("permission-denied", "केवल Student Teacher को Doubt भेज सकता है।");
       const question = String(d.question || "").trim();
       const subject = String(d.subject || "").trim();
       const requestId = String(d.requestId || "");
