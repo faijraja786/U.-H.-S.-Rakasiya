@@ -103,13 +103,16 @@ async function requireAdmin(req, superOnly = false) {
   }
   return req.user.uid;
 }
-async function requireTeacher(req, subject) {
+async function requireTeacher(req, subject, className) {
   const role = await roleOf(req.user.uid);
   if (!["teacher", "admin", "superadmin"].includes(role)) fail("permission-denied", "यह सुविधा केवल Teacher या Admin के लिए है।");
   if (["admin", "superadmin"].includes(role)) return true;
   const snap = await db.doc("teacherAssignments/" + req.user.uid).get();
-  const subjects = snap.exists ? (snap.data().subjects || []) : [];
+  const assignment = snap.exists ? snap.data() : {};
+  const subjects = assignment.subjects || [];
+  const classes = assignment.classes || [];
   if (subject && !subjects.some(x => String(x).toLowerCase() === String(subject).toLowerCase())) fail("permission-denied", "यह विषय आपको assign नहीं किया गया है।");
+  if (className && !classes.some(x => normalizeClassName(x) === normalizeClassName(className))) fail("permission-denied", "यह कक्षा आपको assign नहीं की गई है।");
   return true;
 }
 
@@ -558,14 +561,18 @@ async function run(name, req) {
       let snap;
       if (role === "student") snap = await db.collection("doubts").where("uid", "==", uid).limit(100).get();
       else if (["teacher","admin","superadmin"].includes(role)) {
-        let subjects = [];
+        let subjects = [], classes = [];
         if (role === "teacher") {
           const a = await db.doc("teacherAssignments/" + uid).get();
           subjects = a.exists ? (a.data().subjects || []) : [];
-          if (!subjects.length) return { doubts: [] };
+          classes = a.exists ? (a.data().classes || []) : [];
+          if (!subjects.length || !classes.length) return { doubts: [] };
         }
         snap = await db.collection("doubts").limit(300).get();
-        if (role === "teacher") snap = { docs: snap.docs.filter(x => subjects.some(v => String(v).toLowerCase() === String(x.data().subject).toLowerCase())) };
+        if (role === "teacher") snap = { docs: snap.docs.filter(x =>
+          subjects.some(v => String(v).toLowerCase() === String(x.data().subject).toLowerCase()) &&
+          classes.some(v => normalizeClassName(v) === normalizeClassName(x.data().studentClass))
+        ) };
       } else fail("permission-denied", "Access denied.");
       return { doubts: snap.docs.map(x => ({ id:x.id, ...x.data(), createdAt:x.data().createdAt?.toDate().toISOString() || null })) };
     }
@@ -573,7 +580,7 @@ async function run(name, req) {
       const ref = db.doc("doubts/" + String(d.id || ""));
       const snap = await ref.get();
       if (!snap.exists) fail("not-found", "Doubt नहीं मिला।");
-      await requireTeacher(req, snap.data().subject);
+      await requireTeacher(req, snap.data().subject, snap.data().studentClass);
       const reply = String(d.reply || "").trim();
       if (!reply || reply.length > 5000) fail("invalid-argument", "Reply 1 से 5000 अक्षर का होना चाहिए।");
       await ref.update({ reply, repliedBy: uid, repliedAt: FieldValue.serverTimestamp(), status: "answered" });
@@ -593,10 +600,12 @@ async function run(name, req) {
     case "listSubjectiveSubmissions": {
       const role = await roleOf(uid);
       if (!["teacher","admin","superadmin"].includes(role)) fail("permission-denied", "केवल Teacher या Admin उपयोग कर सकता है।");
-      let subjects = [];
+      let subjects = [], classes = [];
       if (role === "teacher") {
         const assigned = await db.doc("teacherAssignments/" + uid).get();
         subjects = assigned.exists ? (assigned.data().subjects || []) : [];
+        classes = assigned.exists ? (assigned.data().classes || []) : [];
+        if (!subjects.length || !classes.length) return { submissions: [], nextCursor: null, hasMore: false };
       }
       const pageSize = Math.min(25, Math.max(5, Number(d.limit) || 20));
       const quizDocs = [];
@@ -618,7 +627,8 @@ async function run(name, req) {
       const items = [];
       for (const quizDoc of quizDocs) {
         const quiz = quizDoc.data();
-        if (role === "teacher" && !subjects.some(v => String(v).toLowerCase() === String(quiz.subject || "").toLowerCase())) continue;
+        if (role === "teacher" && (!subjects.some(v => String(v).toLowerCase() === String(quiz.subject || "").toLowerCase()) ||
+          !classes.some(v => normalizeClassName(v) === normalizeClassName(quiz.className)))) continue;
         const pageAttempts = Math.min(50, Math.max(5, Number(d.attemptLimit) || 25));
         let attemptsQuery = quizDoc.ref.collection("attempts").where("status","==","submitted").orderBy(FieldPath.documentId()).limit(pageAttempts + 1);
         if (d.quizId && d.attemptCursor) {
