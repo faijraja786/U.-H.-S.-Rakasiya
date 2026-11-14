@@ -20,6 +20,7 @@ function ensureMathJax(target){
   script.addEventListener("load",()=>window.MathJax.typesetPromise?.([target]).catch(()=>{}),{once:true});
  }else if(window.MathJax.typesetPromise)window.MathJax.typesetPromise([target]).catch(()=>{});
 }
+window.renderEduMath=ensureMathJax;
 function page(title,body){$("view").innerHTML='<section class="panel"><h2>'+esc(title)+'</h2>'+body+'</section>';}
 function status(id,text,isError=false){const el=$(id);if(el){el.textContent=text;el.className=isError?"error":"hint";}}
 function markdownHtml(source){
