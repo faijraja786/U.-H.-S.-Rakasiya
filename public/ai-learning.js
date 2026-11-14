@@ -13,6 +13,13 @@ async function api(name,data={}){
  if(!response.ok)throw Error(payload.error?.message||"Server से संपर्क नहीं हो सका।");
  return payload.data;
 }
+function ensureMathJax(target){
+ if(!window.MathJax){
+  window.MathJax={tex:{inlineMath:[["\\\\(","\\\\)"]],displayMath:[["\\\\[","\\\\]"]]},options:{skipHtmlTags:["script","noscript","style","textarea","pre","code"]}};
+  const script=document.createElement("script");script.src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js";script.async=true;document.head.appendChild(script);
+  script.addEventListener("load",()=>window.MathJax.typesetPromise?.([target]).catch(()=>{}),{once:true});
+ }else if(window.MathJax.typesetPromise)window.MathJax.typesetPromise([target]).catch(()=>{});
+}
 function page(title,body){$("view").innerHTML='<section class="panel"><h2>'+esc(title)+'</h2>'+body+'</section>';}
 function status(id,text,isError=false){const el=$(id);if(el){el.textContent=text;el.className=isError?"error":"hint";}}
 function markdownHtml(source){
@@ -45,7 +52,7 @@ window.aiChatPage=async function(){
   if(!c||!c.messages.length){chat.innerHTML='<div class="tutor-welcome"><div class="ai-welcome-icon">✦</div><h3>आज क्या सीखना चाहेंगे?</h3><p>अपनी कक्षा के किसी भी विषय से सवाल पूछें।</p><div class="ai-prompt-chips"><button data-prompt="इसे आसान भाषा में समझाओ।">आसान भाषा में समझाओ</button><button data-prompt="इस सवाल को चरण-दर-चरण हल करो।">Step-by-step हल</button></div></div>';}
   else c.messages.forEach(m=>{const el=document.createElement("article");el.className="tutor-message "+(m.role==="user"?"tutor-user":"tutor-ai");const label=document.createElement("b");label.textContent=m.role==="user"?"आप":"EduFuture AI";const body=document.createElement("div");body.className="tutor-message-body";body.innerHTML=esc(m.text).replace(/\r?\n/g,"<br>").replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>");el.append(label,body);chat.append(el);});
   chat.querySelectorAll("[data-prompt]").forEach(x=>x.onclick=()=>{$("tutorQuestion").value=x.dataset.prompt;$("tutorQuestion").focus()});
-  if(window.MathJax?.typesetPromise)window.MathJax.typesetPromise([chat]).catch(()=>{});
+  ensureMathJax(chat);
   chat.scrollTop=chat.scrollHeight;
  }
  function renderHistory(){
