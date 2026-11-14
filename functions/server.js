@@ -138,6 +138,15 @@ async function requireAdmin(req, superOnly = false) {
   }
   return req.user.uid;
 }
+async function recordAdminActivity(uid, action, entityType, entityId, details = {}) {
+  try {
+    await db.collection("adminActivity").add({
+      actorUid: uid, action: String(action).slice(0,80),
+      entityType: String(entityType).slice(0,50), entityId: String(entityId||"").slice(0,140),
+      details: JSON.parse(JSON.stringify(details||{})), createdAt: FieldValue.serverTimestamp()
+    });
+  } catch (error) { console.error("Activity log write failed:", error.message); }
+}
 async function requireTeacher(req, subject, className) {
   const role = await roleOf(req.user.uid);
   if (!["teacher", "admin", "superadmin"].includes(role)) fail("permission-denied", "यह सुविधा केवल Teacher या Admin के लिए है।");
@@ -788,6 +797,87 @@ async function run(name, req) {
       const id=String(d.id||"").trim().slice(0,100);if(!id)fail("invalid-argument","Chat ID जरूरी है।");
       await db.collection("users").doc(uid).collection("aiTutorChats").doc(id).delete();return {ok:true};
     }
+    case "saveAiTutorFeedback": {
+      const role=await roleOf(uid);
+      if(!["student","admin","superadmin"].includes(role))fail("permission-denied","यह सुविधा उपलब्ध नहीं है।");
+      const rating=["helpful","incorrect","unclear"].includes(d.rating)?d.rating:"incorrect";
+      const text=String(d.text||"").trim().slice(0,1200);
+      const question=String(d.question||"").trim().slice(0,1200);
+      if(!question&&!text)fail("invalid-argument","Feedback खाली है।");
+      await db.collection("aiTutorFeedback").add({uid,role,rating,text,question,chatId:String(d.chatId||"").slice(0,100),createdAt:FieldValue.serverTimestamp()});
+      return {ok:true};
+    }
+    case "generatePracticeFromAnswer": {
+      const role=await roleOf(uid);
+      if(!["student","admin","superadmin"].includes(role))fail("permission-denied","यह सुविधा उपलब्ध नहीं है।");
+      const apiKey=String(process.env.GEMINI_API_KEY||"").trim();
+      if(!apiKey)fail("failed-precondition","Gemini API Key उपलब्ध नहीं है।");
+      const answer=String(d.answer||"").trim().slice(0,7000);
+      const classSnap=await db.doc("roles/"+uid).get(),profile=classSnap.exists?classSnap.data():{};
+      const className=role==="student"?String(profile.className||""):String(d.className||"");
+      if(!answer)fail("invalid-argument","पहले AI का उत्तर चुनें।");
+      const prompt=["Create 5 multiple-choice practice questions strictly based on the following study answer.","Class: "+className,"Use simple Hindi. Return ONLY a JSON array of objects with keys text, options (4 strings), answer (zero-based index), explanation, marks (1). Do not include markdown fences.","Answer source:\n"+answer].join("\n");
+      const endpoint="https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key="+encodeURIComponent(apiKey);
+      const response=await geminiHttpsRequest(endpoint,JSON.stringify({contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:2400,temperature:0.25,responseMimeType:"application/json"}}),60000);
+      let payload={};try{payload=JSON.parse(response.raw||"{}")}catch{}
+      if(!response.ok)fail(response.status===429?"resource-exhausted":"unavailable",payload.error?.message||"अभ्यास Quiz नहीं बन सका।");
+      let raw=String(payload.candidates?.[0]?.content?.parts?.map(x=>x.text||"").join("")||"").trim().replace(/^\`\`\`(?:json)?/i,"").replace(/\`\`\`$/,"");
+      let questions=[];try{questions=JSON.parse(raw)}catch{}
+      if(!Array.isArray(questions)||questions.length!==5)fail("unavailable","AI से सही Quiz format नहीं मिला। फिर कोशिश करें।");
+      questions=questions.map(q=>({text:String(q.text||"").slice(0,800),options:Array.isArray(q.options)?q.options.slice(0,4).map(x=>String(x).slice(0,300)):[],answer:Number(q.answer),explanation:String(q.explanation||"").slice(0,900),marks:1}));
+      if(questions.some(q=>!q.text||q.options.length!==4||!Number.isInteger(q.answer)||q.answer<0||q.answer>3))fail("unavailable","Quiz के कुछ प्रश्न अधूरे हैं।");
+      return {questions,className};
+    }
+    case "getStudentProgress": {
+      if(await roleOf(uid)!=="student")fail("permission-denied","यह पेज केवल Student के लिए है।");
+      const profile=await db.doc("roles/"+uid).get(),className=profile.exists?profile.data().className:"";
+      const quizzes=await db.collection("quizzes").where("status","==","published").get();
+      let attempts=0,completed=0,score=0,total=0,topicStats={};
+      for(const quiz of quizzes.docs){
+        const q=quiz.data(),qc=String(q.className||"");
+        if(qc&&!["all","general","सभी"].includes(qc.toLowerCase())&&normalizeClassName(qc)!==normalizeClassName(className))continue;
+        const attempt=await quiz.ref.collection("attempts").doc(uid).get();
+        if(!attempt.exists)continue;
+        attempts++;
+        if(attempt.data().status!=="submitted")continue;
+        completed++;
+        const board=await quiz.ref.collection("leaderboard").doc(uid).get();
+        if(board.exists){const b=board.data();score+=Number(b.score||0);total+=Number(b.total||0);}
+        const review=Array.isArray(attempt.data().topicStats)?attempt.data().topicStats:[];
+        review.forEach(x=>{const k=String(x.topic||"सामान्य");topicStats[k]??={topic:k,correct:0,total:0};topicStats[k].correct+=Number(x.correct||0);topicStats[k].total+=Number(x.total||0);});
+      }
+      const topics=Object.values(topicStats).map(x=>({...x,accuracy:x.total?Math.round(x.correct/x.total*100):0})).sort((a,b)=>a.accuracy-b.accuracy);
+      return {attempts,completed,score,total,accuracy:total?Math.round(score/total*100):0,weakTopics:topics.slice(0,5)};
+    }
+    case "getTeacherAnalytics": {
+      await requireTeacher(req);
+      const role=await roleOf(uid),assignment=role==="teacher"?await db.doc("teacherAssignments/"+uid).get():null;
+      const classes=role==="teacher"?(assignment?.exists?assignment.data().classes||[]:[]):[];
+      const allowed=classes.length?new Set(classes.map(normalizeClassName)):null;
+      const studentsSnap=await db.collection("roles").where("role","==","student").limit(500).get();
+      const students=studentsSnap.docs.filter(x=>!allowed||allowed.has(normalizeClassName(x.data().className)));
+      const quizSnap=await db.collection("quizzes").orderBy("createdAt","desc").limit(30).get();
+      let submissions=0,score=0,total=0,bySubject={};
+      for(const q of quizSnap.docs){
+        const data=q.data();if(role==="teacher"&&(!classes.some(x=>normalizeClassName(x)===normalizeClassName(data.className))||!(assignment.data().subjects||[]).some(x=>String(x).toLowerCase()===String(data.subject||"").toLowerCase())))continue;
+        const rows=await q.ref.collection("leaderboard").limit(500).get();
+        rows.forEach(r=>{if(!students.some(st=>st.id===r.id))return;const v=r.data();submissions++;score+=Number(v.score||0);total+=Number(v.total||0);const k=String(data.subject||"अन्य");bySubject[k]??={subject:k,attempts:0,score:0,total:0};bySubject[k].attempts++;bySubject[k].score+=Number(v.score||0);bySubject[k].total+=Number(v.total||0);});
+      }
+      return {studentCount:students.length,submissions,average:total?Math.round(score/total*100):0,subjects:Object.values(bySubject).map(x=>({...x,accuracy:x.total?Math.round(x.score/x.total*100):0})).sort((a,b)=>a.accuracy-b.accuracy)};
+    }
+    case "listAdminActivity": {
+      await requireAdmin(req);
+      const snap=await db.collection("adminActivity").orderBy("createdAt","desc").limit(100).get();
+      return {items:snap.docs.map(x=>({id:x.id,...x.data(),createdAt:x.data().createdAt?.toDate?.().toISOString?.()||null}))};
+    }
+    case "saveAiNoteImages": {
+      await requireAdmin(req);
+      const id=String(d.id||"").trim(),paths=Array.isArray(d.paths)?d.paths.filter(x=>typeof x==="string"&&x.startsWith(id+"/")).slice(0,8):[];
+      if(!id)fail("invalid-argument","Notes ID जरूरी है。");
+      const ref=db.doc("aiNotes/"+id),snap=await ref.get();if(!snap.exists)fail("not-found","Notes नहीं मिले।");
+      await ref.update({imagePaths:paths,updatedAt:FieldValue.serverTimestamp()});
+      return {ok:true};
+    }
     case "aiTutorChat": {
       const currentRole = await roleOf(uid);
       if (!["student","admin","superadmin"].includes(currentRole)) fail("permission-denied","AI Study Chat केवल Student और Admin के लिए उपलब्ध है।");
@@ -799,7 +889,7 @@ async function run(name, req) {
       const className = student ? String(profile.className || "").trim() : String(d.className || "").trim();
       const subject = String(d.subject || "सामान्य पढ़ाई").trim().slice(0,80);
       const topic = String(d.topic || ("कक्षा " + className + " का पाठ्यक्रम")).trim().slice(0,160);
-      const question = String(d.question || "").trim().slice(0,3000);
+      const question = String(d.question || "").trim().slice(0,3000);\n      const image=d.image&&typeof d.image==="object"?d.image:null;\n      if(image&&(!["image/jpeg","image/png","image/webp"].includes(String(image.mimeType))||!/^([A-Za-z0-9+/]+={0,2})$/.test(String(image.data||""))||Buffer.byteLength(String(image.data||""),"base64")>3*1024*1024))fail("invalid-argument","Image JPG, PNG या WebP हो और 3 MB से छोटी हो।");
       const history = Array.isArray(d.history) ? d.history.slice(-8).map(x => ({
         role: x.role === "model" ? "model" : "user",
         parts: [{ text: String(x.text || "").slice(0,1500) }]
@@ -819,7 +909,7 @@ async function run(name, req) {
         "Latest student question: " + question
       ].join("\n");
       const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=" + encodeURIComponent(apiKey);
-      const contents = [...history, { role:"user", parts:[{text:prompt}] }];
+      const userParts=[{text:prompt}];if(image)userParts.push({inlineData:{mimeType:image.mimeType,data:image.data}});\n      const contents = [...history, { role:"user", parts:userParts }];
       const response = await geminiHttpsRequest(endpoint, JSON.stringify({
         contents, generationConfig:{maxOutputTokens:1400,temperature:0.35}
       }), 90000);
@@ -873,7 +963,7 @@ async function run(name, req) {
     case "listAiNotes": {
       await requireAdmin(req);
       const snap=await db.collection("aiNotes").orderBy("createdAt","desc").limit(30).get();
-      return {notes:snap.docs.map(x=>({id:x.id,...x.data(),createdAt:x.data().createdAt?.toDate?.().toISOString?.()||null}))};
+      return {notes:await Promise.all(snap.docs.map(async x=>{const v=x.data();const imageUrls=await Promise.all((v.imagePaths||[]).map(p=>signedStorageUrl(p,3600).catch(()=>null)));return {id:x.id,...v,imageUrls:imageUrls.filter(Boolean),createdAt:v.createdAt?.toDate?.().toISOString?.()||null};}))};
     }
     case "publishAiNote": {
       await requireAdmin(req);
@@ -882,7 +972,7 @@ async function run(name, req) {
       if(!id||id.length>128)fail("invalid-argument","Notes ID मान्य नहीं है।");
       const ref=db.doc("aiNotes/"+id),snap=await ref.get();
       if(!snap.exists)fail("not-found","AI Notes नहीं मिले।");
-      await ref.update({published,publishedAt:published?FieldValue.serverTimestamp():null,updatedAt:FieldValue.serverTimestamp()});
+      await ref.update({published,publishedAt:published?FieldValue.serverTimestamp():null,updatedAt:FieldValue.serverTimestamp()});\n      await recordAdminActivity(uid,published?"publish":"unpublish","aiNote",id,{topic:snap.data().topic||""});
       return {ok:true,id,published};
     }
     case "listPublishedAiNotes": {
@@ -891,7 +981,7 @@ async function run(name, req) {
       const snap=await db.collection("aiNotes").where("published","==",true).orderBy("publishedAt","desc").limit(50).get();
       const profileSnap=await db.doc("roles/"+uid).get(),profile=profileSnap.exists?profileSnap.data():{};
       const studentClass=String(profile.className||"").toLowerCase().replace(/^(class|कक्षा)\\s*/i,"").trim();
-      const notes=snap.docs.map(x=>({id:x.id,...x.data(),createdAt:x.data().createdAt?.toDate?.().toISOString?.()||null})).filter(n=>{
+      const notes=await Promise.all(snap.docs.map(async x=>{const v=x.data();const imageUrls=await Promise.all((v.imagePaths||[]).map(p=>signedStorageUrl(p,3600).catch(()=>null)));return {id:x.id,...v,imageUrls:imageUrls.filter(Boolean),createdAt:v.createdAt?.toDate?.().toISOString?.()||null};}));const visibleNotes=notes.filter(n=>{
         if(currentRole!=="student")return true;
         const noteClass=String(n.className||"").toLowerCase().replace(/^(class|कक्षा)\\s*/i,"").trim();
         return !studentClass||!noteClass||studentClass===noteClass;
@@ -1200,7 +1290,7 @@ app.post("/api/notice-upload/:id", express.raw({type:"application/octet-stream",
   }
 });
 app.post("/api/:name", authenticate, async (req, res) => {
-  if (["generateQuestionDraft","generateAiNotes"].includes(req.params.name)) { req.setTimeout(150000); res.setTimeout(150000); }
+  if (["generateQuestionDraft","generateAiNotes","generatePracticeFromAnswer"].includes(req.params.name)) { req.setTimeout(150000); res.setTimeout(150000); }
   if (req.params.name === "aiTutorChat") { req.setTimeout(110000); res.setTimeout(110000); }
   try {
     const data = await run(req.params.name, req);
