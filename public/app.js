@@ -126,7 +126,7 @@ function closeWorkspaceMenu(){
 }
 function render(){
   const premiumAction=$("premiumTopAction");
-  if(premiumAction){premiumAction.hidden=false;premiumAction.style.display=role==="student"?"inline-flex":"none";}
+  if(premiumAction){premiumAction.hidden=false;premiumAction.style.display="inline-flex";}
   let tabs=studentTabs.filter(x=>x[0]!=="premium");
   if(role==="teacher")tabs=[["home","Home"],["notices","Important Notice"],["teacher","Teacher Workspace"],["analytics","Teacher Analytics"]];
   if(role==="admin")tabs=[["home","Home"],["aichat","AI Study Chat"],["ainotes","AI Notes PDF"],["notices","Important Notice"],["teacher","Teacher Workspace"],["memberships","Premium Members"],["admin","Admin Dashboard"],["activity","Activity Log"]];
