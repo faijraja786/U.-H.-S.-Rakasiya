@@ -3,6 +3,7 @@ const cors = require("cors");
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getFirestore, FieldValue, Timestamp, FieldPath } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
+const https = require("https");
 
 const rawServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
 if (!rawServiceAccount) throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON environment variable is required.");
@@ -32,6 +33,40 @@ function fail(code, message) {
   const error = new Error(message);
   error.code = code;
   throw error;
+}
+
+function geminiHttpsRequest(endpoint, body, timeoutMs = 75000) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(endpoint);
+    const request = https.request(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body)
+      }
+    }, response => {
+      const chunks = [];
+      let size = 0;
+      response.on("data", chunk => {
+        size += chunk.length;
+        if (size > 8 * 1024 * 1024) {
+          request.destroy(Object.assign(new Error("Gemini response बहुत बड़ा है।"), { code: "RESPONSE_TOO_LARGE" }));
+          return;
+        }
+        chunks.push(chunk);
+      });
+      response.on("end", () => {
+        const status = Number(response.statusCode || 0);
+        resolve({ status, ok: status >= 200 && status < 300, raw: Buffer.concat(chunks).toString("utf8") });
+      });
+      response.on("error", reject);
+    });
+    request.setTimeout(timeoutMs, () => {
+      request.destroy(Object.assign(new Error("Gemini ने समय पर जवाब नहीं दिया।"), { code: "ETIMEDOUT" }));
+    });
+    request.on("error", reject);
+    request.end(body);
+  });
 }
 const storageBucket = process.env.SUPABASE_BUCKET || "learning";
 function storagePathUrl(path) {
@@ -760,31 +795,30 @@ async function run(name, req) {
         "Use clear age-appropriate Hindi. Do not include markdown fences. Ensure the answer is factually accurate."
       ].join("\n");
       const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent?key=" + encodeURIComponent(apiKey);
+      const requestBody = JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 2048 }
+      });
       let response, raw = "", payload = {};
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          response = await fetch(endpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ role: "user", parts: [{ text: prompt }] }],
-              generationConfig: { responseMimeType: "application/json", maxOutputTokens: 4096 }
-            }),
-            signal: AbortSignal.timeout(45000)
-          });
+          response = await geminiHttpsRequest(endpoint, requestBody, 75000);
         } catch (error) {
-          const timedOut = error && (error.name === "TimeoutError" || error.name === "AbortError");
-          const timeoutError = new Error(timedOut
-            ? "AI को 45 सेकंड में उत्तर नहीं मिला। कृपया कम प्रश्नों के साथ फिर कोशिश करें।"
-            : "Gemini से संपर्क नहीं हो पाया। थोड़ी देर बाद फिर कोशिश करें।");
-          timeoutError.code = timedOut ? "deadline-exceeded" : "unavailable";
+          if (attempt === 0 && error.code !== "ETIMEDOUT" && error.code !== "RESPONSE_TOO_LARGE") {
+            await new Promise(resolve => setTimeout(resolve, 700));
+            continue;
+          }
+          const timeoutError = new Error(error.code === "ETIMEDOUT"
+            ? "Gemini ने 75 सेकंड में जवाब नहीं दिया। कम प्रश्नों के साथ फिर कोशिश करें।"
+            : "Gemini से सुरक्षित कनेक्शन नहीं बन पाया। थोड़ी देर बाद फिर कोशिश करें।");
+          timeoutError.code = error.code === "ETIMEDOUT" ? "deadline-exceeded" : "unavailable";
           throw timeoutError;
         }
-        raw = await response.text();
+        raw = response.raw;
         payload = {};
         try { payload = raw ? JSON.parse(raw) : {}; } catch {}
         if (response.ok || ![429, 500, 502, 503, 504].includes(response.status) || attempt === 1) break;
-        await new Promise(resolve => setTimeout(resolve, 1200));
+        await new Promise(resolve => setTimeout(resolve, 700));
       }
       if (!response.ok) {
         const detail = payload.error?.message || "Gemini API request असफल रही (" + response.status + ").";
@@ -964,6 +998,7 @@ app.post("/api/notice-upload/:id", express.raw({type:"application/octet-stream",
   }
 });
 app.post("/api/:name", authenticate, async (req, res) => {
+  if (req.params.name === "generateQuestionDraft") { req.setTimeout(90000); res.setTimeout(90000); }
   try {
     const data = await run(req.params.name, req);
     return res.json({ data });
