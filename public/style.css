@@ -454,3 +454,8 @@ input,textarea,select{color:#111827;background:#fff}
 @media(min-width:1000px){.ef-chat-page{height:calc(100vh - 82px);grid-template-columns:300px minmax(0,1fr)}}
 @media(max-width:760px){.ef-chat-page{height:calc(100dvh - 82px);min-height:540px;margin:-18px -12px 0;display:block;position:relative}.ef-chat-sidebar{position:absolute;z-index:25;inset:0 auto 0 0;width:min(86vw,320px);transform:translateX(-105%);transition:transform .2s;box-shadow:12px 0 32px #1e3a5f18}.ef-chat-sidebar.mobile-open{transform:translateX(0)}.ef-icon-btn{display:inline-flex}.ef-chat-top{height:64px;flex-basis:64px;padding:0 12px}.ef-chat-messages{height:calc(100% - 64px - 104px);padding:18px 12px}.ef-message{max-width:96%;padding:13px 14px}.ef-message-body{font-size:14px}.ef-chat-footer{padding:8px 10px 12px}.ef-chat-compose{border-radius:16px;padding:8px 9px 8px 13px}.ef-chat-compose button{width:40px;height:40px;flex-basis:40px}.ef-chat-footnote{font-size:10px}.ef-note-row{align-items:flex-start;flex-direction:column}.ef-note-actions{width:100%}.ef-note-actions button{flex:1}.ef-note-preview-head{align-items:flex-start;flex-direction:column}}
 @media(min-width:761px){.ef-chat-page{margin:-24px -16px 0}}
+
+.app-main:has(.ef-chat-page)>.content{max-width:none;margin:0;padding:0;min-height:0}
+.app-main:has(.ef-chat-page)>footer{display:none}
+.ef-chat-page{height:calc(100dvh - 82px)}
+@media(max-width:760px){.ef-chat-page{height:calc(100dvh - 82px)}}
