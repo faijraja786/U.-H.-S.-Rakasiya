@@ -355,3 +355,19 @@ input,textarea,select{color:#111827;background:#fff}
 .leaderboard-quiz{padding:clamp(17px,3vw,24px);border:1px solid #dbe5f2;border-radius:20px;background:#fff;box-shadow:0 10px 28px #0b23400a}
 .leaderboard-quiz h3{margin-top:0}
 @media(max-width:620px){.wizard-progress{gap:5px;padding:10px}.wizard-progress span{font-size:10px}.wizard-actions{flex-direction:column;align-items:stretch}.wizard-actions button{width:100%}.rank-summary{align-items:flex-start;flex-direction:column}}
+
+
+/* AI Learning Studio */
+.tutor-chat{display:flex;flex-direction:column;gap:12px;min-height:220px;max-height:52vh;overflow:auto;padding:16px;background:#f5f8fc;border:1px solid #e1e8f1;border-radius:16px;margin:14px 0}
+.tutor-welcome{padding:18px;border:1px dashed #b9c8dc;border-radius:12px;background:#fff;color:#34445c}
+.tutor-message{max-width:88%;padding:13px 15px;border-radius:14px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
+.tutor-message b{display:block;font-size:12px;letter-spacing:.03em;margin-bottom:5px}
+.tutor-user{align-self:flex-end;background:#e5efff;color:#163d70;border:1px solid #cbdcf7}
+.tutor-ai{align-self:flex-start;background:#fff;color:#263449;border:1px solid #e1e8f1;box-shadow:0 3px 12px rgba(24,49,82,.05)}
+.ai-notes-content{line-height:1.75;color:#263449;padding:8px 2px}
+.ai-notes-content h1,.ai-notes-content h2,.ai-notes-content h3{color:#1d477c;margin-top:22px}
+.ai-notes-content p{margin:7px 0}
+.ai-notes-content .pdf-bullet{padding-left:12px}
+#recentAiNotes .admin-row{gap:12px;align-items:center}
+#recentAiNotes .admin-row small{display:block;color:#68788f;margin-top:4px}
+@media(max-width:600px){.tutor-message{max-width:96%}.tutor-chat{padding:10px;max-height:55vh}}
