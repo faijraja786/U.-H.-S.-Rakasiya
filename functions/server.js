@@ -781,24 +781,25 @@ async function run(name, req) {
       const profile = profileSnap.exists ? profileSnap.data() : {};
       const student = currentRole === "student";
       const className = student ? String(profile.className || "").trim() : String(d.className || "").trim();
-      const subject = String(d.subject || "").trim().slice(0,80);
-      const topic = String(d.topic || "").trim().slice(0,160);
+      const subject = String(d.subject || "सामान्य पढ़ाई").trim().slice(0,80);
+      const topic = String(d.topic || ("कक्षा " + className + " का पाठ्यक्रम")).trim().slice(0,160);
       const question = String(d.question || "").trim().slice(0,3000);
       const history = Array.isArray(d.history) ? d.history.slice(-8).map(x => ({
         role: x.role === "model" ? "model" : "user",
         parts: [{ text: String(x.text || "").slice(0,1500) }]
       })).filter(x => x.parts[0].text) : [];
       if (student && !className) fail("failed-precondition","पहले Student Profile में अपनी कक्षा भरें।");
-      if (!subject || !topic || !question) fail("invalid-argument","विषय, अध्याय और प्रश्न भरना जरूरी है।");
+      if (!question) fail("invalid-argument","अपना पढ़ाई से जुड़ा सवाल लिखें।");
       const prompt = [
         "You are EduFuture Study Tutor for a school student in India.",
-        "Answer only school-learning and academic questions directly related to the declared class, subject and chapter/topic.",
-        "If the request is unrelated to studies or unrelated to the declared subject/topic, politely say you can only help with this lesson and ask for a relevant question.",
+        "Answer school-learning and academic questions suitable for the declared class across school subjects. The student does not need to choose a subject or chapter.",
+        "If the request is unrelated to studies, politely say you can only help with school learning and invite a study question.",
         "Use age-appropriate, respectful, simple Hindi unless the student explicitly asks for English.",
         "Explain step by step, give a short example when useful, and end with one quick check-for-understanding question.",
         "Do not invent textbook page numbers, board syllabus claims, citations or facts. If unsure, clearly say so.",
+        "For mathematics, preserve exact mathematical notation. Write inline formulas as \\( ... \\) and display formulas as \\[ ... \\]. Use standard LaTeX commands such as \\frac{a}{b}, \\sqrt{x}, x^2, \\times, \\div, \\le and \\ge; never replace formulas with vague words or malformed symbols.",
         "Do not ask for personal information. Avoid adult, dangerous or harmful content.",
-        "Class: " + className, "Subject: " + subject, "Chapter/topic: " + topic,
+        "Student class: " + className,
         "Latest student question: " + question
       ].join("\n");
       const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=" + encodeURIComponent(apiKey);
@@ -857,6 +858,16 @@ async function run(name, req) {
       await requireAdmin(req);
       const snap=await db.collection("aiNotes").orderBy("createdAt","desc").limit(30).get();
       return {notes:snap.docs.map(x=>({id:x.id,...x.data(),createdAt:x.data().createdAt?.toDate?.().toISOString?.()||null}))};
+    }
+    case "deleteAiNote": {
+      await requireAdmin(req);
+      const id=String(d.id||"").trim();
+      if(!id||id.length>128)fail("invalid-argument","Notes ID मान्य नहीं है।");
+      const ref=db.doc("aiNotes/"+id);
+      const snap=await ref.get();
+      if(!snap.exists)fail("not-found","AI Notes नहीं मिले या पहले ही हटाए जा चुके हैं।");
+      await ref.delete();
+      return {ok:true,id};
     }
     case "generateQuestionDraft": {
       await requireAdmin(req);
