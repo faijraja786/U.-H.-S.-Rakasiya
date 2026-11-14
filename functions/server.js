@@ -965,8 +965,37 @@ async function run(name, req) {
       const content=String(payload.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"").trim();
       if(!content)fail("unavailable","AI Notes का उत्तर खाली आया। फिर कोशिश करें।");
       const ref=db.collection("aiNotes").doc();
-      await ref.set({className,subject,topic,command,language,level,content,createdBy:uid,createdAt:FieldValue.serverTimestamp()});
-      return {id:ref.id,className,subject,topic,content};
+      const imagePaths=[];
+      const imagePrompts=[
+        "Create a clear, scientifically accurate school textbook educational illustration for Class "+className+", subject "+subject+", chapter "+topic+". Make one central labelled-free diagram or visual explanation of the most important concept from these notes: "+content.slice(0,1800)+". Use clean white background, soft light-blue and teal textbook palette, neat thin lines, correct proportions, simple visual hierarchy, high contrast, no decorative clutter, absolutely no words, letters, numbers, watermark or logo. It must be suitable for a printed school study-notes PDF.",
+        "Create a second distinct educational visual for the same school chapter: "+topic+" ("+subject+", Class "+className+"). Show a useful process, comparison, worked-concept visual, scientific structure or step-by-step flowchart based on these notes: "+content.slice(0,1800)+". Use a clean white background, light pastel textbook colors, accurate shapes and arrows, no text, no letters, no numbers, no watermark or logo. This must be different from the first illustration and useful for learning."
+      ];
+      for(let index=0;index<imagePrompts.length;index++){
+        try{
+          const imageEndpoint="https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent?key="+encodeURIComponent(apiKey);
+          const imageResponse=await geminiHttpsRequest(imageEndpoint,JSON.stringify({
+            contents:[{role:"user",parts:[{text:imagePrompts[index]}]}],
+            generationConfig:{responseModalities:["TEXT","IMAGE"],temperature:0.35}
+          }),120000);
+          let imagePayload={};try{imagePayload=JSON.parse(imageResponse.raw||"{}")}catch{}
+          if(!imageResponse.ok)throw new Error(imagePayload.error?.message||"Image generation request failed ("+imageResponse.status+").");
+          const imagePart=(imagePayload.candidates?.[0]?.content?.parts||[]).find(part=>part.inlineData?.data&&String(part.inlineData.mimeType||"").startsWith("image/"));
+          if(!imagePart)throw new Error("Gemini ने इस चित्र के लिए image output नहीं दिया।");
+          const mime=String(imagePart.inlineData.mimeType||"image/png");
+          const extension=mime==="image/jpeg"?"jpg":mime==="image/webp"?"webp":"png";
+          const imagePath="ai-notes/"+ref.id+"/ai-illustration-"+(index+1)+"."+extension;
+          const bytes=Buffer.from(imagePart.inlineData.data,"base64");
+          await supabaseStorageRequest("/object/"+encodeURIComponent(storageBucket)+"/"+storagePathUrl(imagePath),{
+            method:"POST",headers:{"Content-Type":mime,"x-upsert":"true"},body:bytes
+          });
+          imagePaths.push(imagePath);
+        }catch(imageError){
+          console.error("AI notes illustration "+(index+1)+" failed:",imageError.message);
+        }
+      }
+      await ref.set({className,subject,topic,command,language,level,content,imagePaths,illustrationStatus:imagePaths.length===2?"complete":imagePaths.length?"partial":"failed",createdBy:uid,createdAt:FieldValue.serverTimestamp()});
+      const imageUrls=await Promise.all(imagePaths.map(path=>signedStorageUrl(path,3600).catch(()=>null)));
+      return {id:ref.id,className,subject,topic,content,imageUrls:imageUrls.filter(Boolean),illustrationStatus:imagePaths.length===2?"complete":imagePaths.length?"partial":"failed"};
     }
     case "listAiNotes": {
       await requireAdmin(req);
