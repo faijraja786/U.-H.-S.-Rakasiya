@@ -889,7 +889,9 @@ async function run(name, req) {
       const className = student ? String(profile.className || "").trim() : String(d.className || "").trim();
       const subject = String(d.subject || "सामान्य पढ़ाई").trim().slice(0,80);
       const topic = String(d.topic || ("कक्षा " + className + " का पाठ्यक्रम")).trim().slice(0,160);
-      const question = String(d.question || "").trim().slice(0,3000);\n      const image=d.image&&typeof d.image==="object"?d.image:null;\n      if(image&&(!["image/jpeg","image/png","image/webp"].includes(String(image.mimeType))||!/^([A-Za-z0-9+/]+={0,2})$/.test(String(image.data||""))||Buffer.byteLength(String(image.data||""),"base64")>3*1024*1024))fail("invalid-argument","Image JPG, PNG या WebP हो और 3 MB से छोटी हो।");
+      const question = String(d.question || "").trim().slice(0,3000);
+      const image=d.image&&typeof d.image==="object"?d.image:null;
+      if(image&&(!["image/jpeg","image/png","image/webp"].includes(String(image.mimeType))||!/^([A-Za-z0-9+/]+={0,2})$/.test(String(image.data||""))||Buffer.byteLength(String(image.data||""),"base64")>3*1024*1024))fail("invalid-argument","Image JPG, PNG या WebP हो और 3 MB से छोटी हो।");
       const history = Array.isArray(d.history) ? d.history.slice(-8).map(x => ({
         role: x.role === "model" ? "model" : "user",
         parts: [{ text: String(x.text || "").slice(0,1500) }]
@@ -909,7 +911,8 @@ async function run(name, req) {
         "Latest student question: " + question
       ].join("\n");
       const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=" + encodeURIComponent(apiKey);
-      const userParts=[{text:prompt}];if(image)userParts.push({inlineData:{mimeType:image.mimeType,data:image.data}});\n      const contents = [...history, { role:"user", parts:userParts }];
+      const userParts=[{text:prompt}];if(image)userParts.push({inlineData:{mimeType:image.mimeType,data:image.data}});
+      const contents = [...history, { role:"user", parts:userParts }];
       const response = await geminiHttpsRequest(endpoint, JSON.stringify({
         contents, generationConfig:{maxOutputTokens:1400,temperature:0.35}
       }), 90000);
@@ -972,7 +975,8 @@ async function run(name, req) {
       if(!id||id.length>128)fail("invalid-argument","Notes ID मान्य नहीं है।");
       const ref=db.doc("aiNotes/"+id),snap=await ref.get();
       if(!snap.exists)fail("not-found","AI Notes नहीं मिले।");
-      await ref.update({published,publishedAt:published?FieldValue.serverTimestamp():null,updatedAt:FieldValue.serverTimestamp()});\n      await recordAdminActivity(uid,published?"publish":"unpublish","aiNote",id,{topic:snap.data().topic||""});
+      await ref.update({published,publishedAt:published?FieldValue.serverTimestamp():null,updatedAt:FieldValue.serverTimestamp()});
+      await recordAdminActivity(uid,published?"publish":"unpublish","aiNote",id,{topic:snap.data().topic||""});
       return {ok:true,id,published};
     }
     case "listPublishedAiNotes": {
