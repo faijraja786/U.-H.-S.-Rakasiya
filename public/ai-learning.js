@@ -33,37 +33,49 @@ function openPdf(title,meta,content){
 }
 window.aiChatPage=async function(){
  const snap=await getDoc(doc(db,"roles",auth.currentUser.uid)),profile=snap.exists()?snap.data():{};
- const role=profile.role||"student",isStudent=role==="student";
- const classValue=String(profile.className||"");
- let history=[];
- page("AI Study Chat",'<div class="dashboard-hero"><span class="eyebrow">EDUFUTURE • AI LEARNING ASSISTANT</span><h2>पढ़ाई से जुड़ा हर सवाल पूछें</h2><p>AI Tutor आपकी कक्षा, विषय और अध्याय के अनुसार सरल भाषा में समझाएगा।</p></div><div class="item"><div class="builder-meta-grid"><div><label>कक्षा</label><input id="tutorClass" value="'+esc(classValue)+'" '+(isStudent?'readonly':'')+' placeholder="Class 10"></div><div><label>विषय</label><input id="tutorSubject" placeholder="जैसे गणित"></div><div><label>अध्याय / Topic</label><input id="tutorTopic" placeholder="जैसे द्विघात समीकरण"></div></div><div id="tutorChat" class="tutor-chat" aria-live="polite"><div class="tutor-welcome"><b>नमस्ते! मैं EduFuture AI Tutor हूँ।</b><p>विषय और अध्याय चुनकर उसी पाठ से जुड़ा प्रश्न पूछें।</p></div></div><label for="tutorQuestion">आपका सवाल</label><textarea id="tutorQuestion" rows="3" maxlength="3000" placeholder="उदाहरण: इस अध्याय का यह सूत्र कैसे काम करता है?"></textarea><div class="overview-actions"><button id="tutorSend" class="success-action">✦ सवाल पूछें</button><button id="tutorClear" class="secondary">नई बातचीत</button></div><p id="tutorStatus" class="hint" role="status"></p><p class="hint">AI कभी-कभी गलती कर सकता है। परीक्षा की तैयारी में अपनी किताब और शिक्षक से भी मिलान करें।</p></div>');
- const chat=$("tutorChat");
- const addMessage=(who,text)=>{const el=document.createElement("article");el.className="tutor-message "+(who==="user"?"tutor-user":"tutor-ai");const label=document.createElement("b");label.textContent=who==="user"?"आप":"EduFuture AI Tutor";const body=document.createElement("div");body.textContent=text;el.append(label,body);chat.append(el);chat.scrollTop=chat.scrollHeight};
- if(isStudent&&!classValue){$("tutorStatus").textContent="पहले अपना Student Profile पूरा करें।";$("tutorSend").disabled=true;return;}
- $("tutorClear").onclick=()=>{history=[];chat.innerHTML='<div class="tutor-welcome"><b>नई बातचीत शुरू करें।</b></div>';status("tutorStatus","")};
+ const classValue=String(profile.className||""),storageKey="edufuture-ai-chat-"+auth.currentUser.uid;
+ let chats=[];try{chats=JSON.parse(localStorage.getItem(storageKey)||"[]");if(!Array.isArray(chats))chats=[];}catch{chats=[];}
+ let activeId=chats[0]?.id||null;
+ const save=()=>{try{localStorage.setItem(storageKey,JSON.stringify(chats.slice(0,40)));}catch{}};
+ const newId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+ page("AI Study Chat",'<div class="ai-workspace"><aside class="ai-history"><div class="ai-history-head"><b>आपकी बातचीत</b><button id="newTutorChat" class="secondary" type="button">＋ नई Chat</button></div><div id="tutorHistoryList"></div></aside><section class="ai-chat-shell"><header class="ai-chat-header"><div class="ai-avatar">✦</div><div><b>EduFuture AI Tutor</b><small>कक्षा '+esc(classValue||"—")+' • Study Assistant</small></div><span class="ai-online">● Online</span></header><div class="ai-class-strip"><label for="tutorClass">कक्षा</label><select id="tutorClass"><option value="'+esc(classValue)+'">'+esc(classValue||"कक्षा चुनें")+'</option></select><span>केवल पढ़ाई से जुड़े सवाल</span></div><div id="tutorChat" class="tutor-chat" aria-live="polite"></div><div class="ai-composer"><textarea id="tutorQuestion" rows="1" maxlength="3000" placeholder="अपना सवाल पूछें…"></textarea><button id="tutorSend" type="button" aria-label="सवाल भेजें">➤</button></div><div class="ai-chat-foot"><span id="tutorStatus">उत्तर को किताब से भी मिलाएँ।</span><button id="clearTutorHistory" class="text-button" type="button">History साफ करें</button></div></section></div>');
+ const chat=$("tutorChat"),list=$("tutorHistoryList");
+ function renderChat(){
+  const c=chats.find(x=>x.id===activeId);chat.innerHTML="";
+  if(!c||!c.messages.length){chat.innerHTML='<div class="tutor-welcome"><div class="ai-welcome-icon">✦</div><h3>आज क्या सीखना चाहेंगे?</h3><p>अपनी कक्षा के किसी भी विषय से सवाल पूछें।</p><div class="ai-prompt-chips"><button data-prompt="इसे आसान भाषा में समझाओ।">आसान भाषा में समझाओ</button><button data-prompt="इस सवाल को चरण-दर-चरण हल करो।">Step-by-step हल</button></div></div>';}
+  else c.messages.forEach(m=>{const el=document.createElement("article");el.className="tutor-message "+(m.role==="user"?"tutor-user":"tutor-ai");const label=document.createElement("b");label.textContent=m.role==="user"?"आप":"EduFuture AI";const body=document.createElement("div");body.className="tutor-message-body";body.innerHTML=esc(m.text).replace(/\r?\n/g,"<br>").replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>");el.append(label,body);chat.append(el);});
+  chat.querySelectorAll("[data-prompt]").forEach(x=>x.onclick=()=>{$("tutorQuestion").value=x.dataset.prompt;$("tutorQuestion").focus()});
+  if(window.MathJax?.typesetPromise)window.MathJax.typesetPromise([chat]).catch(()=>{});
+  chat.scrollTop=chat.scrollHeight;
+ }
+ function renderHistory(){
+  list.innerHTML=chats.length?chats.map(c=>'<div class="ai-history-row '+(c.id===activeId?"active":"")+'"><button class="ai-history-open" data-open-chat="'+esc(c.id)+'" type="button">'+esc(c.title||"नई बातचीत")+'</button><button class="ai-history-delete" data-delete-chat="'+esc(c.id)+'" type="button" aria-label="हटाएँ">×</button></div>').join(""):'<p class="ai-history-empty">अभी कोई पुरानी बातचीत नहीं है।</p>';
+  list.querySelectorAll("[data-open-chat]").forEach(x=>x.onclick=()=>{activeId=x.dataset.openChat;renderHistory();renderChat()});
+  list.querySelectorAll("[data-delete-chat]").forEach(x=>x.onclick=()=>{if(!confirm("यह बातचीत हटाएँ?"))return;chats=chats.filter(c=>c.id!==x.dataset.deleteChat);if(activeId===x.dataset.deleteChat)activeId=chats[0]?.id||null;save();renderHistory();renderChat()});
+ }
+ if(!classValue){$("tutorStatus").textContent="पहले Student Profile में कक्षा भरें।";$("tutorSend").disabled=true;return;}
+ renderHistory();renderChat();
+ $("newTutorChat").onclick=()=>{activeId=null;renderHistory();renderChat();$("tutorQuestion").focus()};
+ $("clearTutorHistory").onclick=()=>{if(!confirm("इस डिवाइस की पूरी AI Chat History हटाएँ?"))return;chats=[];activeId=null;save();renderHistory();renderChat();$("tutorStatus").textContent="History साफ हो गई।"};
  async function send(){
-  const button=$("tutorSend"),question=$("tutorQuestion").value.trim(),subject=$("tutorSubject").value.trim(),topic=$("tutorTopic").value.trim(),className=$("tutorClass").value.trim();
-  if(button.disabled)return;
-  if(!className||!subject||!topic||!question){status("tutorStatus","कक्षा, विषय, अध्याय और सवाल भरें।",true);return;}
-  button.disabled=true;status("tutorStatus","AI Tutor आपके सवाल को समझ रहा है…");
-  addMessage("user",question);$("tutorQuestion").value="";
-  try{
-   const result=await api("aiTutorChat",{className,subject,topic,question,history});
-   history.push({role:"user",text:question},{role:"model",text:result.answer});history=history.slice(-8);
-   addMessage("ai",result.answer);status("tutorStatus","जवाब तैयार है।");
-  }catch(e){addMessage("ai","अभी जवाब नहीं मिल पाया: "+e.message);status("tutorStatus",e.message,true)}
+  const button=$("tutorSend"),question=$("tutorQuestion").value.trim(),className=$("tutorClass").value.trim();if(button.disabled||!question)return;
+  if(!className){$("tutorStatus").textContent="कक्षा चुनें।";return;}
+  let c=chats.find(x=>x.id===activeId);if(!c){c={id:newId(),title:question.slice(0,48),messages:[],history:[],updatedAt:Date.now()};chats.unshift(c);activeId=c.id;}
+  c.messages.push({role:"user",text:question});$("tutorQuestion").value="";save();renderHistory();renderChat();button.disabled=true;$("tutorStatus").textContent="AI जवाब तैयार कर रहा है…";
+  try{const result=await api("aiTutorChat",{className,subject:"सामान्य पढ़ाई",topic:"कक्षा "+className+" का पाठ्यक्रम",question,history:c.history||[]});c.messages.push({role:"model",text:result.answer});c.history=[...(c.history||[]),{role:"user",text:question},{role:"model",text:result.answer}].slice(-8);save();renderChat();$("tutorStatus").textContent="जवाब तैयार है।";}
+  catch(e){c.messages.push({role:"model",text:"अभी जवाब नहीं मिल पाया: "+e.message});save();renderChat();$("tutorStatus").textContent=e.message;}
   finally{button.disabled=false;$("tutorQuestion").focus();}
  }
- $("tutorSend").onclick=send;
- $("tutorQuestion").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}});
+ $("tutorSend").onclick=send;$("tutorQuestion").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}});
 };
 window.aiNotesPage=async function(){
  const snap=await getDoc(doc(db,"roles",auth.currentUser.uid)),profile=snap.exists()?snap.data():{};
  if(!["admin","superadmin"].includes(profile.role)){page("Access Denied","<p>यह सुविधा केवल Admin के लिए है।</p>");return;}
  page("AI Notes PDF Studio",'<div class="dashboard-hero"><span class="eyebrow">EDUFUTURE • GEMINI CONTENT STUDIO</span><h2>Admin Command से Study Notes बनाएं</h2><p>अपना निर्देश लिखें। AI उसी कक्षा, विषय और अध्याय के अनुसार व्यवस्थित Notes तैयार करेगा।</p></div><section class="item"><div class="builder-meta-grid"><div><label>कक्षा</label><input id="notesClass" placeholder="Class 10"></div><div><label>विषय</label><input id="notesSubject" placeholder="Science"></div><div><label>अध्याय / Topic</label><input id="notesTopic" placeholder="प्रकाश और परावर्तन"></div><div><label>भाषा</label><select id="notesLanguage"><option>Hindi</option><option>English</option><option>Bilingual</option></select></div><div><label>Notes का प्रकार</label><select id="notesLevel"><option>Detailed Notes</option><option>Short Revision</option><option>Exam Preparation</option></select></div></div><label for="notesCommand">Admin Command / निर्देश</label><textarea id="notesCommand" rows="5" maxlength="2500" placeholder="उदाहरण: इस अध्याय के सभी मुख्य सिद्धांत, परिभाषाएँ, सूत्र, सरल उदाहरण और परीक्षा में पूछे जाने वाले महत्वपूर्ण बिंदु शामिल करो। अंत में 5 प्रश्न उत्तर सहित दो।"></textarea><div class="overview-actions"><button id="generateNotes" class="success-action">✦ Generate AI Notes</button><button id="notesClear" class="secondary">Clear</button></div><p id="notesStatus" class="hint" role="status"></p></section><section id="notesPreview" class="item" hidden></section><section class="item"><h3>Recent AI Notes</h3><div id="recentAiNotes">लोड हो रहा है…</div></section>');
  async function recent(){
-  try{const result=await api("listAiNotes");$("recentAiNotes").innerHTML=(result.notes||[]).map(n=>'<article class="admin-row"><span><b>'+esc(n.topic)+'</b><small>'+esc(n.className)+' • '+esc(n.subject)+' • '+esc(n.createdAt||"")+'</small></span><button type="button" data-old-note="'+esc(n.id)+'">Open / PDF</button></article>').join("")||"<p>अभी कोई AI Notes नहीं बने हैं।</p>";
+  try{const result=await api("listAiNotes");$("recentAiNotes").innerHTML=(result.notes||[]).map(n=>'<article class="admin-row"><span><b>'+esc(n.topic)+'</b><small>'+esc(n.className)+' • '+esc(n.subject)+' • '+esc(n.createdAt||"")+'</small></span><div class="ai-note-actions"><button type="button" data-old-note="'+esc(n.id)+'">Open / PDF</button><button type="button" class="danger" data-delete-note="'+esc(n.id)+'">Delete</button></div></article>').join("")||"<p>अभी कोई AI Notes नहीं बने हैं।</p>";
    $("recentAiNotes").querySelectorAll("[data-old-note]").forEach(b=>b.onclick=()=>{const n=result.notes.find(x=>x.id===b.dataset.oldNote);if(n){showNotes(n);openPdf(n.topic+" - Study Notes",n.className+" • "+n.subject+" • "+n.topic,n.content)}});
+   $("recentAiNotes").querySelectorAll("[data-delete-note]").forEach(b=>b.onclick=async()=>{if(!confirm("इस Notes PDF को हमेशा के लिए हटाएँ?"))return;b.disabled=true;try{await api("deleteAiNote",{id:b.dataset.deleteNote});await recent();$("notesPreview").hidden=true;status("notesStatus","Notes हटा दिए गए।")}catch(e){b.disabled=false;status("notesStatus",e.message,true)}});
   }catch(e){$("recentAiNotes").textContent=e.message}
  }
  function showNotes(n){
