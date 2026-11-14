@@ -119,17 +119,17 @@ async function showStudentProfileSetup(current,profile={}){
     }catch(e){$("profileSetupStatus").textContent=e.message;button.disabled=false}
   };
 }
-const studentTabs=[["home","Home"],["aichat","AI Study Chat"],["notices","Important Notice"],["quiz","Available Quizzes"],["notes","Study Notes"],["pyq","Previous Year Questions"],["leaderboard","Leaderboard"],["results","My Results"],["doubts","Doubt Solving"],["tasks","Daily Targets"],["planner","Study Routine"],["cards","Flashcards"]];
+const studentTabs=[["home","Home"],["progress","My Progress"],["aichat","AI Study Chat"],["notices","Important Notice"],["quiz","Available Quizzes"],["notes","Study Notes"],["pyq","Previous Year Questions"],["leaderboard","Leaderboard"],["results","My Results"],["doubts","Doubt Solving"],["tasks","Daily Targets"],["planner","Study Routine"],["cards","Flashcards"]];
 function closeWorkspaceMenu(){
   $("app").classList.remove("menu-open");
   $("menuToggle").setAttribute("aria-expanded","false");
 }
 function render(){
   let tabs=studentTabs;
-  if(role==="teacher")tabs=[["home","Home"],["notices","Important Notice"],["teacher","Teacher Workspace"]];
-  if(role==="admin")tabs=[["home","Home"],["aichat","AI Study Chat"],["ainotes","AI Notes PDF"],["notices","Important Notice"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"]];
-  if(role==="superadmin")tabs=[["home","Home"],["aichat","AI Study Chat"],["ainotes","AI Notes PDF"],["notices","Important Notice"],["overview","Overview"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"],["super","Super Admin"]];
-  const pages={overview:superOverviewPage,home:role==="superadmin"?superHomePage:homePage,aichat:()=>window.aiChatPage(),ainotes:()=>window.aiNotesPage(),notices:importantNoticesPage,quiz:quizPage,notes:notesPage,pyq:pyqPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,admin:adminPage,aiquestions:aiQuestionBankPage,createquiz:createQuizPage,objectivebuilder:()=>quizBuilderPage("objective"),subjectivebuilder:()=>quizBuilderPage("subjective"),notesupload:()=>contentUploadPage("note"),pyqupload:()=>contentUploadPage("pyq"),super:superPage};
+  if(role==="teacher")tabs=[["home","Home"],["notices","Important Notice"],["teacher","Teacher Workspace"],["analytics","Teacher Analytics"]];
+  if(role==="admin")tabs=[["home","Home"],["aichat","AI Study Chat"],["ainotes","AI Notes PDF"],["notices","Important Notice"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"],["activity","Activity Log"]];
+  if(role==="superadmin")tabs=[["home","Home"],["aichat","AI Study Chat"],["ainotes","AI Notes PDF"],["notices","Important Notice"],["overview","Overview"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"],["activity","Activity Log"],["super","Super Admin"]];
+  const pages={overview:superOverviewPage,progress:studentProgressPage,analytics:teacherAnalyticsPage,activity:adminActivityPage,home:role==="superadmin"?superHomePage:homePage,aichat:()=>window.aiChatPage(),ainotes:()=>window.aiNotesPage(),notices:importantNoticesPage,quiz:quizPage,notes:notesPage,pyq:pyqPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,admin:adminPage,aiquestions:aiQuestionBankPage,createquiz:createQuizPage,objectivebuilder:()=>quizBuilderPage("objective"),subjectivebuilder:()=>quizBuilderPage("subjective"),notesupload:()=>contentUploadPage("note"),pyqupload:()=>contentUploadPage("pyq"),super:superPage};
   // Internal workflow pages are intentionally not sidebar items. Keep them routable.
   if(!tabs.some(x=>x[0]===tab)&&!pages[tab])tab=tabs[0][0];
   $("nav").innerHTML='<div class="nav-section-label">MENU</div>'+tabs.map(x=>'<button data-tab="'+x[0]+'" class="nav-link '+(tab===x[0]?"active":"")+'"><span class="nav-icon">'+({overview:"◈",home:"⌂",aichat:"✦",ainotes:"▤",notices:"📢",quiz:"▤",notes:"▧",leaderboard:"♛",results:"◷",doubts:"✉",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜"}[x[0]]||"•")+'</span><span>'+x[1]+"</span></button>").join("");
@@ -153,6 +153,22 @@ async function superHomePage(){
   panel("Head Teacher Control Center",'<div class="admin-welcome"><span class="eyebrow">EDUFUTURE • SUPER ADMIN</span><h2>पूरा EduFuture आपके नियंत्रण में</h2><p>यह Student Dashboard नहीं है। यहाँ से quizzes, teachers, written answers, content और accounts नियंत्रित करें।</p><div class="overview-actions"><button data-super-create>＋ Create Quiz</button><button data-super-teacher>Teacher Workspace</button><button data-super-manage>Super Admin Controls</button></div></div><div class="grid"><div class="stat"><strong>'+studentData.students.length+'</strong><span>Students</span></div><div class="stat"><strong>'+adminData.admins.length+'</strong><span>Admins / Super Admins</span></div><div class="stat"><strong>'+quizSnap.size+'</strong><span>Total Quizzes</span></div><div class="stat"><strong>'+published+'</strong><span>Published Quizzes</span></div><div class="stat"><strong>'+gradeData.submissions.reduce((n,x)=>n+x.questions.length,0)+'</strong><span>Answers Awaiting Review</span></div></div><div class="dashboard-shortcuts"><button data-super-notes>Upload Notes</button><button data-super-pyq>Upload PYQ</button><button data-super-results>Quiz Results & Ranks</button></div>');
   const go=(selector,target)=>$("view").querySelector(selector).onclick=()=>{tab=target;render()};
   go("[data-super-create]","createquiz");go("[data-super-teacher]","teacher");go("[data-super-manage]","super");go("[data-super-notes]","notesupload");go("[data-super-pyq]","pyqupload");go("[data-super-results]","admin");
+}
+async function studentProgressPage(){
+  const [stats,results]=await Promise.all([call("getStudentProgress"),call("getMyResults")]);
+  const topics=(stats.weakTopics||[]).map(x=>'<article class="item"><b>'+esc(x.topic)+'</b><p>'+x.accuracy+'% सही उत्तर • '+x.correct+'/'+x.total+'</p></article>').join("");
+  const recent=(results.results||[]).slice(0,12).map(x=>'<article class="item"><b>'+esc(x.title||"Quiz")+'</b><p>'+(x.released?esc(x.score)+' / '+esc(x.total)+' अंक':"Result अभी जारी नहीं हुआ")+'</p></article>').join("");
+  panel("मेरी पढ़ाई की Progress",'<div class="grid"><div class="stat"><strong>'+stats.attempts+'</strong><span>Quiz शुरू किए</span></div><div class="stat"><strong>'+stats.completed+'</strong><span>Quiz पूरे किए</span></div><div class="stat"><strong>'+stats.score+'/'+stats.total+'</strong><span>कुल अंक</span></div><div class="stat"><strong>'+stats.accuracy+'%</strong><span>सही उत्तर</span></div></div><section class="item"><h3>अधिक अभ्यास वाले विषय</h3>'+(topics||'<p>अभी पर्याप्त विषय-आधारित परिणाम उपलब्ध नहीं हैं।</p>')+'</section><section class="item"><h3>हाल के Quiz</h3>'+(recent||'<p>अभी कोई Quiz Attempt नहीं किया।</p>')+'</section>');
+}
+async function teacherAnalyticsPage(){
+  const a=await call("getTeacherAnalytics");
+  const rows=(a.subjects||[]).map(x=>'<tr><td>'+esc(x.subject)+'</td><td>'+x.attempts+'</td><td>'+x.accuracy+'%</td></tr>').join("");
+  panel("Teacher Analytics",'<div class="grid"><div class="stat"><strong>'+a.studentCount+'</strong><span>विद्यार्थी</span></div><div class="stat"><strong>'+a.submissions+'</strong><span>Quiz Submissions</span></div><div class="stat"><strong>'+a.average+'%</strong><span>औसत प्रदर्शन</span></div></div><section class="item"><h3>विषय के अनुसार प्रदर्शन</h3><div class="table-wrap"><table><thead><tr><th>विषय</th><th>Attempts</th><th>Accuracy</th></tr></thead><tbody>'+(rows||'<tr><td colspan="3">अभी Analytics डेटा उपलब्ध नहीं है।</td></tr>')+'</tbody></table></div></section>');
+}
+async function adminActivityPage(){
+  const r=await call("listAdminActivity");
+  const rows=(r.items||[]).map(x=>'<article class="item"><b>'+esc(x.action)+' • '+esc(x.entityType)+'</b><p>'+esc(x.details?.topic||x.details?.title||x.entityId||"")+'</p><small>'+esc(x.actorUid)+' • '+dateText(x.createdAt)+'</small></article>').join("");
+  panel("Admin Activity Log",rows||'<div class="empty-state">अभी कोई Admin activity दर्ज नहीं है।</div>');
 }
 async function homePage(){
   const [quizSnap,resultData]=await Promise.all([getDocs(query(collection(db,"quizzes"),where("status","==","published"))),call("getMyResults").catch(()=>({results:[]}))]);
