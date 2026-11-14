@@ -654,3 +654,17 @@ a{color:#347fc0}
 /* Keep the student upgrade action visible in the workspace header. */
 #premiumTopAction{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;white-space:nowrap;background:#f59e0b;color:#fff;border:1px solid #fbbf24;padding:10px 15px;border-radius:999px;font-size:13px;font-weight:800;cursor:pointer}
 @media(max-width:800px){#premiumTopAction{padding:8px 10px;font-size:11px}}
+
+
+/* Premium header button: compact sky-blue Upgrade action */
+#premiumTopAction{display:inline-flex!important;visibility:visible!important;align-items:center;justify-content:center;flex:0 0 auto;position:relative;z-index:30;white-space:nowrap;background:linear-gradient(135deg,#38bdf8,#0284c7)!important;color:#fff!important;border:1px solid #7dd3fc!important;padding:10px 18px;border-radius:999px;font-size:14px;font-weight:850;box-shadow:0 6px 18px #0284c733;cursor:pointer}
+#premiumTopAction:hover{background:linear-gradient(135deg,#0ea5e9,#0369a1)!important;transform:translateY(-1px)}
+.premium-dialog{max-height:88vh;overflow:auto}
+.premium-intro{color:#64748b;line-height:1.6}
+.premium-plan-card{border:1px solid #bae6fd;border-radius:18px;padding:18px;background:linear-gradient(155deg,#f0f9ff,#fff 70%);box-shadow:0 8px 24px #0284c710}
+.premium-plan-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.premium-plan-label{font-size:11px;font-weight:900;letter-spacing:1px;color:#0369a1}
+.premium-plan-tag{font-size:10px;font-weight:800;color:#075985;background:#e0f2fe;border-radius:999px;padding:5px 9px}
+.premium-plan-subtitle{font-size:12px;color:#64748b;margin-top:-4px}
+.premium-select-plan{width:100%;border:0;border-radius:12px;padding:12px;background:#bae6fd;color:#075985;font-weight:850;cursor:not-allowed}
+@media(max-width:800px){#premiumTopAction{padding:8px 12px;font-size:12px}}
