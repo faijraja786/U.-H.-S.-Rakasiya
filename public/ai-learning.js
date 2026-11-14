@@ -45,23 +45,25 @@ window.aiChatPage=async function(){
  const classOptions=isStudent?'<option value="'+esc(classValue)+'">'+esc(classValue||"कक्षा चुनें")+'</option>':['6','7','8','9','10','11','12'].map(x=>'<option value="Class '+x+'" '+(classValue.toLowerCase().replace("class ","")===x?"selected":"")+' >कक्षा '+x+'</option>').join("");
  let chats=[];try{chats=JSON.parse(localStorage.getItem(storageKey)||"[]");if(!Array.isArray(chats))chats=[];}catch{}
  let activeId=chats[0]?.id||null;
- const save=()=>{try{localStorage.setItem(storageKey,JSON.stringify(chats.slice(0,60)));}catch{}};
+ const save=()=>{try{localStorage.setItem(storageKey,JSON.stringify(chats.slice(0,60)));}catch{}const c=chats.find(x=>x.id===activeId);if(c)api("saveAiTutorChat",{id:c.id,title:c.title,messages:c.messages,history:c.history||[]}).catch(e=>console.warn("Cloud history save:",e.message));};
  const newId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
  $("view").innerHTML='<section class="ef-chat-page"><aside class="ef-chat-sidebar" id="efChatSidebar"><div class="ef-side-top"><div class="ef-brand-mini"><span>✦</span><div><b>EduFuture AI</b><small>पढ़ाई में आपका साथी</small></div></div><button id="newTutorChat" class="ef-new-chat">＋ नई बातचीत</button></div><div class="ef-history-title">पुरानी बातचीत</div><div id="tutorHistoryList" class="ef-history-list"></div><div class="ef-side-bottom"><span>कक्षा '+esc(classValue||"—")+'</span><span>सिर्फ पढ़ाई के सवाल</span></div></aside><section class="ef-chat-main"><header class="ef-chat-top"><button id="toggleChatHistory" class="ef-icon-btn" aria-label="History खोलें">☰</button><div><b>AI Study Tutor</b><small>आसान हिन्दी • चरण-दर-चरण समझाएँ</small></div><span class="ef-class-pill">कक्षा <select id="tutorClass" '+(isStudent?"disabled":"")+'>'+classOptions+'</select></span></header><div id="tutorChat" class="ef-chat-messages" aria-live="polite"></div><footer class="ef-chat-footer"><div class="ef-chat-compose"><textarea id="tutorQuestion" rows="1" maxlength="3000" placeholder="अपना सवाल यहाँ लिखें…"></textarea><button id="tutorSend" aria-label="सवाल भेजें" type="button">➤</button></div><div class="ef-chat-footnote"><span id="tutorStatus">गणित के सूत्र किताब जैसे दिखेंगे।</span><button id="clearTutorHistory" type="button">History साफ करें</button></div></footer></section></section>';
  const chat=$("tutorChat"),list=$("tutorHistoryList");
- function renderChat(){
+ function renderChat(forceBottom=true){
+  const keepBottom=forceBottom||(chat.scrollHeight-chat.scrollTop-chat.clientHeight<110),previousTop=chat.scrollTop;
   const c=chats.find(x=>x.id===activeId);chat.innerHTML="";
   if(!c||!c.messages.length){chat.innerHTML='<div class="ef-welcome"><div class="ef-welcome-mark">✦</div><p class="ef-welcome-kicker">EDUFUTURE LEARNING</p><h1>आज क्या सीखें?</h1><p>कक्षा '+esc(classValue||"चुनें")+' के किसी भी विषय से सवाल पूछें। जवाब आसान हिन्दी में मिलेगा।</p><div class="ef-suggestions"><button data-prompt="इस सवाल को आसान हिन्दी में उदाहरण के साथ समझाइए।">आसान भाषा में समझाएँ</button><button data-prompt="इस गणित के सवाल को किताब वाले सूत्र और पूरे हल के साथ समझाइए।">गणित का पूरा हल</button><button data-prompt="इस विषय के 5 अभ्यास प्रश्न उत्तर सहित दीजिए।">अभ्यास प्रश्न</button></div></div>';}
   else c.messages.forEach(m=>{const el=document.createElement("article");el.className="ef-message "+(m.role==="user"?"ef-user-message":"ef-ai-message");const label=document.createElement("b");label.textContent=m.role==="user"?"आप":"✦ EduFuture";const body=document.createElement("div");body.className="ef-message-body";body.innerHTML=markdownHtml(m.text);el.append(label,body);chat.append(el);});
   chat.querySelectorAll("[data-prompt]").forEach(x=>x.onclick=()=>{$("tutorQuestion").value=x.dataset.prompt;$("tutorQuestion").focus()});
-  ensureMathJax(chat);chat.scrollTop=chat.scrollHeight;
+  ensureMathJax(chat);requestAnimationFrame(()=>{if(keepBottom)chat.scrollTop=chat.scrollHeight;else chat.scrollTop=previousTop;});
  }
  function renderHistory(){
   list.innerHTML=chats.length?chats.map(c=>'<div class="ef-history-row '+(c.id===activeId?"active":"")+'"><button class="ef-history-open" data-open-chat="'+esc(c.id)+'">'+esc(c.title||"नई बातचीत")+'</button><button class="ef-history-delete" data-delete-chat="'+esc(c.id)+'" aria-label="बातचीत हटाएँ">×</button></div>').join(""):'<p class="ef-history-empty">अभी कोई पुरानी बातचीत नहीं।</p>';
   list.querySelectorAll("[data-open-chat]").forEach(x=>x.onclick=()=>{activeId=x.dataset.openChat;renderHistory();renderChat();$("efChatSidebar").classList.remove("mobile-open")});
-  list.querySelectorAll("[data-delete-chat]").forEach(x=>x.onclick=()=>{if(!confirm("यह बातचीत हटाएँ?"))return;chats=chats.filter(c=>c.id!==x.dataset.deleteChat);if(activeId===x.dataset.deleteChat)activeId=chats[0]?.id||null;save();renderHistory();renderChat()});
+  list.querySelectorAll("[data-delete-chat]").forEach(x=>x.onclick=async()=>{if(!confirm("यह बातचीत सभी डिवाइसों की History से हटाएँ?"))return;const id=x.dataset.deleteChat;chats=chats.filter(c=>c.id!==id);if(activeId===id)activeId=chats[0]?.id||null;save();try{await api("deleteAiTutorChat",{id})}catch(e){console.warn("Cloud history delete:",e.message)}renderHistory();renderChat()});
  }
  if(isStudent&&!classValue){$("tutorStatus").textContent="पहले Student Profile में अपनी कक्षा भरें।";$("tutorSend").disabled=true;return;}
+ try{const cloud=await api("listAiTutorChats");const local=new Map(chats.map(c=>[c.id,c]));(cloud.chats||[]).forEach(c=>{if(!local.has(c.id))local.set(c.id,{...c,updatedAt:Date.now()})});chats=Array.from(local.values()).slice(0,60);}catch(e){console.warn("Cloud history load:",e.message)}
  renderHistory();renderChat();
  $("newTutorChat").onclick=()=>{activeId=null;renderHistory();renderChat();$("efChatSidebar").classList.remove("mobile-open");$("tutorQuestion").focus()};
  $("toggleChatHistory").onclick=()=>$("efChatSidebar").classList.toggle("mobile-open");
@@ -71,8 +73,12 @@ window.aiChatPage=async function(){
   if(!className){$("tutorStatus").textContent="कक्षा चुनें।";return;}
   let c=chats.find(x=>x.id===activeId);if(!c){c={id:newId(),title:question.slice(0,48),messages:[],history:[],updatedAt:Date.now()};chats.unshift(c);activeId=c.id;}
   c.messages.push({role:"user",text:question});$("tutorQuestion").value="";save();renderHistory();renderChat();button.disabled=true;$("tutorStatus").textContent="सरल हिन्दी में जवाब तैयार हो रहा है…";
-  try{const result=await api("aiTutorChat",{className,subject:"सामान्य पढ़ाई",topic:"कक्षा "+className+" का पाठ्यक्रम",question,history:c.history||[]});c.messages.push({role:"model",text:result.answer});c.history=[...(c.history||[]),{role:"user",text:question},{role:"model",text:result.answer}].slice(-8);save();renderChat();$("tutorStatus").textContent="जवाब तैयार है।";}
-  catch(e){c.messages.push({role:"model",text:"अभी जवाब नहीं मिल पाया: "+e.message});save();renderChat();$("tutorStatus").textContent=e.message;}
+  try{
+   const result=await api("aiTutorChat",{className,subject:"सामान्य पढ़ाई",topic:"कक्षा "+className+" का पाठ्यक्रम",question,history:c.history||[]});
+   const answer=String(result.answer||"");c.messages.push({role:"model",text:""});const target=c.messages[c.messages.length-1];
+   for(let i=0;i<answer.length;i+=18){target.text=answer.slice(0,i+18);renderChat(false);if(i%72===0)save();await new Promise(resolve=>setTimeout(resolve,18));}
+   c.history=[...(c.history||[]),{role:"user",text:question},{role:"model",text:answer}].slice(-8);save();renderChat(true);$("tutorStatus").textContent="जवाब तैयार है।";
+  }catch(e){c.messages.push({role:"model",text:"अभी जवाब नहीं मिल पाया: "+e.message});save();renderChat(true);$("tutorStatus").textContent=e.message;}
   finally{button.disabled=false;$("tutorQuestion").focus();}
  }
  $("tutorSend").onclick=send;$("tutorQuestion").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}});
