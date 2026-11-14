@@ -772,6 +772,92 @@ async function run(name, req) {
       return { ok: true, updated: Boolean(previousGrade), pendingReview, score: finalScore, subjectiveScore };
     }
 
+    case "aiTutorChat": {
+      const currentRole = await roleOf(uid);
+      if (!["student","admin","superadmin"].includes(currentRole)) fail("permission-denied","AI Study Chat केवल Student और Admin के लिए उपलब्ध है।");
+      const apiKey = String(process.env.GEMINI_API_KEY || "").trim();
+      if (!apiKey) fail("failed-precondition","Gemini API Key Render में उपलब्ध नहीं है।");
+      const profileSnap = await db.doc("roles/" + uid).get();
+      const profile = profileSnap.exists ? profileSnap.data() : {};
+      const student = currentRole === "student";
+      const className = student ? String(profile.className || "").trim() : String(d.className || "").trim();
+      const subject = String(d.subject || "").trim().slice(0,80);
+      const topic = String(d.topic || "").trim().slice(0,160);
+      const question = String(d.question || "").trim().slice(0,3000);
+      const history = Array.isArray(d.history) ? d.history.slice(-8).map(x => ({
+        role: x.role === "model" ? "model" : "user",
+        parts: [{ text: String(x.text || "").slice(0,1500) }]
+      })).filter(x => x.parts[0].text) : [];
+      if (student && !className) fail("failed-precondition","पहले Student Profile में अपनी कक्षा भरें।");
+      if (!subject || !topic || !question) fail("invalid-argument","विषय, अध्याय और प्रश्न भरना जरूरी है।");
+      const prompt = [
+        "You are EduFuture Study Tutor for a school student in India.",
+        "Answer only school-learning and academic questions directly related to the declared class, subject and chapter/topic.",
+        "If the request is unrelated to studies or unrelated to the declared subject/topic, politely say you can only help with this lesson and ask for a relevant question.",
+        "Use age-appropriate, respectful, simple Hindi unless the student explicitly asks for English.",
+        "Explain step by step, give a short example when useful, and end with one quick check-for-understanding question.",
+        "Do not invent textbook page numbers, board syllabus claims, citations or facts. If unsure, clearly say so.",
+        "Do not ask for personal information. Avoid adult, dangerous or harmful content.",
+        "Class: " + className, "Subject: " + subject, "Chapter/topic: " + topic,
+        "Latest student question: " + question
+      ].join("\n");
+      const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=" + encodeURIComponent(apiKey);
+      const contents = [...history, { role:"user", parts:[{text:prompt}] }];
+      const response = await geminiHttpsRequest(endpoint, JSON.stringify({
+        contents, generationConfig:{maxOutputTokens:1400,temperature:0.35}
+      }), 90000);
+      let payload={};try{payload=JSON.parse(response.raw||"{}")}catch{}
+      if(!response.ok){
+        const error=new Error(payload.error?.message||"AI Tutor अभी जवाब नहीं दे पाया।");
+        error.code=response.status===429?"resource-exhausted":[500,502,503,504].includes(response.status)?"unavailable":"failed-precondition";
+        throw error;
+      }
+      const answer=String(payload.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"").trim();
+      if(!answer)fail("unavailable","AI Tutor से खाली जवाब मिला। फिर कोशिश करें।");
+      return {answer,className,subject,topic};
+    }
+    case "generateAiNotes": {
+      await requireAdmin(req);
+      const apiKey = String(process.env.GEMINI_API_KEY || "").trim();
+      if (!apiKey) fail("failed-precondition","Gemini API Key Render में उपलब्ध नहीं है।");
+      const className=String(d.className||"").trim().slice(0,40);
+      const subject=String(d.subject||"").trim().slice(0,80);
+      const topic=String(d.topic||"").trim().slice(0,160);
+      const command=String(d.command||"").trim().slice(0,2500);
+      const language=["Hindi","English","Bilingual"].includes(d.language)?d.language:"Hindi";
+      const level=["Short Revision","Detailed Notes","Exam Preparation"].includes(d.level)?d.level:"Detailed Notes";
+      if(!className||!subject||!topic||!command)fail("invalid-argument","Class, Subject, Topic और Admin Command भरना जरूरी है।");
+      const prompt=[
+        "Create original, accurate school study notes for an Indian school learner.",
+        "Class: "+className,"Subject: "+subject,"Chapter/topic: "+topic,
+        "Language: "+language,"Depth: "+level,
+        "Admin's exact instruction: "+command,
+        "Use a clear title, learning objectives, well-organized headings, definitions, explanations, worked examples where appropriate, key points, a short summary and 5 revision questions with answers.",
+        "Keep the level appropriate to the declared class. Stay focused on the requested subject and chapter. Never invent board-specific textbook references or page numbers. If an instruction asks for unsupported facts, mark uncertainty rather than fabricate.",
+        "Use readable plain text/Markdown. Do not include HTML, scripts, citations you cannot verify, or an answer key that contradicts the explanations."
+      ].join("\n");
+      const endpoint="https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key="+encodeURIComponent(apiKey);
+      const response=await geminiHttpsRequest(endpoint,JSON.stringify({
+        contents:[{role:"user",parts:[{text:prompt}]}],
+        generationConfig:{maxOutputTokens:7000,temperature:0.3}
+      }),120000);
+      let payload={};try{payload=JSON.parse(response.raw||"{}")}catch{}
+      if(!response.ok){
+        const error=new Error(payload.error?.message||"AI Notes generate नहीं हो सके।");
+        error.code=response.status===429?"resource-exhausted":[500,502,503,504].includes(response.status)?"unavailable":"failed-precondition";
+        throw error;
+      }
+      const content=String(payload.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"").trim();
+      if(!content)fail("unavailable","AI Notes का उत्तर खाली आया। फिर कोशिश करें।");
+      const ref=db.collection("aiNotes").doc();
+      await ref.set({className,subject,topic,command,language,level,content,createdBy:uid,createdAt:FieldValue.serverTimestamp()});
+      return {id:ref.id,className,subject,topic,content};
+    }
+    case "listAiNotes": {
+      await requireAdmin(req);
+      const snap=await db.collection("aiNotes").orderBy("createdAt","desc").limit(30).get();
+      return {notes:snap.docs.map(x=>({id:x.id,...x.data(),createdAt:x.data().createdAt?.toDate?.().toISOString?.()||null}))};
+    }
     case "generateQuestionDraft": {
       await requireAdmin(req);
       const apiKey = String(process.env.GEMINI_API_KEY || "").trim();
@@ -1064,7 +1150,8 @@ app.post("/api/notice-upload/:id", express.raw({type:"application/octet-stream",
   }
 });
 app.post("/api/:name", authenticate, async (req, res) => {
-  if (req.params.name === "generateQuestionDraft") { req.setTimeout(180000); res.setTimeout(180000); }
+  if (["generateQuestionDraft","generateAiNotes"].includes(req.params.name)) { req.setTimeout(150000); res.setTimeout(150000); }
+  if (req.params.name === "aiTutorChat") { req.setTimeout(110000); res.setTimeout(110000); }
   try {
     const data = await run(req.params.name, req);
     return res.json({ data });
