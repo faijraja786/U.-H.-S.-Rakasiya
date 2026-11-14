@@ -469,3 +469,31 @@ input,textarea,select{color:#111827;background:#fff}
 .ef-chat-footer{flex:0 0 auto}
 @media(max-width:760px){.ef-chat-page{height:calc(100dvh - 82px)!important;min-height:0!important}.ef-chat-messages{padding:18px 14px;gap:16px}.ef-message{max-width:96%;padding:14px}.ef-chat-top{height:62px;flex-basis:62px}}
 .ai-notes-content{line-height:1.8;color:#334155}.ai-notes-content h1,.ai-notes-content h2,.ai-notes-content h3{color:#1e3a8a;margin:18px 0 8px}.ai-notes-content p{margin:7px 0}.ai-notes-content ul,.ai-notes-content ol{padding-left:26px}.ai-notes-content mjx-container{max-width:100%;overflow-x:auto}
+
+/* EduFuture light-only design refresh */
+:root{color-scheme:light;--ef-bg:#f7faff;--ef-card:#ffffff;--ef-ink:#23364d;--ef-muted:#708198;--ef-line:#e3ebf4;--ef-accent:#397fbd}
+body,.app-main,.content{background:#f7faff;color:#23364d}
+.panel,.item,.stat,.auth-card,.ef-notes-form,.ef-recent-notes,.ef-notes-preview,.ef-library-card{background:#fff!important;color:#23364d!important;border-color:#e3ebf4!important;box-shadow:0 8px 26px rgba(35,54,77,.045)}
+button{transition:background .16s ease,border-color .16s ease,transform .16s ease}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #bfdbfe;outline-offset:2px}
+.nav-link{color:#51657d}.nav-link.active{background:#eaf3fc;color:#245c91}
+.dashboard-hero,.ef-notes-hero{background:linear-gradient(120deg,#eff7ff,#f2fbf8)!important;border-color:#dceaf5!important}
+.ef-chat-page{background:#f8fbff;color:#26384f}
+.ef-chat-sidebar,.ef-chat-main,.ef-chat-footer{background:#fff!important}
+.ef-chat-sidebar{border-color:#e4edf6}.ef-chat-top{background:#fff;border-bottom:1px solid #e9eff6;color:#2b4562}
+.ef-chat-messages{background:#f8fbff}
+.ef-chat-compose{background:#fff;border-color:#dce7f2}
+.ef-chat-compose button{background:#55a4df;color:#fff}
+.ef-attach-btn{width:40px;height:40px;flex:0 0 40px;border-radius:13px;background:#eef6fd!important;color:#3476ad!important;font-size:22px}
+.ef-image-preview{display:flex;align-items:center;gap:10px;padding:8px 16px;background:#fff}.ef-image-preview img{max-width:120px;max-height:90px;object-fit:contain;border-radius:10px}
+.ef-chat-image{display:block;max-width:min(100%,360px);max-height:300px;object-fit:contain;border-radius:12px;margin-top:10px}
+.ef-answer-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;padding-top:9px;border-top:1px solid #edf2f7}
+.ef-answer-actions button{background:#f1f6fb;color:#45637f;border:1px solid #e1eaf3;padding:7px 10px;font-size:12px}
+.ef-practice-card{margin:18px 0;padding:18px;border:1px solid #dce8f4;border-radius:16px;background:#fff}
+.ef-practice-card fieldset{border:1px solid #e4edf5;border-radius:12px;margin:12px 0;padding:12px}.ef-practice-card label{display:block;padding:6px 0}
+.ef-note-image{display:block;max-width:100%;max-height:480px;object-fit:contain;margin:18px auto;border-radius:12px}
+.pdf-contents,.ef-pdf-toc{background:#f7fbff;border:1px solid #e3ebf4;padding:16px;border-radius:12px;margin:18px 0}
+.pdf-contents a,.ef-pdf-toc a{color:#2f6fa8;text-decoration:none}
+.ef-pdf-image img{display:block;max-width:100%;max-height:650px;object-fit:contain;margin:18px auto;page-break-inside:avoid}
+.table-wrap{width:100%;overflow-x:auto}.table-wrap table{width:100%;border-collapse:collapse}.table-wrap th,.table-wrap td{padding:10px;border-bottom:1px solid #e7eef6;text-align:left}
+@media(max-width:760px){.ef-answer-actions button{flex:1 1 auto}.ef-image-preview{padding:8px 10px}.ef-chat-compose{gap:8px}.ef-attach-btn{width:36px;height:36px;flex-basis:36px}}
