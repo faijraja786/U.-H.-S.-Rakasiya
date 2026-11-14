@@ -966,7 +966,7 @@ async function run(name, req) {
       const content=String(payload.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"").trim();
       if(!content)fail("unavailable","AI Notes का उत्तर खाली आया। फिर कोशिश करें।");
       const ref=db.collection("aiNotes").doc();
-      const imagePaths=[];
+      const imagePaths=[],imageErrors=[];
       const imagePrompts=[
         "Create one polished, accurate educational textbook infographic for Class "+className+", subject "+subject+", chapter "+topic+". Base it on these notes: "+content.slice(0,2200)+". Choose the most important concept and explain it visually with a clear diagram, labelled arrows only when essential, simple visual examples and a neat school-book layout. Use a white background, light-blue and teal pastel palette, crisp readable shapes, correct scientific or mathematical relationships, generous margins, portrait-friendly 4:3 composition. Do not add a title, paragraphs, watermark, logo or decorative clutter. This is an illustration to be embedded inside printed school study notes."
       ];
@@ -992,12 +992,13 @@ async function run(name, req) {
           });
           imagePaths.push(imagePath);
         }catch(imageError){
+          imageErrors.push("चित्र "+(index+1)+": "+String(imageError.message||"अनजान त्रुटि").slice(0,220));
           console.error("AI notes illustration "+(index+1)+" failed:",imageError.message);
         }
       }
-      await ref.set({className,subject,topic,command,language,level,content,imagePaths,illustrationStatus:imagePaths.length===imagePrompts.length?"complete":imagePaths.length?"partial":"failed",createdBy:uid,createdAt:FieldValue.serverTimestamp()});
+      await ref.set({className,subject,topic,command,language,level,content,imagePaths,imageErrors,illustrationStatus:imagePaths.length===imagePrompts.length?"complete":imagePaths.length?"partial":"failed",createdBy:uid,createdAt:FieldValue.serverTimestamp()});
       const imageUrls=await Promise.all(imagePaths.map(path=>signedStorageUrl(path,3600).catch(()=>null)));
-      return {id:ref.id,className,subject,topic,content,imageUrls:imageUrls.filter(Boolean),illustrationStatus:imagePaths.length===2?"complete":imagePaths.length?"partial":"failed"};
+      return {id:ref.id,className,subject,topic,content,imageUrls:imageUrls.filter(Boolean),illustrationStatus:imagePaths.length===imagePrompts.length?"complete":imagePaths.length?"partial":"failed",imageErrors};
     }
     case "listAiNotes": {
       await requireAdmin(req);
