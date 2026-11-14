@@ -26,6 +26,15 @@
         ]
       },
       {
+        "source": "/ai-learning.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
         "source": "/question-bank-tools.js",
         "headers": [
           {
