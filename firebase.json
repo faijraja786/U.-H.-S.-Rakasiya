@@ -26,6 +26,15 @@
         ]
       },
       {
+        "source": "/question-bank-tools.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
         "source": "/app.js",
         "headers": [
           {
