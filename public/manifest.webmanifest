@@ -1,0 +1,19 @@
+{
+  "name": "EduFuture • U.H.S. Rakasiya",
+  "short_name": "EduFuture",
+  "description": "Smart Learning Portal",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f7fc",
+  "theme_color": "#ffffff",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

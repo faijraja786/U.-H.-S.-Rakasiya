@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://edufuture-1c3dd.web.app/sitemap.xml

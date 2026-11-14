@@ -1,281 +1,84 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="hi">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>EduFuture | U.H.S. Rakasiya</title>
-
-<meta name="theme-color" content="#4f46e5">
-<meta name="description" content="EduFuture - Smart Learning and Online Examination Platform">
-
-<link rel="stylesheet" href="./style.css">
-
-<style>
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  font-family: Arial, sans-serif;
-  background: #f1f5ff;
-  color: #172554;
-}
-
-header {
-  background: linear-gradient(120deg,#312e81,#4f46e5,#7c3aed);
-  color: white;
-  padding: 25px 18px;
-  border-radius: 0 0 25px 25px;
-  box-shadow: 0 5px 20px #312e8133;
-}
-
-header h1 {
-  font-size: 30px;
-}
-
-header p {
-  margin-top: 7px;
-}
-
-#auth {
-  max-width: 430px;
-  margin: 50px auto;
-  padding: 25px;
-  background: white;
-  border-radius: 20px;
-  box-shadow: 0 8px 35px #64748b30;
-}
-
-#auth h1 {
-  color: #4f46e5;
-  text-align: center;
-  font-size: 32px;
-}
-
-#auth h2 {
-  text-align: center;
-  margin: 15px 0;
-  font-size: 19px;
-}
-
-input, textarea, select {
-  width: 100%;
-  padding: 13px;
-  margin: 8px 0;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  font-size: 15px;
-  background: #f8fafc;
-}
-
-button {
-  padding: 11px 16px;
-  border: none;
-  border-radius: 10px;
-  background: #4f46e5;
-  color: white;
-  font-weight: bold;
-  cursor: pointer;
-  margin: 5px 3px;
-}
-
-button:hover {
-  background: #3730a3;
-}
-
-#auth button {
-  width: 100%;
-  padding: 13px;
-}
-
-#google {
-  background: #0f9d58;
-}
-
-#reset {
-  background: #64748b;
-}
-
-#message {
-  color: #dc2626;
-  margin-top: 12px;
-  text-align: center;
-}
-
-#app {
-  padding: 15px;
-}
-
-#logout {
-  background: #ef4444;
-}
-
-#nav {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 15px 0;
-}
-
-#nav button {
-  white-space: nowrap;
-  background: white;
-  color: #4338ca;
-  border: 1px solid #c7d2fe;
-}
-
-#nav button.active {
-  background: #4f46e5;
-  color: white;
-}
-
-.panel {
-  background: white;
-  padding: 20px;
-  border-radius: 18px;
-  margin: 12px 0;
-  box-shadow: 0 5px 20px #64748b18;
-}
-
-.panel h2 {
-  color: #4338ca;
-  margin-bottom: 15px;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit,minmax(140px,1fr));
-  gap: 12px;
-  margin: 15px 0;
-}
-
-.item {
-  background: linear-gradient(135deg,#eef2ff,#f5f3ff);
-  padding: 16px;
-  margin: 10px 0;
-  border-radius: 13px;
-  border: 1px solid #ddd6fe;
-}
-
-.item h2 {
-  color: #4f46e5;
-}
-
-.question {
-  background: #f8fafc;
-  padding: 15px;
-  border-radius: 12px;
-  margin: 15px 0;
-  border: 1px solid #e2e8f0;
-}
-
-.option {
-  display: block;
-  padding: 10px;
-  margin: 7px 0;
-  background: white;
-  border-radius: 8px;
-}
-
-.option input {
-  width: auto;
-}
-
-details {
-  margin-top: 10px;
-}
-
-a {
-  color: #4f46e5;
-  font-weight: bold;
-}
-
-footer {
-  text-align: center;
-  padding: 25px;
-  color: #64748b;
-}
-
-[hidden] {
-  display: none !important;
-}
-
-@media(max-width:600px) {
-  header h1 {
-    font-size: 25px;
-  }
-
-  #app {
-    padding: 10px;
-  }
-
-  .panel {
-    padding: 15px;
-  }
-}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <meta name="description" content="EduFuture - U.H.S. Rakasiya का Smart Learning Portal। विद्यार्थियों के लिए Online Quiz, Study Notes, Previous Year Questions और School Updates।">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <meta name="googlebot" content="index, follow">
+  <meta name="keywords" content="EduFuture, UHS Rakasiya, online learning, school quiz, study notes, education portal">
+  <link rel="canonical" href="https://edufuture-1c3dd.web.app/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="EduFuture | U.H.S. Rakasiya">
+  <meta property="og:description" content="U.H.S. Rakasiya Smart Learning Portal - Quizzes, Notes and School Updates">
+  <meta property="og:url" content="https://edufuture-1c3dd.web.app/">
+  <title>EduFuture | U.H.S. Rakasiya</title>
+  <link rel="stylesheet" href="./style.css?v=upgrade-plans-20261114">
+  <link rel="stylesheet" href="./redesign.css?v=20261114-2">
 </head>
-
 <body>
+  <section id="auth" class="auth-card">
+    <div class="brand-mark">EF</div>
+    <h1>EduFuture</h1>
+    <p class="muted center">U.H.S. Rakasiya • Smart Learning Portal</p>
+    <div class="login-mode-note"><b>एक ही Login • सही Dashboard अपने-आप</b><span>आपके account की सुरक्षित role के अनुसार Student, Teacher या Admin workspace खुलेगा।</span></div>
+    <label for="name">Full Name (नए Student account के लिए)</label>
+    <input id="name" type="text" autocomplete="name" placeholder="अपना पूरा नाम">
+    <label for="email">Email Address</label>
+    <input id="email" type="email" autocomplete="username" placeholder="name@example.com">
+    <label for="password">Password</label>
+    <div class="password-field"><input id="password" type="password" autocomplete="current-password" placeholder="Password"><button id="togglePassword" class="password-toggle" type="button" aria-label="Show password" aria-pressed="false">Show</button></div>
+    <button id="login" class="primary full">Sign In</button>
+    <button id="signup" class="secondary full">Create Student Account</button>
+    <button id="google" class="google full">Continue with Google</button>
+    <button id="reset" class="text-button full">Forgot Password?</button>
+    <p id="authMessage" role="status" aria-live="polite"></p>
+    <p class="muted center small">Learn Today • Lead Tomorrow</p>
+    <nav class="public-legal-links" aria-label="Website information">
+      <a href="./about.html">About Us</a><a href="./privacy.html">Privacy Policy</a><a href="./contact.html">Contact Us</a><a href="./terms.html">Terms &amp; Conditions</a><a href="./refund.html">Refund Policy</a>
+    </nav>
+  </section>
 
-<!-- LOGIN / SIGNUP -->
-<div id="auth">
+  <div id="app" class="app-shell" hidden>
+    <button id="sidebarOverlay" class="sidebar-overlay" type="button" aria-label="Close menu"></button>
+    <aside class="sidebar">
+      <a class="sidebar-brand" href="./"><span class="sidebar-logo">EF</span><span><b>EduFuture</b><small>U.H.S. Rakasiya</small></span></a>
+      <nav id="nav" class="nav"></nav>
+      <div class="sidebar-footer">
+        <div class="sidebar-foot"><span class="online-dot"></span> Learning Portal <small>Secure Workspace</small></div>
+        <button id="logout" class="sidebar-logout" type="button">↪ &nbsp; Logout</button>
+      </div>
+    </aside>
+    <section class="app-main">
+      <header class="topbar">
+        <button id="menuToggle" class="menu-toggle" type="button" aria-label="Open navigation menu" aria-expanded="false"><span></span><span></span><span></span></button>
+        <div class="topbar-title"><span class="topbar-kicker">U.H.S. RAKASIYA</span><strong>Learning Workspace</strong></div>
+        <button id="premiumTopAction" class="premium-top-action" type="button">✦ Upgrade</button>
+        <div class="account">
+          <span id="roleBadge" class="role-badge"></span>
+          <div class="profile-wrap">
+            <button id="profileToggle" class="profile-trigger" aria-expanded="false" aria-label="Profile menu">
+              <span id="avatarInitial" class="avatar-initial">U</span><span id="identity" class="profile-identity">User</span><span class="profile-chevron">⌄</span>
+            </button>
+            <div id="profileMenu" class="profile-menu" hidden>
+              <div class="profile-menu-head"><b id="profileName">User</b><small id="profileEmail"></small><small id="profileClass"></small><span id="profileRole"></span></div>
+            </div>
+          </div>
+        </div>
+      </header>
+      <main id="view" class="content"></main>
+      <dialog id="premiumDialog" class="premium-dialog"><div class="premium-dialog-head"><span class="eyebrow">EDUFUTURE • MEMBERSHIP PLANS</span><button id="premiumDialogClose" class="secondary" type="button" aria-label="Close">✕</button></div><h2>अपना Premium Plan चुनें</h2><p class="premium-intro">अपनी पढ़ाई को और बेहतर बनाने के लिए Premium सुविधाएँ पाएँ।</p><article class="premium-plan-card"><div class="premium-plan-top"><span class="premium-plan-label">STUDENT PREMIUM</span><span class="premium-plan-tag">POPULAR</span></div><div class="premium-dialog-price">₹100 <span>/ 5 महीने</span></div><p class="premium-plan-subtitle">एक बार की कीमत • पाँच महीने का Access</p><ul><li>Premium Test Series</li><li>Premium Notes और PDF</li><li>PYQ और Important Questions</li><li>Premium AI Study Features</li><li>Detailed Test Results</li></ul><button class="premium-select-plan" type="button" disabled>Payment जल्द उपलब्ध होगा</button></article><p class="hint">अभी भुगतान न करें। Payment सुविधा तैयार होने पर यहीं से सुरक्षित Upgrade कर सकेंगे।</p></dialog>
+      <footer>© 2026 EduFuture • U.H.S. Rakasiya</footer>
+    </section>
+  </div>
 
-  <h1>🎓 EduFuture</h1>
-  <h2>Welcome to Smart Learning</h2>
-
-  <p style="text-align:center;color:#64748b;margin-bottom:15px">
-    U.H.S. Rakasiya
-  </p>
-
-  <input id="name" type="text" placeholder="Your Full Name">
-
-  <input id="email" type="email" placeholder="Email Address">
-
-  <input id="password" type="password" placeholder="Password">
-
-  <button id="signup">✨ Create Account</button>
-
-  <button id="login">🔐 Login</button>
-
-  <button id="google">🌐 Google Login</button>
-
-  <button id="reset">Forgot Password?</button>
-
-  <p id="message"></p>
-
-  <p style="text-align:center;margin-top:20px;color:#64748b">
-    Learn Today • Lead Tomorrow
-  </p>
-
-</div>
-
-<!-- MAIN DASHBOARD -->
-<div id="app" hidden>
-
-  <header>
-    <h1>🎓 EduFuture</h1>
-    <p>U.H.S. Rakasiya | Smart Education Portal</p>
-    <p id="identity"></p>
-    <button id="logout">Logout ↗</button>
-  </header>
-
-  <nav id="nav"></nav>
-
-  <main id="view"></main>
-
-  <footer>
-    <h3>EduFuture</h3>
-    <p>Empowering Students Through Education</p>
-    <p>© 2026 U.H.S. Rakasiya</p>
-  </footer>
-
-</div>
-
-<script type="module" src="./app.js"></script>
-
+  <script type="module" src="./app.js?v=upgrade-plans-20261114"></script>
+  <script type="module" src="./question-bank-tools.js"></script>
+  <script type="module" src="./ai-learning.js"></script>
 </body>
-    </html>
+</html>
