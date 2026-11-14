@@ -546,6 +546,7 @@ async function run(name, req) {
         await deleteStorageObject(objectPath);
       }
       await ref.delete();
+      await recordAdminActivity(uid,"delete","content",id,{title:snap.data().title||""});
       return { ok: true };
     }
     case "createNotice": {
@@ -557,6 +558,7 @@ async function run(name, req) {
       if (mediaPath && (!mediaPath.startsWith("notices/" + id + "/") || !mediaType)) fail("invalid-argument", "Notice media path मान्य नहीं है।");
       await db.doc("notices/" + id).set({ title, body, mediaPath, mediaType, createdBy: uid,
         createdAt: FieldValue.serverTimestamp(), expiresAt: Timestamp.fromMillis(Date.now()+30*24*60*60*1000) });
+      await recordAdminActivity(uid,"create","notice",id,{title});
       return { id, expiresAt: new Date(Date.now()+30*24*60*60*1000).toISOString() };
     }
     case "listNotices": {
@@ -585,6 +587,7 @@ async function run(name, req) {
       const path=String(snap.data().mediaPath||"");
       if(path){if(!path.startsWith("notices/"+id+"/"))fail("invalid-argument","Notice media path मान्य नहीं है।");await deleteStorageObject(path)}
       await ref.delete();
+      await recordAdminActivity(uid,"delete","notice",id,{title:snap.data().title||""});
       return {ok:true};
     }
     case "setContentPublished": {
@@ -596,6 +599,7 @@ async function run(name, req) {
       const snap = await ref.get();
       if (!snap.exists) fail("not-found", "Content नहीं मिला।");
       await ref.update({ published, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid });
+      await recordAdminActivity(uid,published?"publish":"unpublish","content",id,{title:snap.data().title||""});
       return { ok: true, published };
     }
     case "listStudents": {
@@ -1167,6 +1171,7 @@ async function run(name, req) {
         batch.update(ref, { status, publishedBy:uid, publishedAt:FieldValue.serverTimestamp() });
       }
       await batch.commit();
+      await recordAdminActivity(uid,"publish","questionDraft",ids.join(","),{count:ids.length});
       return { ok:true, updated:ids.length };
     }
     case "deleteQuestionDraft": {
@@ -1176,6 +1181,7 @@ async function run(name, req) {
       const ref = db.doc("aiQuestionDrafts/" + id), snap = await ref.get();
       if (!snap.exists || !["pending","draft","rejected"].includes(snap.data().status)) fail("not-found", "यह Draft हटाने योग्य नहीं मिला।");
       await ref.delete();
+      await recordAdminActivity(uid,"delete","questionDraft",id);
       return { ok:true };
     }
     case "deleteQuestionBankQuestion": {
@@ -1185,6 +1191,7 @@ async function run(name, req) {
       const ref = db.doc("questionBank/" + id), snap = await ref.get();
       if (!snap.exists || snap.data().status !== "approved") fail("not-found", "Approved प्रश्न नहीं मिला।");
       await ref.delete();
+      await recordAdminActivity(uid,"delete","questionBank",id,{topic:snap.data().topic||""});
       return { ok:true };
     }
     case "updateQuestionBankQuestion": {
