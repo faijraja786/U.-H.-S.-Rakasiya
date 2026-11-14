@@ -650,3 +650,7 @@ a{color:#347fc0}
 .premium-dialog::backdrop{background:#0b122099;backdrop-filter:blur(3px)}
 .premium-dialog-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.premium-dialog h2{margin:12px 0;color:#10213d}.premium-dialog-price{font-size:38px;font-weight:900;color:#1d4ed8}.premium-dialog-price span{font-size:15px;font-weight:600;color:#64748b}.premium-dialog li{margin:9px 0}.premium-dialog .hint{line-height:1.5}
 @media(max-width:800px){.premium-top-action{font-size:11px;padding:8px 10px}.topbar{flex-wrap:wrap}}
+
+/* Keep the student upgrade action visible in the workspace header. */
+#premiumTopAction{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;white-space:nowrap;background:#f59e0b;color:#fff;border:1px solid #fbbf24;padding:10px 15px;border-radius:999px;font-size:13px;font-weight:800;cursor:pointer}
+@media(max-width:800px){#premiumTopAction{padding:8px 10px;font-size:11px}}
