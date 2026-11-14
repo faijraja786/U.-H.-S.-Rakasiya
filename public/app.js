@@ -119,7 +119,7 @@ async function showStudentProfileSetup(current,profile={}){
     }catch(e){$("profileSetupStatus").textContent=e.message;button.disabled=false}
   };
 }
-const studentTabs=[["home","Home"],["progress","My Progress"],["aichat","AI Study Chat"],["notices","Important Notice"],["quiz","Available Quizzes"],["notes","Study Notes"],["pyq","Previous Year Questions"],["leaderboard","Leaderboard"],["results","My Results"],["doubts","Doubt Solving"],["tasks","Daily Targets"],["planner","Study Routine"],["cards","Flashcards"]];
+const studentTabs=[["home","Home"],["progress","My Progress"],["aichat","AI Study Chat"],["notices","Important Notice"],["quiz","Available Quizzes"],["notes","Study Notes"],["pyq","Previous Year Questions"],["leaderboard","Leaderboard"],["results","My Results"],["doubts","Doubt Solving"],["tasks","Daily Targets"],["planner","Study Routine"],["cards","Flashcards"],["premium","Premium Upgrade"]];
 function closeWorkspaceMenu(){
   $("app").classList.remove("menu-open");
   $("menuToggle").setAttribute("aria-expanded","false");
@@ -127,9 +127,9 @@ function closeWorkspaceMenu(){
 function render(){
   let tabs=studentTabs;
   if(role==="teacher")tabs=[["home","Home"],["notices","Important Notice"],["teacher","Teacher Workspace"],["analytics","Teacher Analytics"]];
-  if(role==="admin")tabs=[["home","Home"],["aichat","AI Study Chat"],["ainotes","AI Notes PDF"],["notices","Important Notice"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"],["activity","Activity Log"]];
-  if(role==="superadmin")tabs=[["home","Home"],["aichat","AI Study Chat"],["ainotes","AI Notes PDF"],["notices","Important Notice"],["overview","Overview"],["teacher","Teacher Workspace"],["admin","Admin Dashboard"],["activity","Activity Log"],["super","Super Admin"]];
-  const pages={overview:superOverviewPage,progress:studentProgressPage,analytics:teacherAnalyticsPage,activity:adminActivityPage,home:role==="superadmin"?superHomePage:homePage,aichat:()=>window.aiChatPage(),ainotes:()=>window.aiNotesPage(),notices:importantNoticesPage,quiz:quizPage,notes:notesPage,pyq:pyqPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,admin:adminPage,aiquestions:aiQuestionBankPage,createquiz:createQuizPage,objectivebuilder:()=>quizBuilderPage("objective"),subjectivebuilder:()=>quizBuilderPage("subjective"),notesupload:()=>contentUploadPage("note"),pyqupload:()=>contentUploadPage("pyq"),super:superPage};
+  if(role==="admin")tabs=[["home","Home"],["aichat","AI Study Chat"],["ainotes","AI Notes PDF"],["notices","Important Notice"],["teacher","Teacher Workspace"],["memberships","Premium Members"],["admin","Admin Dashboard"],["activity","Activity Log"]];
+  if(role==="superadmin")tabs=[["home","Home"],["aichat","AI Study Chat"],["ainotes","AI Notes PDF"],["notices","Important Notice"],["overview","Overview"],["teacher","Teacher Workspace"],["memberships","Premium Members"],["admin","Admin Dashboard"],["activity","Activity Log"],["super","Super Admin"]];
+  const pages={overview:superOverviewPage,progress:studentProgressPage,analytics:teacherAnalyticsPage,activity:adminActivityPage,home:role==="superadmin"?superHomePage:homePage,aichat:()=>window.aiChatPage(),ainotes:()=>window.aiNotesPage(),notices:importantNoticesPage,quiz:quizPage,notes:notesPage,pyq:pyqPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,premium:premiumPage,memberships:membershipAdminPage,admin:adminPage,aiquestions:aiQuestionBankPage,createquiz:createQuizPage,objectivebuilder:()=>quizBuilderPage("objective"),subjectivebuilder:()=>quizBuilderPage("subjective"),notesupload:()=>contentUploadPage("note"),pyqupload:()=>contentUploadPage("pyq"),super:superPage};
   // Internal workflow pages are intentionally not sidebar items. Keep them routable.
   if(!tabs.some(x=>x[0]===tab)&&!pages[tab])tab=tabs[0][0];
   $("nav").innerHTML='<div class="nav-section-label">MENU</div>'+tabs.map(x=>'<button data-tab="'+x[0]+'" class="nav-link '+(tab===x[0]?"active":"")+'"><span class="nav-icon">'+({overview:"◈",home:"⌂",aichat:"✦",ainotes:"▤",notices:"📢",quiz:"▤",notes:"▧",leaderboard:"♛",results:"◷",doubts:"✉",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜"}[x[0]]||"•")+'</span><span>'+x[1]+"</span></button>").join("");
@@ -154,6 +154,20 @@ async function superHomePage(){
   const go=(selector,target)=>$("view").querySelector(selector).onclick=()=>{tab=target;render()};
   go("[data-super-create]","createquiz");go("[data-super-teacher]","teacher");go("[data-super-manage]","super");go("[data-super-notes]","notesupload");go("[data-super-pyq]","pyqupload");go("[data-super-results]","admin");
 }
+
+async function premiumPage(){
+  const membership=await call("getMyMembership");
+  const active=membership.active===true;
+  const expiry=membership.expiresAt?dateText(membership.expiresAt):"—";
+  panel("EduFuture Premium Upgrade",'<div class="dashboard-hero"><span class="eyebrow">EDUFUTURE • PREMIUM MEMBERSHIP</span><h2>पढ़ाई को दें एक नया स्तर</h2><p>एक ही Premium Plan में आपकी पढ़ाई के लिए जरूरी अतिरिक्त सुविधाएँ।</p><div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><strong style="font-size:42px">₹100</strong><span>/ 5 महीने</span></div><div class="grid"><div class="stat"><strong>✓</strong><span>Premium Test Series</span></div><div class="stat"><strong>✓</strong><span>Premium Notes & PDF</span></div><div class="stat"><strong>✓</strong><span>PYQ & Important Questions</span></div><div class="stat"><strong>✓</strong><span>Premium AI Study Features</span></div><div class="stat"><strong>✓</strong><span>Detailed Test Results</span></div></div><section class="item"><h3>आपकी Membership</h3><p><b>स्थिति:</b> '+(active?'<span style="color:#16834a">Active</span>':'अभी Free Plan')+'</p><p><b>समाप्ति तिथि:</b> '+esc(expiry)+'</p><p class="hint">'+(active?'आपकी Premium सदस्यता सक्रिय है।':'Payment सुविधा अभी तैयार की जा रही है। फिलहाल कोई भुगतान न करें।')+'</p><button type="button" disabled style="opacity:.65;cursor:not-allowed">Payment जल्द उपलब्ध होगा</button></section></div>');
+}
+async function membershipAdminPage(){
+  if(!["admin","superadmin"].includes(role))return panel("Access Denied","<p>यह पेज केवल Admin के लिए है।</p>");
+  const result=await call("listPremiumMemberships");
+  const rows=(result.memberships||[]).map(m=>'<tr><td>'+esc(m.displayName||m.email||m.uid)+'</td><td>'+esc(m.status||"inactive")+'</td><td>'+esc(m.expiresAt?dateText(m.expiresAt):"—")+'</td></tr>').join("");
+  panel("Premium Membership Management",'<p class="hint">यहाँ सदस्यताओं की स्थिति दिखाई जाती है। Payment सत्यापन जुड़ने तक Admin भी किसी भुगतान को सफल घोषित नहीं कर सकता।</p><div class="table-wrap"><table><thead><tr><th>Student</th><th>Status</th><th>Expiry</th></tr></thead><tbody>'+(rows||'<tr><td colspan="3">अभी कोई Premium Membership रिकॉर्ड नहीं है।</td></tr>')+'</tbody></table></div>');
+}
+
 async function studentProgressPage(){
   const [stats,results]=await Promise.all([call("getStudentProgress"),call("getMyResults")]);
   const topics=(stats.weakTopics||[]).map(x=>'<article class="item"><b>'+esc(x.topic)+'</b><p>'+x.accuracy+'% सही उत्तर • '+x.correct+'/'+x.total+'</p></article>').join("");
