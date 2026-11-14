@@ -953,7 +953,7 @@ async function run(name, req) {
         const ext=mime==="image/png"?"png":mime==="image/webp"?"webp":"jpg";
         const path="admin-ai-media/"+mediaId+"/generated."+ext;
         await supabaseStorageRequest("/object/"+encodeURIComponent(storageBucket)+"/"+storagePathUrl(path),{method:"POST",headers:{"Content-Type":mime,"x-upsert":"true"},body:Buffer.from(img.data,"base64")});
-        const url=await signedStorageUrl(path,3600);
+        const url=await signedStorageUrl(path,604800);
         await db.collection("adminAiMedia").doc(mediaId).set({kind,prompt,path,createdBy:uid,createdAt:FieldValue.serverTimestamp()});
         await recordAdminActivity(uid,"generate","ai-media",mediaId,{kind});
         return {kind,url,path};
