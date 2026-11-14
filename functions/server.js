@@ -1316,6 +1316,28 @@ async function run(name, req) {
       await recordAdminActivity(uid,"edit","questionBank",id,{topic:String(edited.topic??original.topic??"")});
       return { ok: true };
     }
+    case "getMyMembership": {
+      if (await roleOf(uid) !== "student") fail("permission-denied", "यह सुविधा केवल Student के लिए है।");
+      const snap = await db.doc("memberships/" + uid).get();
+      if (!snap.exists) return { active: false, status: "inactive", expiresAt: null, planId: "premium-5-months" };
+      const data = snap.data();
+      const expiry = data.expiresAt?.toDate ? data.expiresAt.toDate() : (data.expiresAt ? new Date(data.expiresAt) : null);
+      const active = data.status === "active" && expiry && expiry.getTime() > Date.now();
+      return { active: !!active, status: active ? "active" : "expired", expiresAt: expiry && !Number.isNaN(expiry.getTime()) ? expiry.toISOString() : null, planId: data.planId || "premium-5-months" };
+    }
+    case "listPremiumMemberships": {
+      await requireAdmin(req);
+      const snap = await db.collection("memberships").orderBy("createdAt", "desc").limit(100).get();
+      const memberships = await Promise.all(snap.docs.map(async docSnap => {
+        const data = docSnap.data();
+        let displayName = "", email = "";
+        try { const u = await auth.getUser(docSnap.id); displayName = u.displayName || ""; email = u.email || ""; } catch {}
+        const expiry = data.expiresAt?.toDate ? data.expiresAt.toDate() : (data.expiresAt ? new Date(data.expiresAt) : null);
+        const active = data.status === "active" && expiry && expiry.getTime() > Date.now();
+        return { uid: docSnap.id, displayName, email, status: active ? "active" : (data.status || "inactive"), expiresAt: expiry && !Number.isNaN(expiry.getTime()) ? expiry.toISOString() : null };
+      }));
+      return { memberships };
+    }
     default:
       fail("not-found", "Unknown API action.");
   }
