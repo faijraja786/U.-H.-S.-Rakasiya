@@ -794,8 +794,8 @@ async function run(name, req) {
         "You are EduFuture Study Tutor for a school student in India.",
         "Answer school-learning and academic questions suitable for the declared class across school subjects. The student does not need to choose a subject or chapter.",
         "If the request is unrelated to studies, politely say you can only help with school learning and invite a study question.",
-        "Use age-appropriate, respectful, simple Hindi unless the student explicitly asks for English.",
-        "Explain step by step, give a short example when useful, and end with one quick check-for-understanding question.",
+        "Use very simple everyday Hindi suitable for the declared class. Prefer familiar school textbook terms used in Bihar/NCERT books. Avoid difficult, artificial or machine-translated Hindi. Explain every new term in one short sentence.",
+        "Keep the answer clear and not unnecessarily long. Use short headings, numbered steps and one simple example. For maths, show the standard school-book formula first, then substitute values step by step. End with one short practice question.",
         "Do not invent textbook page numbers, board syllabus claims, citations or facts. If unsure, clearly say so.",
         "For mathematics, preserve exact mathematical notation. Write inline formulas as \\( ... \\) and display formulas as \\[ ... \\]. Use standard LaTeX commands such as \\frac{a}{b}, \\sqrt{x}, x^2, \\times, \\div, \\le and \\ge; never replace formulas with vague words or malformed symbols.",
         "Do not ask for personal information. Avoid adult, dangerous or harmful content.",
@@ -835,7 +835,7 @@ async function run(name, req) {
         "Admin's exact instruction: "+command,
         "Use a clear title, learning objectives, well-organized headings, definitions, explanations, worked examples where appropriate, key points, a short summary and 5 revision questions with answers.",
         "Keep the level appropriate to the declared class. Stay focused on the requested subject and chapter. Never invent board-specific textbook references or page numbers. If an instruction asks for unsupported facts, mark uncertainty rather than fabricate.",
-        "Use readable plain text/Markdown. Do not include HTML, scripts, citations you cannot verify, or an answer key that contradicts the explanations."
+        "Write in very simple, natural school-level Hindi. Use the exact familiar Hindi terms from school textbooks; do not invent translations. Explain hard words in brackets. For mathematics, use standard LaTeX notation: inline $x^2$, fractions $\\frac{a}{b}$, roots $\\sqrt{x}$, and display equations between $ ... $. Include a worked example with each important formula. Keep paragraphs short. Do not include HTML, scripts, fake citations or fabricated textbook page numbers."
       ].join("\n");
       const endpoint="https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key="+encodeURIComponent(apiKey);
       const response=await geminiHttpsRequest(endpoint,JSON.stringify({
@@ -858,6 +858,29 @@ async function run(name, req) {
       await requireAdmin(req);
       const snap=await db.collection("aiNotes").orderBy("createdAt","desc").limit(30).get();
       return {notes:snap.docs.map(x=>({id:x.id,...x.data(),createdAt:x.data().createdAt?.toDate?.().toISOString?.()||null}))};
+    }
+    case "publishAiNote": {
+      await requireAdmin(req);
+      const id=String(d.id||"").trim();
+      const published=d.published===true;
+      if(!id||id.length>128)fail("invalid-argument","Notes ID मान्य नहीं है।");
+      const ref=db.doc("aiNotes/"+id),snap=await ref.get();
+      if(!snap.exists)fail("not-found","AI Notes नहीं मिले।");
+      await ref.update({published,publishedAt:published?FieldValue.serverTimestamp():null,updatedAt:FieldValue.serverTimestamp()});
+      return {ok:true,id,published};
+    }
+    case "listPublishedAiNotes": {
+      const currentRole=await roleOf(uid);
+      if(!["student","admin","superadmin","teacher"].includes(currentRole))fail("permission-denied","Login जरूरी है।");
+      const snap=await db.collection("aiNotes").where("published","==",true).orderBy("publishedAt","desc").limit(50).get();
+      const profileSnap=await db.doc("roles/"+uid).get(),profile=profileSnap.exists?profileSnap.data():{};
+      const studentClass=String(profile.className||"").toLowerCase().replace(/^(class|कक्षा)\\s*/i,"").trim();
+      const notes=snap.docs.map(x=>({id:x.id,...x.data(),createdAt:x.data().createdAt?.toDate?.().toISOString?.()||null})).filter(n=>{
+        if(currentRole!=="student")return true;
+        const noteClass=String(n.className||"").toLowerCase().replace(/^(class|कक्षा)\\s*/i,"").trim();
+        return !studentClass||!noteClass||studentClass===noteClass;
+      });
+      return {notes};
     }
     case "deleteAiNote": {
       await requireAdmin(req);
