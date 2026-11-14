@@ -1335,7 +1335,8 @@ app.post("/api/notice-upload/:id", express.raw({type:"application/octet-stream",
   }
 });
 app.post("/api/:name", authenticate, async (req, res) => {
-  if (["generateQuestionDraft","generateAiNotes","generatePracticeFromAnswer"].includes(req.params.name)) { req.setTimeout(150000); res.setTimeout(150000); }
+  if (["generateQuestionDraft","generatePracticeFromAnswer"].includes(req.params.name)) { req.setTimeout(180000); res.setTimeout(180000); }
+  if (req.params.name === "generateAiNotes") { req.setTimeout(300000); res.setTimeout(300000); }
   if (req.params.name === "aiTutorChat") { req.setTimeout(110000); res.setTimeout(110000); }
   try {
     const data = await run(req.params.name, req);
