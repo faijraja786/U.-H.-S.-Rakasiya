@@ -958,37 +958,30 @@ async function run(name, req) {
         await recordAdminActivity(uid,"generate","ai-media",mediaId,{kind});
         return {kind,url,path};
       }
-      // Veo 3.1 Preview was retired in Gemini API on 2026-10-22.
-      // Use Gemini Omni Flash through the Interactions API instead.
+      // Free-tier fallback: ask the existing text model for an educational storyboard.
+      // The browser turns these scenes into a downloadable animated WebM; no paid video API is called.
+      const storyboardPrompt=[
+        "Create a concise educational explainer video storyboard for an Indian school.",
+        "Return ONLY valid JSON with this exact shape: {\"title\":\"...\",\"scenes\":[{\"heading\":\"...\",\"text\":\"...\"}]}",
+        "Create 4 to 6 scenes. Each heading must be short. Each text must be simple Hindi, accurate, and no more than 25 words.",
+        "Use clear step-by-step explanations. Do not include markdown, narration tags, or extra keys.",
+        "Topic and visual direction: "+prompt
+      ].join("\n");
       const response=await geminiHttpsRequest(
-        "https://generativelanguage.googleapis.com/v1beta/interactions",
-        JSON.stringify({
-          model:"gemini-omni-1.1-flash",
-          input:prompt,
-          response_format:{type:"video",aspect_ratio:"16:9",resolution:"720p"}
-        }),
-        300000,
-        {"x-goog-api-key":apiKey}
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key="+encodeURIComponent(apiKey),
+        JSON.stringify({contents:[{role:"user",parts:[{text:storyboardPrompt}]}],generationConfig:{temperature:0.35,maxOutputTokens:1200,responseMimeType:"application/json"}}),
+        90000
       );
       let payload={};try{payload=JSON.parse(response.raw||"{}")}catch{}
       if(!response.ok){
-        const message=payload.error?.message||("Gemini video API request failed ("+response.status+").");
+        const message=payload.error?.message||("Storyboard request failed ("+response.status+").");
         fail(response.status===429?"resource-exhausted":"unavailable",message);
       }
-      const videoPart=(payload.steps||[])
-        .filter(step=>step.type==="model_output")
-        .flatMap(step=>step.content||[])
-        .find(part=>part.type==="video"&&part.data);
-      const videoData=videoPart?.data||payload.output_video?.data||payload.outputVideo?.data||"";
-      if(!videoData)fail("unavailable",payload.error?.message||"Gemini Omni ने वीडियो डेटा नहीं लौटाया।");
-      const videoBytes=Buffer.from(videoData,"base64");
-      if(!videoBytes.length||videoBytes.length>50*1024*1024)fail("failed-precondition","वीडियो खाली है या 50 MB से बड़ा है।");
-      const path="admin-ai-media/"+mediaId+"/generated.mp4";
-      await supabaseStorageRequest("/object/"+encodeURIComponent(storageBucket)+"/"+storagePathUrl(path),{method:"POST",headers:{"Content-Type":"video/mp4","x-upsert":"true"},body:videoBytes});
-      const url=await signedStorageUrl(path,3600);
-      await db.collection("adminAiMedia").doc(mediaId).set({kind,prompt,path,createdBy:uid,createdAt:FieldValue.serverTimestamp()});
-      await recordAdminActivity(uid,"generate","ai-media",mediaId,{kind});
-      return {kind,url,path};
+      const raw=String(payload.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"").trim();
+      let storyboard={};try{storyboard=JSON.parse(raw)}catch{fail("unavailable","AI से सही storyboard नहीं मिला। फिर कोशिश करें।");}
+      const scenes=Array.isArray(storyboard.scenes)?storyboard.scenes.slice(0,6).map(x=>({heading:String(x.heading||"").slice(0,90),text:String(x.text||"").slice(0,260)})).filter(x=>x.heading&&x.text):[];
+      if(scenes.length<3)fail("unavailable","AI ने पर्याप्त video scenes नहीं बनाए। फिर कोशिश करें।");
+      return {kind:"video",title:String(storyboard.title||prompt).slice(0,120),scenes,format:"webm",notice:"यह AI storyboard से बना animated explainer है; paid video-generation API इस्तेमाल नहीं हुई।"};
     }
     case "generateAiNotes": {
       await requireAdmin(req);
