@@ -788,10 +788,10 @@ async function run(name, req) {
         "Create exactly " + count + " original school-level practice questions.",
         "Class: " + className, "Subject: " + subject, "Chapter/topic: " + topic,
         "Difficulty: " + difficulty, "Question type: " + type,
-        "Return ONLY a JSON array. Every item must have keys: text, options, answer, modelAnswer, explanation, marks, difficulty, topic.",
+        "Return ONLY a JSON array. Every item must have keys: text, options, answer, modelAnswer, explanation, marks, difficulty, topic. Include a meaningful explanation for every question and suitable marks.",
         type === "objective"
           ? "For each item, options must be exactly four short strings and answer must be a zero-based integer from 0 to 3. modelAnswer must be an empty string."
-          : "For each item, options must be an empty array, answer must be null, and modelAnswer must contain a concise correct reference answer.",
+          : "For each item, options must be an empty array, answer must be null, modelAnswer must contain a correct reference answer, and explanation must clearly explain the answer step by step in simple Hindi so a teacher can use it while grading.",
         "Use clear age-appropriate Hindi. Do not include markdown fences. Ensure the answer is factually accurate."
       ].join("\n");
       const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent?key=" + encodeURIComponent(apiKey);
@@ -848,8 +848,8 @@ async function run(name, req) {
           className, subject, topic, type, difficulty,
           text, options, answer,
           modelAnswer: type === "subjective" ? String(q.modelAnswer || "").trim().slice(0,5000) : "",
-          explanation: String(q.explanation || "").trim().slice(0,2000),
-          marks: Math.min(20, Math.max(1, Number(q.marks) || 1)),
+          explanation: String(q.explanation || (type === "subjective" ? "उत्तर की व्याख्या: " + String(q.modelAnswer || "").trim() : "")).trim().slice(0,2000),
+          marks: Math.min(20, Math.max(1, Number(q.marks) || (type === "subjective" ? 5 : 1))),
           status: "pending", createdBy: uid, createdAt: FieldValue.serverTimestamp()
         };
         batch.set(ref, draft);
@@ -873,7 +873,7 @@ async function run(name, req) {
     case "reviewQuestionDraft": {
       await requireAdmin(req);
       const id = String(d.id || "");
-      const decision = d.decision === "approve" ? "approve" : d.decision === "reject" ? "reject" : "";
+      const decision = ["approve","reject","saveDraft"].includes(d.decision) ? d.decision : "";
       if (!id || !decision) fail("invalid-argument", "Draft और review action जरूरी हैं।");
       const ref = db.doc("aiQuestionDrafts/" + id);
       const snap = await ref.get();
@@ -883,6 +883,20 @@ async function run(name, req) {
         return { ok: true, status: "rejected" };
       }
       const original = snap.data();
+      if (decision === "saveDraft") {
+        const edited = d.question && typeof d.question === "object" ? d.question : {};
+        const text = String(edited.text ?? original.text).trim().slice(0,3000);
+        const type = original.type === "subjective" ? "subjective" : "objective";
+        const options = type === "objective" ? (Array.isArray(edited.options) ? edited.options : original.options).slice(0,4).map(x=>String(x||"").trim().slice(0,500)) : [];
+        const answer = type === "objective" ? Number(edited.answer ?? original.answer) : null;
+        const modelAnswer = type === "subjective" ? String(edited.modelAnswer ?? original.modelAnswer ?? "").trim().slice(0,5000) : "";
+        const explanation = String(edited.explanation ?? original.explanation ?? "").trim().slice(0,2000);
+        const marks = Math.min(20,Math.max(1,Number(edited.marks ?? original.marks)||1));
+        if (!text || (type === "objective" && (options.length !== 4 || options.some(x=>!x) || !Number.isInteger(answer) || answer<0 || answer>3))) fail("invalid-argument", "प्रश्न, चारों विकल्प और सही उत्तर जाँचें।");
+        if (type === "subjective" && (!modelAnswer || !explanation)) fail("invalid-argument", "Subjective प्रश्न का Model Answer और Explanation जरूरी है।");
+        await ref.update({ text, options, answer, modelAnswer, explanation, marks, status:"draft", savedAsDraftBy:uid, savedAsDraftAt:FieldValue.serverTimestamp() });
+        return { ok:true, status:"draft" };
+      }
       const edited = d.question && typeof d.question === "object" ? d.question : {};
       const text = String(edited.text ?? original.text).trim().slice(0,3000);
       const type = original.type === "subjective" ? "subjective" : "objective";
@@ -908,6 +922,39 @@ async function run(name, req) {
         tx.update(ref, { status: "approved", reviewedBy: uid, reviewedAt: FieldValue.serverTimestamp(), questionBankId: bankRef.id, reviewedQuestion: { text, options, answer, modelAnswer, explanation: bankQuestion.explanation, marks: bankQuestion.marks } });
       });
       return { ok: true, status: "approved", questionBankId: bankRef.id };
+    }
+    case "setQuestionDraftStatus": {
+      await requireAdmin(req);
+      const ids = Array.isArray(d.ids) ? [...new Set(d.ids.map(x=>String(x||"").trim()).filter(Boolean))].slice(0,100) : [];
+      const status = String(d.status || "");
+      if (!ids.length || !["published"].includes(status)) fail("invalid-argument", "Draft IDs और valid status जरूरी हैं।");
+      const batch = db.batch();
+      for (const id of ids) {
+        const ref = db.doc("aiQuestionDrafts/" + id);
+        const snap = await ref.get();
+        if (!snap.exists || snap.data().status !== "draft") fail("failed-precondition", "चुने गए Draft में से कोई Draft अब उपलब्ध नहीं है।");
+        batch.update(ref, { status, publishedBy:uid, publishedAt:FieldValue.serverTimestamp() });
+      }
+      await batch.commit();
+      return { ok:true, updated:ids.length };
+    }
+    case "deleteQuestionDraft": {
+      await requireAdmin(req);
+      const id = String(d.id || "").trim();
+      if (!id) fail("invalid-argument", "Draft ID जरूरी है।");
+      const ref = db.doc("aiQuestionDrafts/" + id), snap = await ref.get();
+      if (!snap.exists || !["pending","draft","rejected"].includes(snap.data().status)) fail("not-found", "यह Draft हटाने योग्य नहीं मिला।");
+      await ref.delete();
+      return { ok:true };
+    }
+    case "deleteQuestionBankQuestion": {
+      await requireAdmin(req);
+      const id = String(d.id || "").trim();
+      if (!id) fail("invalid-argument", "Question ID जरूरी है।");
+      const ref = db.doc("questionBank/" + id), snap = await ref.get();
+      if (!snap.exists || snap.data().status !== "approved") fail("not-found", "Approved प्रश्न नहीं मिला।");
+      await ref.delete();
+      return { ok:true };
     }
     case "updateQuestionBankQuestion": {
       await requireAdmin(req);
