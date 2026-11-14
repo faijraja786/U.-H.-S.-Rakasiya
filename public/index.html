@@ -38,6 +38,9 @@
     <button id="reset" class="text-button full">Forgot Password?</button>
     <p id="authMessage" role="status" aria-live="polite"></p>
     <p class="muted center small">Learn Today • Lead Tomorrow</p>
+    <nav class="public-legal-links" aria-label="Website information">
+      <a href="./about.html">About Us</a><a href="./privacy.html">Privacy Policy</a><a href="./contact.html">Contact Us</a><a href="./terms.html">Terms &amp; Conditions</a><a href="./refund.html">Refund Policy</a>
+    </nav>
   </section>
 
   <div id="app" class="app-shell" hidden>
@@ -69,9 +72,20 @@
       </header>
       <main id="view" class="content"></main>
       <dialog id="premiumDialog" class="premium-dialog"><div class="premium-dialog-head"><span class="eyebrow">EDUFUTURE • MEMBERSHIP PLANS</span><button id="premiumDialogClose" class="secondary" type="button" aria-label="Close">✕</button></div><h2>अपना Premium Plan चुनें</h2><p class="premium-intro">अपनी पढ़ाई को और बेहतर बनाने के लिए Premium सुविधाएँ पाएँ।</p><article class="premium-plan-card"><div class="premium-plan-top"><span class="premium-plan-label">STUDENT PREMIUM</span><span class="premium-plan-tag">POPULAR</span></div><div class="premium-dialog-price">₹100 <span>/ 5 महीने</span></div><p class="premium-plan-subtitle">एक बार की कीमत • पाँच महीने का Access</p><ul><li>Premium Test Series</li><li>Premium Notes और PDF</li><li>PYQ और Important Questions</li><li>Premium AI Study Features</li><li>Detailed Test Results</li></ul><button class="premium-select-plan" type="button" disabled>Payment जल्द उपलब्ध होगा</button></article><p class="hint">अभी भुगतान न करें। Payment सुविधा तैयार होने पर यहीं से सुरक्षित Upgrade कर सकेंगे।</p></dialog>
-      <footer>© 2026 EduFuture • U.H.S. Rakasiya</footer>
+      <footer>© 2026 EduFuture • U.H.S. Rakasiya
+        <nav class="public-legal-links app-legal-links" aria-label="Website information">
+          <a href="./about.html">About Us</a><a href="./privacy.html">Privacy Policy</a><a href="./contact.html">Contact Us</a><a href="./terms.html">Terms &amp; Conditions</a><a href="./refund.html">Refund Policy</a>
+        </nav>
+      </footer>
     </section>
   </div>
+
+  <style>
+    .public-legal-links{display:flex;justify-content:center;flex-wrap:wrap;gap:8px 15px;margin:18px auto 0;padding:0 10px;font-size:12px}
+    .public-legal-links a{color:#1688df;text-decoration:none}
+    .public-legal-links a:hover{text-decoration:underline}
+    .app-legal-links{margin-top:10px}
+  </style>
   <script type="module" src="./app.js?v=upgrade-plans-20261114"></script>
   <script type="module" src="./question-bank-tools.js"></script>
   <script type="module" src="./ai-learning.js"></script>
