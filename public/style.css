@@ -640,3 +640,6 @@ a{color:#347fc0}
 .ef-note-illustration figcaption{margin-top:8px;color:#71849b;font-size:12px}
 .ef-note-preview-head,.ef-preview-publish{min-width:0;flex-wrap:wrap}
 @media(max-width:600px){.ef-note-illustration{padding:8px;margin:14px auto}.ef-note-illustration img{max-height:360px}}
+
+.ef-chat-video{display:block;width:min(100%,560px);max-height:420px;margin-top:12px;border-radius:12px;background:#111;}
+#tutorMediaMode{max-width:135px;min-width:0;padding:8px 6px;font-size:12px;background:#f4f8fd!important;color:#315f91!important;border:1px solid #dce7f3!important;}
