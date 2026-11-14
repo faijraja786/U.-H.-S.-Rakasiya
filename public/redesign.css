@@ -7,3 +7,42 @@ button{background:#438fc9!important;color:#fff!important;border-radius:10px!impo
 @media(max-width:800px){.app-shell{display:block!important;min-height:100dvh}.sidebar{position:fixed!important;z-index:60;left:0;top:0;bottom:0;width:min(290px,84vw);height:100dvh!important;padding:18px 14px!important;transform:translateX(-105%);transition:transform .22s ease;box-shadow:12px 0 35px #10243b22!important}#app.menu-open .sidebar{transform:translateX(0)}.sidebar-brand{padding:8px 8px 20px!important}.sidebar .nav{display:flex!important;flex-direction:column!important;overflow-y:auto!important;overflow-x:hidden!important;padding:6px 0!important}.sidebar .nav-link{width:100%!important;max-width:none!important;flex:0 0 auto!important;white-space:normal!important}.nav-section-label{display:block!important}.sidebar-foot{display:block!important;margin-top:auto}.sidebar-overlay{position:fixed;inset:0;z-index:55;background:#14263c66;border:0;border-radius:0;display:none}#app.menu-open .sidebar-overlay{display:block}.app-main>.topbar{position:sticky;top:0;z-index:40;min-height:66px;padding:9px 12px!important;display:flex;flex-wrap:nowrap;gap:9px}.menu-toggle{display:inline-flex!important;width:40px;height:40px;flex:0 0 40px;align-items:center;justify-content:center;flex-direction:column;gap:4px;padding:0;background:#f1f6fb!important;border:1px solid var(--ef-line)!important;color:#315d83!important}.menu-toggle span{display:block;width:17px;height:2px;background:#315d83;border-radius:2px}.topbar-title{min-width:0;flex:1}.topbar-title strong{font-size:14px;white-space:nowrap}.topbar-kicker{font-size:8px}.account{gap:5px;flex:0 0 auto}.role-badge{display:none}.profile-trigger{padding:3px 6px 3px 3px}.profile-identity{display:none}.avatar-initial{width:34px;height:34px}#premiumTopAction{font-size:11px!important;padding:8px 10px!important}.content{padding:14px 11px!important;min-height:0}.panel{padding:16px!important}.grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}.stat{padding:13px!important}.overview-actions,.dashboard-shortcuts{display:grid;grid-template-columns:1fr}.overview-actions button,.dashboard-shortcuts button{width:100%}}
 @media(max-width:390px){.grid{grid-template-columns:1fr!important}.topbar-title strong{font-size:13px}#premiumTopAction{padding:7px 8px!important}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+
+
+/* Feature-wise color system: retain EduFuture blue, add clear accents */
+:root{--ef-blue:#438fc9;--ef-teal:#149b91;--ef-violet:#8064c8;--ef-orange:#e58a35;--ef-green:#299b68;--ef-pink:#d65f91;--ef-cyan:#279db6;--ef-amber:#c58a22}
+.sidebar .nav-link{border:1px solid transparent;transition:background .16s,border-color .16s,color .16s}
+.sidebar .nav-link .nav-icon{width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 30px;border-radius:9px;background:#edf4fb;color:#397fb8;font-size:15px}
+.sidebar .nav-link[data-tab="home"] .nav-icon{background:#e7f1fb;color:#397fb8}
+.sidebar .nav-link[data-tab="progress"] .nav-icon,.sidebar .nav-link[data-tab="analytics"] .nav-icon{background:#e5f6f0;color:#16865f}
+.sidebar .nav-link[data-tab="aichat"] .nav-icon{background:#f0eafd;color:#7957c7}
+.sidebar .nav-link[data-tab="ainotes"] .nav-icon,.sidebar .nav-link[data-tab="notes"] .nav-icon{background:#e7f7f8;color:#168b99}
+.sidebar .nav-link[data-tab="notices"] .nav-icon{background:#fff1df;color:#c77a1e}
+.sidebar .nav-link[data-tab="quiz"] .nav-icon,.sidebar .nav-link[data-tab="createquiz"] .nav-icon{background:#e7efff;color:#496fce}
+.sidebar .nav-link[data-tab="pyq"] .nav-icon{background:#fcebe5;color:#c46c46}
+.sidebar .nav-link[data-tab="leaderboard"] .nav-icon{background:#fff6d9;color:#b48716}
+.sidebar .nav-link[data-tab="results"] .nav-icon{background:#e4f5ec;color:#218a5d}
+.sidebar .nav-link[data-tab="doubts"] .nav-icon{background:#fce8f0;color:#c04f83}
+.sidebar .nav-link[data-tab="tasks"] .nav-icon,.sidebar .nav-link[data-tab="planner"] .nav-icon{background:#e8f6ed;color:#278253}
+.sidebar .nav-link[data-tab="cards"] .nav-icon{background:#f0eafa;color:#7957c7}
+.sidebar .nav-link[data-tab="teacher"] .nav-icon{background:#e5f6f5;color:#168b82}
+.sidebar .nav-link[data-tab="memberships"] .nav-icon{background:#fff1df;color:#c77a1e}
+.sidebar .nav-link[data-tab="admin"] .nav-icon,.sidebar .nav-link[data-tab="super"] .nav-icon{background:#edf0f5;color:#596b82}
+.sidebar .nav-link[data-tab="overview"] .nav-icon{background:#e9eaff;color:#6268c9}
+.sidebar .nav-link.active{font-weight:750}
+.sidebar .nav-link[data-tab="aichat"].active{background:#f3effd!important;color:#6748b5!important;border-color:#e2d8fb!important}
+.sidebar .nav-link[data-tab="quiz"].active{background:#edf2ff!important;color:#3f60b6!important;border-color:#dce5ff!important}
+.sidebar .nav-link[data-tab="notes"].active,.sidebar .nav-link[data-tab="ainotes"].active{background:#eaf8f8!important;color:#147d89!important;border-color:#d4eeee!important}
+.sidebar .nav-link[data-tab="notices"].active{background:#fff6e9!important;color:#a96816!important;border-color:#f7e6c9!important}
+.sidebar .nav-link[data-tab="doubts"].active{background:#fff0f5!important;color:#b44778!important;border-color:#f6dce8!important}
+.sidebar .nav-link[data-tab="progress"].active,.sidebar .nav-link[data-tab="results"].active{background:#eaf7f0!important;color:#18784f!important;border-color:#d5eddf!important}
+.sidebar .nav-link[data-tab="teacher"].active{background:#e9f7f6!important;color:#147d76!important;border-color:#d4eeeb!important}
+.sidebar .nav-link[data-tab="leaderboard"].active{background:#fff8e5!important;color:#9e7512!important;border-color:#f3e8c4!important}
+.stat:nth-child(5n+1){border-top:3px solid #438fc9!important}.stat:nth-child(5n+2){border-top:3px solid #299b68!important}.stat:nth-child(5n+3){border-top:3px solid #8064c8!important}.stat:nth-child(5n+4){border-top:3px solid #e58a35!important}.stat:nth-child(5n){border-top:3px solid #d65f91!important}
+.stat:nth-child(5n+2) strong{color:#218a5d!important}.stat:nth-child(5n+3) strong{color:#7957c7!important}.stat:nth-child(5n+4) strong{color:#c77a1e!important}.stat:nth-child(5n) strong{color:#c04f83!important}
+.dashboard-shortcuts button:nth-child(1){background:#168b82!important}.dashboard-shortcuts button:nth-child(2){background:#8064c8!important}.dashboard-shortcuts button:nth-child(3){background:#e58a35!important}
+.overview-actions button:nth-child(1){background:#438fc9!important}.overview-actions button:nth-child(2){background:#149b91!important}.overview-actions button:nth-child(3){background:#8064c8!important}
+.quiz-status.available{background:#e5f6ec!important;color:#218653!important}.quiz-status.submitted{background:#eaf0ff!important;color:#4b65b7!important}.quiz-status.in-progress{background:#fff5df!important;color:#b47a17!important}.quiz-status.unavailable{background:#f1f3f6!important;color:#778398!important}
+.question-label{background:#edf2ff!important;color:#496fce!important}
+.empty-state{background:#f1f7fc!important;border:1px dashed #c8dced!important;border-radius:12px!important;padding:22px!important}
+#premiumTopAction{background:linear-gradient(120deg,#2996cf,#397fb8)!important}
