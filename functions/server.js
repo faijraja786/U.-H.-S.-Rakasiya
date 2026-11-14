@@ -843,8 +843,9 @@ async function run(name, req) {
         completed++;
         const board=await quiz.ref.collection("leaderboard").doc(uid).get();
         if(board.exists){const b=board.data();score+=Number(b.score||0);total+=Number(b.total||0);}
-        const review=Array.isArray(attempt.data().topicStats)?attempt.data().topicStats:[];
-        review.forEach(x=>{const k=String(x.topic||"सामान्य");topicStats[k]??={topic:k,correct:0,total:0};topicStats[k].correct+=Number(x.correct||0);topicStats[k].total+=Number(x.total||0);});
+        const [questions,answers]=await Promise.all([quiz.ref.collection("publicQuestions").orderBy("index").get(),quiz.ref.collection("privateAnswers").get()]);
+        const answerMap=new Map(answers.docs.map(x=>[x.id,x.data()])),chosen=attempt.data().answers||{},grades=attempt.data().grades||{};
+        questions.docs.forEach(x=>{const question=x.data(),answer=answerMap.get(x.id)||{},topic=String(question.topic||q.subject||"सामान्य");topicStats[topic]??={topic,correct:0,total:0};const bucket=topicStats[topic];if(question.type==="subjective"||answer.type==="subjective"){const grade=grades[x.id];if(grade){bucket.total+=1;if(Number(grade.marks||0)>=Number(answer.marks||question.marks||1)*0.7)bucket.correct+=1;}}else{bucket.total+=1;if(Number.isInteger(chosen[x.id])&&chosen[x.id]===answer.answer)bucket.correct+=1;}});
       }
       const topics=Object.values(topicStats).map(x=>({...x,accuracy:x.total?Math.round(x.correct/x.total*100):0})).sort((a,b)=>a.accuracy-b.accuracy);
       return {attempts,completed,score,total,accuracy:total?Math.round(score/total*100):0,weakTopics:topics.slice(0,5)};
