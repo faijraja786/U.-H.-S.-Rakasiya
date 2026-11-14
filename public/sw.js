@@ -1,5 +1,5 @@
-const CACHE="edufuture-static-v10";
-const STATIC=["./","./index.html","./style.css","./app.js","./firebase-config.js","./manifest.webmanifest","./icon.svg"];
+const CACHE="edufuture-static-v11";
+const STATIC=["./","./index.html","./style.css","./app.js","./firebase-config.js","./question-bank-tools.js","./manifest.webmanifest","./icon.svg"];
 self.addEventListener("install",event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(STATIC)).then(()=>self.skipWaiting())));
 self.addEventListener("activate",event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
 self.addEventListener("fetch",event=>{
