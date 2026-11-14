@@ -932,6 +932,61 @@ async function run(name, req) {
       if(!answer)fail("unavailable","AI Tutor से खाली जवाब मिला। फिर कोशिश करें।");
       return {answer,className,subject,topic};
     }
+    case "adminGenerateMedia": {
+      await requireAdmin(req);
+      const apiKey=String(process.env.GEMINI_API_KEY||"").trim();
+      if(!apiKey)fail("failed-precondition","Gemini API Key Render में उपलब्ध नहीं है।");
+      const kind=d.kind==="video"?"video":"image";
+      const prompt=String(d.prompt||"").trim().slice(0,1600);
+      if(prompt.length<8)fail("invalid-argument","चित्र या वीडियो के लिए थोड़ा विस्तार से निर्देश लिखें।");
+      const mediaId=db.collection("adminAiMedia").doc().id;
+      if(kind==="image"){
+        const response=await geminiHttpsRequest("https://generativelanguage.googleapis.com/v1beta/interactions",JSON.stringify({
+          model:"gemini-3.1-flash-image",input:[{type:"text",text:prompt}],
+          response_format:{type:"image",mime_type:"image/jpeg",aspect_ratio:"16:9",image_size:"1K"}
+        }),120000,{"x-goog-api-key":apiKey});
+        let payload={};try{payload=JSON.parse(response.raw||"{}")}catch{}
+        if(!response.ok)fail(response.status===429?"resource-exhausted":"unavailable",payload.error?.message||"Gemini चित्र नहीं बना पाया।");
+        const img=payload.output_image||payload.outputImage||payload.output?.find?.(x=>x.type==="image");
+        if(!img?.data)fail("unavailable","Gemini से चित्र प्राप्त नहीं हुआ।");
+        const mime=String(img.mime_type||img.mimeType||"image/jpeg");
+        const ext=mime==="image/png"?"png":mime==="image/webp"?"webp":"jpg";
+        const path="admin-ai-media/"+mediaId+"/generated."+ext;
+        await supabaseStorageRequest("/object/"+encodeURIComponent(storageBucket)+"/"+storagePathUrl(path),{method:"POST",headers:{"Content-Type":mime,"x-upsert":"true"},body:Buffer.from(img.data,"base64")});
+        const url=await signedStorageUrl(path,3600);
+        await db.collection("adminAiMedia").doc(mediaId).set({kind,prompt,path,createdBy:uid,createdAt:FieldValue.serverTimestamp()});
+        await recordAdminActivity(uid,"generate","ai-media",mediaId,{kind});
+        return {kind,url,path};
+      }
+      const start=await fetch("https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview:predictLongRunning?key="+encodeURIComponent(apiKey),{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({instances:[{prompt}],parameters:{aspectRatio:"16:9",durationSeconds:8,numberOfVideos:1,resolution:"720p"}})
+      });
+      let operation={};try{operation=await start.json()}catch{}
+      if(!start.ok||!operation.name)fail(start.status===429?"resource-exhausted":"unavailable",operation.error?.message||"Video generation शुरू नहीं हो सकी। हो सकता है आपके API project में Veo access उपलब्ध न हो।");
+      let completed=null;
+      for(let attempt=0;attempt<24;attempt++){
+        await new Promise(resolve=>setTimeout(resolve,10000));
+        const poll=await fetch("https://generativelanguage.googleapis.com/v1beta/"+operation.name+"?key="+encodeURIComponent(apiKey));
+        let state={};try{state=await poll.json()}catch{}
+        if(!poll.ok)fail("unavailable",state.error?.message||"Video की स्थिति नहीं मिल सकी।");
+        if(state.done){completed=state;break;}
+      }
+      if(!completed)fail("deadline-exceeded","वीडियो बनने में अधिक समय लग रहा है। थोड़ी देर बाद फिर कोशिश करें।");
+      if(completed.error)fail("unavailable",completed.error.message||"वीडियो नहीं बन पाया।");
+      const videoUri=completed.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri||completed.response?.generatedVideos?.[0]?.video?.uri;
+      if(!videoUri)fail("unavailable","Gemini ने तैयार वीडियो का लिंक नहीं लौटाया।");
+      const download=await fetch(videoUri,{headers:{"x-goog-api-key":apiKey}});
+      if(!download.ok)fail("unavailable","तैयार वीडियो डाउनलोड नहीं हो सका।");
+      const videoBytes=Buffer.from(await download.arrayBuffer());
+      if(!videoBytes.length||videoBytes.length>50*1024*1024)fail("failed-precondition","वीडियो खाली है या 50 MB से बड़ा है।");
+      const path="admin-ai-media/"+mediaId+"/generated.mp4";
+      await supabaseStorageRequest("/object/"+encodeURIComponent(storageBucket)+"/"+storagePathUrl(path),{method:"POST",headers:{"Content-Type":"video/mp4","x-upsert":"true"},body:videoBytes});
+      const url=await signedStorageUrl(path,3600);
+      await db.collection("adminAiMedia").doc(mediaId).set({kind,prompt,path,createdBy:uid,createdAt:FieldValue.serverTimestamp()});
+      await recordAdminActivity(uid,"generate","ai-media",mediaId,{kind});
+      return {kind,url,path};
+    }
     case "generateAiNotes": {
       await requireAdmin(req);
       const apiKey = String(process.env.GEMINI_API_KEY || "").trim();
@@ -976,7 +1031,7 @@ async function run(name, req) {
           const imageResponse=await geminiHttpsRequest(imageEndpoint,JSON.stringify({
             model:"gemini-3.1-flash-image",
             input:[{type:"text",text:imagePrompts[index]}],
-            response_format:{type:"image",mime_type:"image/png",aspect_ratio:"4:3",image_size:"1K"}
+            response_format:{type:"image",mime_type:"image/jpeg",aspect_ratio:"4:3",image_size:"1K"}
           }),90000,{"x-goog-api-key":apiKey});
           let imagePayload={};try{imagePayload=JSON.parse(imageResponse.raw||"{}")}catch{}
           if(!imageResponse.ok)throw new Error(imagePayload.error?.message||"Gemini Image API request failed ("+imageResponse.status+").");
