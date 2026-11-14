@@ -76,7 +76,7 @@ window.aiChatPage=async function(){
   try{
    const result=await api("aiTutorChat",{className,subject:"सामान्य पढ़ाई",topic:"कक्षा "+className+" का पाठ्यक्रम",question,history:c.history||[]});
    const answer=String(result.answer||"");c.messages.push({role:"model",text:""});const target=c.messages[c.messages.length-1];
-   for(let i=0;i<answer.length;i+=18){target.text=answer.slice(0,i+18);renderChat(false);if(i%72===0)save();await new Promise(resolve=>setTimeout(resolve,18));}
+   for(let i=0;i<answer.length;i+=36){target.text=answer.slice(0,i+36);renderChat(false);await new Promise(resolve=>setTimeout(resolve,24));}
    c.history=[...(c.history||[]),{role:"user",text:question},{role:"model",text:answer}].slice(-8);save();renderChat(true);$("tutorStatus").textContent="जवाब तैयार है।";
   }catch(e){c.messages.push({role:"model",text:"अभी जवाब नहीं मिल पाया: "+e.message});save();renderChat(true);$("tutorStatus").textContent=e.message;}
   finally{button.disabled=false;$("tutorQuestion").focus();}
