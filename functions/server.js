@@ -35,14 +35,15 @@ function fail(code, message) {
   throw error;
 }
 
-function geminiHttpsRequest(endpoint, body, timeoutMs = 75000) {
+function geminiHttpsRequest(endpoint, body, timeoutMs = 75000, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const url = new URL(endpoint);
     const request = https.request(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(body)
+        "Content-Length": Buffer.byteLength(body),
+        ...extraHeaders
       }
     }, response => {
       const chunks = [];
@@ -94,7 +95,7 @@ async function signedStorageUrl(path, expiresIn = 3600) {
 }
 async function supabaseStorageRequest(endpoint, options = {}) {
   const base = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
-  const secret = process.env.SUPABASE_SECRET_KEY || "";
+  const secret = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || "";
   if (!base || !secret) fail("failed-precondition", "Supabase Storage की server key अभी Render में configure नहीं है।");
   const response = await fetch(base + "/storage/v1" + endpoint, {
     ...options,
@@ -967,24 +968,25 @@ async function run(name, req) {
       const ref=db.collection("aiNotes").doc();
       const imagePaths=[];
       const imagePrompts=[
-        "Create a clear, scientifically accurate school textbook educational illustration for Class "+className+", subject "+subject+", chapter "+topic+". Make one central labelled-free diagram or visual explanation of the most important concept from these notes: "+content.slice(0,1800)+". Use clean white background, soft light-blue and teal textbook palette, neat thin lines, correct proportions, simple visual hierarchy, high contrast, no decorative clutter, absolutely no words, letters, numbers, watermark or logo. It must be suitable for a printed school study-notes PDF.",
-        "Create a second distinct educational visual for the same school chapter: "+topic+" ("+subject+", Class "+className+"). Show a useful process, comparison, worked-concept visual, scientific structure or step-by-step flowchart based on these notes: "+content.slice(0,1800)+". Use a clean white background, light pastel textbook colors, accurate shapes and arrows, no text, no letters, no numbers, no watermark or logo. This must be different from the first illustration and useful for learning."
+        "Create one polished, accurate educational textbook infographic for Class "+className+", subject "+subject+", chapter "+topic+". Base it on these notes: "+content.slice(0,2200)+". Choose the most important concept and explain it visually with a clear diagram, labelled arrows only when essential, simple visual examples and a neat school-book layout. Use a white background, light-blue and teal pastel palette, crisp readable shapes, correct scientific or mathematical relationships, generous margins, portrait-friendly 4:3 composition. Do not add a title, paragraphs, watermark, logo or decorative clutter. This is an illustration to be embedded inside printed school study notes."
       ];
       for(let index=0;index<imagePrompts.length;index++){
         try{
-          const imageEndpoint="https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent?key="+encodeURIComponent(apiKey);
+          const imageEndpoint="https://generativelanguage.googleapis.com/v1beta/interactions";
           const imageResponse=await geminiHttpsRequest(imageEndpoint,JSON.stringify({
-            contents:[{role:"user",parts:[{text:imagePrompts[index]}]}],
-            generationConfig:{responseModalities:["TEXT","IMAGE"],temperature:0.35}
-          }),120000);
+            model:"gemini-3.1-flash-image",
+            input:[{type:"text",text:imagePrompts[index]}],
+            response_format:{type:"image",mime_type:"image/png",aspect_ratio:"4:3",image_size:"1K"}
+          }),90000,{"x-goog-api-key":apiKey});
           let imagePayload={};try{imagePayload=JSON.parse(imageResponse.raw||"{}")}catch{}
-          if(!imageResponse.ok)throw new Error(imagePayload.error?.message||"Image generation request failed ("+imageResponse.status+").");
-          const imagePart=(imagePayload.candidates?.[0]?.content?.parts||[]).find(part=>part.inlineData?.data&&String(part.inlineData.mimeType||"").startsWith("image/"));
-          if(!imagePart)throw new Error("Gemini ने इस चित्र के लिए image output नहीं दिया।");
-          const mime=String(imagePart.inlineData.mimeType||"image/png");
+          if(!imageResponse.ok)throw new Error(imagePayload.error?.message||"Gemini Image API request failed ("+imageResponse.status+").");
+          const generatedImage=imagePayload.output_image||imagePayload.outputImage||null;
+          const imageData=generatedImage?.data||imagePayload.output?.find?.(part=>part.type==="image")?.data||"";
+          if(!imageData)throw new Error(imagePayload.error?.message||"Gemini ने Image API में कोई चित्र नहीं लौटाया।");
+          const mime=String(generatedImage?.mime_type||generatedImage?.mimeType||"image/png");
           const extension=mime==="image/jpeg"?"jpg":mime==="image/webp"?"webp":"png";
           const imagePath="ai-notes/"+ref.id+"/ai-illustration-"+(index+1)+"."+extension;
-          const bytes=Buffer.from(imagePart.inlineData.data,"base64");
+          const bytes=Buffer.from(imageData,"base64");
           await supabaseStorageRequest("/object/"+encodeURIComponent(storageBucket)+"/"+storagePathUrl(imagePath),{
             method:"POST",headers:{"Content-Type":mime,"x-upsert":"true"},body:bytes
           });
@@ -993,7 +995,7 @@ async function run(name, req) {
           console.error("AI notes illustration "+(index+1)+" failed:",imageError.message);
         }
       }
-      await ref.set({className,subject,topic,command,language,level,content,imagePaths,illustrationStatus:imagePaths.length===2?"complete":imagePaths.length?"partial":"failed",createdBy:uid,createdAt:FieldValue.serverTimestamp()});
+      await ref.set({className,subject,topic,command,language,level,content,imagePaths,illustrationStatus:imagePaths.length===imagePrompts.length?"complete":imagePaths.length?"partial":"failed",createdBy:uid,createdAt:FieldValue.serverTimestamp()});
       const imageUrls=await Promise.all(imagePaths.map(path=>signedStorageUrl(path,3600).catch(()=>null)));
       return {id:ref.id,className,subject,topic,content,imageUrls:imageUrls.filter(Boolean),illustrationStatus:imagePaths.length===2?"complete":imagePaths.length?"partial":"failed"};
     }
@@ -1016,15 +1018,28 @@ async function run(name, req) {
     case "listPublishedAiNotes": {
       const currentRole=await roleOf(uid);
       if(!["student","admin","superadmin","teacher"].includes(currentRole))fail("permission-denied","Login जरूरी है।");
-      const snap=await db.collection("aiNotes").where("published","==",true).orderBy("publishedAt","desc").limit(50).get();
+      // Filter by the published flag only; sort in memory to avoid a composite-index dependency.
+      const snap=await db.collection("aiNotes").where("published","==",true).limit(100).get();
       const profileSnap=await db.doc("roles/"+uid).get(),profile=profileSnap.exists?profileSnap.data():{};
-      const studentClass=String(profile.className||"").toLowerCase().replace(/^(class|कक्षा)\\s*/i,"").trim();
-      const notes=await Promise.all(snap.docs.map(async x=>{const v=x.data();const imageUrls=await Promise.all((v.imagePaths||[]).map(p=>signedStorageUrl(p,3600).catch(()=>null)));return {id:x.id,...v,imageUrls:imageUrls.filter(Boolean),createdAt:v.createdAt?.toDate?.().toISOString?.()||null};}));const visibleNotes=notes.filter(n=>{
+      const normalizeClass=value=>String(value||"").toLowerCase().normalize("NFKC")
+        .replace(/^(class|कक्षा)\s*/i,"").replace(/(st|nd|rd|th)$/i,"").replace(/\s+/g,"").trim();
+      const studentClass=normalizeClass(profile.className||profile.class||"");
+      const notes=await Promise.all(snap.docs.map(async x=>{
+        const v=x.data();
+        const imageUrls=await Promise.all((v.imagePaths||[]).map(p=>signedStorageUrl(p,3600).catch(error=>{
+          console.error("Published AI note image URL failed:",x.id,error.message);return null;
+        })));
+        return {id:x.id,...v,imageUrls:imageUrls.filter(Boolean),createdAt:v.createdAt?.toDate?.().toISOString?.()||null};
+      }));
+      const visibleNotes=notes.filter(n=>{
         if(currentRole!=="student")return true;
-        const noteClass=String(n.className||"").toLowerCase().replace(/^(class|कक्षा)\\s*/i,"").trim();
+        const noteClass=normalizeClass(n.className);
         return !studentClass||!noteClass||studentClass===noteClass;
+      }).sort((a,b)=>{
+        const time=n=>{const value=n.publishedAt||n.createdAt;return value?.toDate?value.toDate().getTime():new Date(value||0).getTime();};
+        return time(b)-time(a);
       });
-      return {notes};
+      return {notes:visibleNotes};
     }
     case "deleteAiNote": {
       await requireAdmin(req);
@@ -1033,7 +1048,10 @@ async function run(name, req) {
       const ref=db.doc("aiNotes/"+id);
       const snap=await ref.get();
       if(!snap.exists)fail("not-found","AI Notes नहीं मिले या पहले ही हटाए जा चुके हैं।");
+      const imagePaths=Array.isArray(snap.data().imagePaths)?snap.data().imagePaths:[];
       await ref.delete();
+      await Promise.all(imagePaths.map(path=>deleteStorageObject(path).catch(error=>console.error("AI note image cleanup failed:",path,error.message))));
+      await recordAdminActivity(uid,"delete","aiNote",id,{topic:snap.data().topic||"",imageCount:imagePaths.length});
       return {ok:true,id};
     }
     case "generateQuestionDraft": {
