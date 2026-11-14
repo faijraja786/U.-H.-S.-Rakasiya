@@ -15,7 +15,7 @@ async function api(name,data={}){
 }
 function ensureMathJax(target){
  if(!window.MathJax){
-  window.MathJax={tex:{inlineMath:[["$","$"],["\\\\(","\\\\)"]],displayMath:[["$$","$$"],["\\\\[","\\\\]"]],processEscapes:true,packages:{"[+]":["ams"]}},options:{skipHtmlTags:["script","noscript","style","textarea","pre","code"]},startup:{typeset:false}};
+  window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]],processEscapes:true,packages:{"[+]":["ams"]}},options:{skipHtmlTags:["script","noscript","style","textarea","pre","code"]},startup:{typeset:false}};
   const script=document.createElement("script");script.src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js";script.async=true;document.head.appendChild(script);
   script.addEventListener("load",()=>window.MathJax.typesetPromise?.([target]).catch(()=>{}),{once:true});
  }else if(window.MathJax.typesetPromise)window.MathJax.typesetPromise([target]).catch(()=>{});
