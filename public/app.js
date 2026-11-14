@@ -354,7 +354,7 @@ async function adminPage(){
 
 async function aiQuestionBankPage(){
   if(role!=="admin"&&role!=="superadmin")return;
-  panel("AI Question Generator",'<button class="text-button" id="aiBack">← Admin Dashboard</button><div class="dashboard-hero"><span class="eyebrow">EDUFUTURE • GEMINI AI</span><h2>AI से प्रश्न बनाएं</h2><p>AI के बनाए प्रश्न पहले Pending में आएँगे। जाँच और Approve करने के बाद ही वे Question Bank में जुड़ेंगे।</p></div><section class="item"><div class="builder-meta-grid"><div><label>Class</label><input id="aiClass" placeholder="जैसे Class 10"></div><div><label>Subject</label><input id="aiSubject" placeholder="जैसे Science"></div><div><label>Chapter / Topic</label><input id="aiTopic" placeholder="जैसे प्रकाश और परावर्तन"></div><div><label>Question Type</label><select id="aiType"><option value="objective">MCQ</option><option value="subjective">Subjective</option></select></div><div><label>Difficulty</label><select id="aiDifficulty"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select></div><div><label>Number of Questions (1–15)</label><input id="aiCount" type="number" min="1" max="15" value="5"></div></div><button id="aiGenerate" class="success-action">✦ Generate Questions</button><span id="aiStatus" class="hint"></span></section><h3>Pending Review</h3><div id="aiPending">Loading pending questions…</div><h3>Approved Question Bank</h3><div id="aiApproved">Loading approved questions…</div>');
+  panel("AI Question Generator",'<button class="text-button" id="aiBack">← Admin Dashboard</button><div class="dashboard-hero"><span class="eyebrow">EDUFUTURE • GEMINI AI</span><h2>AI से प्रश्न बनाएं</h2><p>AI के बनाए प्रश्न पहले Pending में आएँगे। जाँच और Approve करने के बाद ही वे Question Bank में जुड़ेंगे।</p></div><section class="item"><div class="builder-meta-grid"><div><label>Class</label><input id="aiClass" placeholder="जैसे Class 10"></div><div><label>Subject</label><input id="aiSubject" placeholder="जैसे Science"></div><div><label>Chapter / Topic</label><input id="aiTopic" placeholder="जैसे प्रकाश और परावर्तन"></div><div><label>Question Type</label><select id="aiType"><option value="objective">MCQ</option><option value="subjective">Subjective</option></select></div><div><label>Difficulty</label><select id="aiDifficulty"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select></div><div><label>Number of Questions (10–100)</label><input id="aiCount" type="number" min="10" max="100" step="10" value="10"></div></div><button id="aiGenerate" class="success-action">✦ Generate Questions</button><span id="aiStatus" class="hint"></span></section><h3>Pending Review</h3><div id="aiPending">Loading pending questions…</div><h3>Approved Question Bank</h3><section class="item"><h4>Publish Selected Questions</h4><p class="hint">Approved प्रश्न चुनें और Quiz की जानकारी व Publish Topic भरें।</p><label>Quiz Title</label><input id="bankPublishTitle" placeholder="विज्ञान अभ्यास टेस्ट"><label>Class</label><input id="bankPublishClass" placeholder="Class 10 या All"><label>Subject</label><input id="bankPublishSubject" placeholder="Science"><label>Publish Topic / Chapter</label><input id="bankPublishTopic" placeholder="प्रकाश और परावर्तन"><label>Duration (minutes)</label><input id="bankPublishDuration" type="number" min="1" max="600" value="30"><button id="bankPublish" class="success-action">Publish Selected as Quiz</button><span id="bankPublishStatus" class="hint"></span></section><div id="aiApproved">Loading approved questions…</div>');
   $("aiBack").onclick=()=>{tab="admin";render()};
   async function loadLists(){
     const [pendingResult,approvedResult]=await Promise.allSettled([call("listQuestionDrafts"),call("listQuestionBank")]);
@@ -369,10 +369,29 @@ async function aiQuestionBankPage(){
         }).join("")||'<div class="empty-state">अभी कोई Pending AI प्रश्न नहीं है।</div>')
       : '<div class="error">Pending Draft लोड नहीं हुए: '+esc(pendingResult.reason?.message||"अज्ञात त्रुटि")+'</div>';
     const approvedHtml=approvedResult.status==="fulfilled"
-      ? ((approved.questions||[]).map(q=>'<article class="item"><div class="question-meta"><span>'+esc(q.className)+'</span><span>'+esc(q.subject)+'</span><span>'+esc(q.difficulty)+'</span></div><b>'+esc(q.text)+'</b><p class="hint">'+esc(q.topic)+' • '+(q.type==="objective"?"MCQ":"Subjective")+'</p>'+(q.type==="objective"?'<ol type="A">'+(q.options||[]).map((x,k)=>'<li>'+esc(x)+(k===q.answer?' ✓ सही उत्तर':'')+'</li>').join("")+'</ol>':'<p><b>Model Answer:</b> '+esc(q.modelAnswer||"")+'</p>')+'</article>').join("")||'<div class="empty-state">अभी Question Bank में कोई approved प्रश्न नहीं है।</div>')
+      ? ((approved.questions||[]).map(q=>'<article class="item ai-approved-card" data-bank-card="'+esc(q.id)+'"><label class="question-meta"><input type="checkbox" data-bank-select="'+esc(q.id)+'"> चुनें • '+esc(q.className)+' • '+esc(q.subject)+' • '+esc(q.difficulty)+'</label><label>Topic</label><input data-bank-topic value="'+esc(q.topic||"")+'"><label>Question (Edit)</label><textarea rows="3" data-bank-text>'+esc(q.text)+'</textarea>'+(q.type==="objective"?'<label>Options (one per line)</label><textarea rows="4" data-bank-options>'+esc((q.options||[]).join("\n"))+'</textarea><label>Correct Option</label><select data-bank-answer>'+(q.options||[]).map((v,k)=>'<option value="'+k+'" '+(Number(q.answer)===k?"selected":"")+'>'+String.fromCharCode(65+k)+' — '+esc(v)+'</option>').join("")+'</select>':'<label>Model Answer</label><textarea rows="3" data-bank-model>'+esc(q.modelAnswer||"")+'</textarea>')+'<label>Explanation</label><textarea rows="2" data-bank-explanation>'+esc(q.explanation||"")+'</textarea><div class="overview-actions"><button data-bank-save="'+esc(q.id)+'">Save Edit</button></div></article>').join("")||'<div class="empty-state">अभी Question Bank में कोई approved प्रश्न नहीं है।</div>')
       : '<div class="error">Question Bank लोड नहीं हुआ: '+esc(approvedResult.reason?.message||"अज्ञात त्रुटि")+'</div>';
     $("aiPending").innerHTML=pendingHtml;
     $("aiApproved").innerHTML=approvedHtml;
+    $("aiApproved").querySelectorAll("[data-bank-save]").forEach(b=>b.onclick=async()=>{
+      const card=b.closest("[data-bank-card]");
+      try{const of=card.querySelector("[data-bank-options]"),question={text:card.querySelector("[data-bank-text]").value,topic:card.querySelector("[data-bank-topic]").value,explanation:card.querySelector("[data-bank-explanation]").value};
+        if(of){question.options=of.value.split("\\n").map(x=>x.trim()).filter(Boolean);question.answer=Number(card.querySelector("[data-bank-answer]").value)}else question.modelAnswer=card.querySelector("[data-bank-model]").value;
+        b.disabled=true;await call("updateQuestionBankQuestion",{id:b.dataset.bankSave,question});alertMsg("Approved प्रश्न अपडेट हो गया।");await loadLists();
+      }catch(e){b.disabled=false;alertMsg(e.message)}
+    });
+    $("bankPublish").onclick=async()=>{
+      const selected=[...$("aiApproved").querySelectorAll("[data-bank-select]:checked")],status=$("bankPublishStatus"),button=$("bankPublish");
+      if(!selected.length){alertMsg("पहले प्रश्न चुनें।");return}
+      const title=$("bankPublishTitle").value.trim(),className=$("bankPublishClass").value.trim(),subject=$("bankPublishSubject").value.trim(),topic=$("bankPublishTopic").value.trim(),duration=Number($("bankPublishDuration").value);
+      if(!title||!className||!subject||!topic){alertMsg("Quiz Title, Class, Subject और Topic भरें।");return}
+      if(!Number.isInteger(duration)||duration<1||duration>600){alertMsg("Duration 1 से 600 मिनट रखें।");return}
+      const questions=selected.map(box=>{const card=box.closest("[data-bank-card]"),of=card.querySelector("[data-bank-options]");
+        return {text:card.querySelector("[data-bank-text]").value.trim(),type:of?"objective":"subjective",options:of?of.value.split("\\n").map(x=>x.trim()).filter(Boolean):[],answer:of?Number(card.querySelector("[data-bank-answer]").value):null,modelAnswer:card.querySelector("[data-bank-model]")?.value||"",explanation:card.querySelector("[data-bank-explanation]").value,topic,marks:1};});
+      button.disabled=true;status.textContent="Quiz publish हो रहा है…";
+      try{const r=await call("saveQuiz",{title,className,subject,topic,duration,questions,quizType:questions.every(q=>q.type==="objective")?"objective":questions.every(q=>q.type==="subjective")?"subjective":"mixed",publish:true});status.textContent="Quiz publish हो गया • "+r.questionCount+" प्रश्न";alertMsg("Quiz विद्यार्थियों के लिए publish हो गया।")}
+      catch(e){status.textContent=e.message;alertMsg(e.message)}finally{button.disabled=false}
+    };
     $("view").querySelectorAll("[data-ai-approve]").forEach(b=>b.onclick=async()=>{
       const id=b.dataset.aiApprove;
       try{
@@ -395,7 +414,7 @@ async function aiQuestionBankPage(){
   $("aiGenerate").onclick=async()=>{
     const button=$("aiGenerate"),status=$("aiStatus");
     const count=Number($("aiCount").value);
-    if(!Number.isInteger(count)||count<1||count>15){alertMsg("1 से 15 प्रश्न चुनें।");return}
+    if(!Number.isInteger(count)||count<10||count>100){alertMsg("10 से 100 प्रश्न चुनें।");return}
     button.disabled=true;
     const startedAt=Date.now();
     status.textContent="Gemini AI प्रश्न तैयार कर रहा है… 0 सेकंड";
