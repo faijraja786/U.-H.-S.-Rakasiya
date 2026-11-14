@@ -396,13 +396,18 @@ async function aiQuestionBankPage(){
     const button=$("aiGenerate"),status=$("aiStatus");
     const count=Number($("aiCount").value);
     if(!Number.isInteger(count)||count<1||count>15){alertMsg("1 से 15 प्रश्न चुनें।");return}
-    button.disabled=true;status.textContent="Gemini AI प्रश्न तैयार कर रहा है…";
+    button.disabled=true;
+    const startedAt=Date.now();
+    status.textContent="Gemini AI प्रश्न तैयार कर रहा है… 0 सेकंड";
+    const progressTimer=setInterval(()=>{
+      status.textContent="Gemini AI प्रश्न तैयार कर रहा है… "+Math.floor((Date.now()-startedAt)/1000)+" सेकंड";
+    },1000);
     try{
       const result=await call("generateQuestionDraft",{className:$("aiClass").value.trim(),subject:$("aiSubject").value.trim(),topic:$("aiTopic").value.trim(),type:$("aiType").value,difficulty:$("aiDifficulty").value,count});
-      status.textContent=(result.drafts?.length||0)+" प्रश्न Pending Review में आए।";
+      status.textContent=(result.drafts?.length||0)+" प्रश्न Pending Review में आ गए।";
       await loadLists();
-    }catch(e){status.textContent=e.message}
-    finally{button.disabled=false}
+    }catch(e){status.textContent=e.message||"प्रश्न नहीं बन सके। कृपया फिर कोशिश करें।"}
+    finally{clearInterval(progressTimer);button.disabled=false}
   };
   await loadLists()
 }
