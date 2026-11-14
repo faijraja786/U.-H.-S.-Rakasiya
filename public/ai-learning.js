@@ -41,12 +41,13 @@ function openPdf(title,meta,content){
 }
 window.aiChatPage=async function(){
  const snap=await getDoc(doc(db,"roles",auth.currentUser.uid)),profile=snap.exists()?snap.data():{};
- const classValue=String(profile.className||""),storageKey="edufuture-ai-chat-"+auth.currentUser.uid;
+ const classValue=String(profile.className||""),isStudent=profile.role==="student",storageKey="edufuture-ai-chat-"+auth.currentUser.uid;
+ const classOptions=isStudent?'<option value="'+esc(classValue)+'">'+esc(classValue||"कक्षा चुनें")+'</option>':['6','7','8','9','10','11','12'].map(x=>'<option value="Class '+x+'" '+(classValue.toLowerCase().replace("class ","")===x?"selected":"")+' >Class '+x+'</option>').join("");
  let chats=[];try{chats=JSON.parse(localStorage.getItem(storageKey)||"[]");if(!Array.isArray(chats))chats=[];}catch{chats=[];}
  let activeId=chats[0]?.id||null;
  const save=()=>{try{localStorage.setItem(storageKey,JSON.stringify(chats.slice(0,40)));}catch{}};
  const newId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
- page("AI Study Chat",'<div class="ai-workspace"><aside class="ai-history"><div class="ai-history-head"><b>आपकी बातचीत</b><button id="newTutorChat" class="secondary" type="button">＋ नई Chat</button></div><div id="tutorHistoryList"></div></aside><section class="ai-chat-shell"><header class="ai-chat-header"><div class="ai-avatar">✦</div><div><b>EduFuture AI Tutor</b><small>कक्षा '+esc(classValue||"—")+' • Study Assistant</small></div><span class="ai-online">● Online</span></header><div class="ai-class-strip"><label for="tutorClass">कक्षा</label><select id="tutorClass"><option value="'+esc(classValue)+'">'+esc(classValue||"कक्षा चुनें")+'</option></select><span>केवल पढ़ाई से जुड़े सवाल</span></div><div id="tutorChat" class="tutor-chat" aria-live="polite"></div><div class="ai-composer"><textarea id="tutorQuestion" rows="1" maxlength="3000" placeholder="अपना सवाल पूछें…"></textarea><button id="tutorSend" type="button" aria-label="सवाल भेजें">➤</button></div><div class="ai-chat-foot"><span id="tutorStatus">उत्तर को किताब से भी मिलाएँ।</span><button id="clearTutorHistory" class="text-button" type="button">History साफ करें</button></div></section></div>');
+ page("AI Study Chat",'<div class="ai-workspace"><aside class="ai-history"><div class="ai-history-head"><b>आपकी बातचीत</b><button id="newTutorChat" class="secondary" type="button">＋ नई Chat</button></div><div id="tutorHistoryList"></div></aside><section class="ai-chat-shell"><header class="ai-chat-header"><div class="ai-avatar">✦</div><div><b>EduFuture AI Tutor</b><small>कक्षा '+esc(classValue||"—")+' • Study Assistant</small></div><span class="ai-online">● Online</span></header><div class="ai-class-strip"><label for="tutorClass">कक्षा</label><select id="tutorClass" '+(isStudent?"disabled":"")+'>'+classOptions+'</select><span>केवल पढ़ाई से जुड़े सवाल</span></div><div id="tutorChat" class="tutor-chat" aria-live="polite"></div><div class="ai-composer"><textarea id="tutorQuestion" rows="1" maxlength="3000" placeholder="अपना सवाल पूछें…"></textarea><button id="tutorSend" type="button" aria-label="सवाल भेजें">➤</button></div><div class="ai-chat-foot"><span id="tutorStatus">उत्तर को किताब से भी मिलाएँ।</span><button id="clearTutorHistory" class="text-button" type="button">History साफ करें</button></div></section></div>');
  const chat=$("tutorChat"),list=$("tutorHistoryList");
  function renderChat(){
   const c=chats.find(x=>x.id===activeId);chat.innerHTML="";
@@ -61,7 +62,7 @@ window.aiChatPage=async function(){
   list.querySelectorAll("[data-open-chat]").forEach(x=>x.onclick=()=>{activeId=x.dataset.openChat;renderHistory();renderChat()});
   list.querySelectorAll("[data-delete-chat]").forEach(x=>x.onclick=()=>{if(!confirm("यह बातचीत हटाएँ?"))return;chats=chats.filter(c=>c.id!==x.dataset.deleteChat);if(activeId===x.dataset.deleteChat)activeId=chats[0]?.id||null;save();renderHistory();renderChat()});
  }
- if(!classValue){$("tutorStatus").textContent="पहले Student Profile में कक्षा भरें।";$("tutorSend").disabled=true;return;}
+ if(isStudent&&!classValue){$("tutorStatus").textContent="पहले Student Profile में कक्षा भरें।";$("tutorSend").disabled=true;return;}
  renderHistory();renderChat();
  $("newTutorChat").onclick=()=>{activeId=null;renderHistory();renderChat();$("tutorQuestion").focus()};
  $("clearTutorHistory").onclick=()=>{if(!confirm("इस डिवाइस की पूरी AI Chat History हटाएँ?"))return;chats=[];activeId=null;save();renderHistory();renderChat();$("tutorStatus").textContent="History साफ हो गई।"};
