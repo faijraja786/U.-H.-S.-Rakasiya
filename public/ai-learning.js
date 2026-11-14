@@ -88,6 +88,7 @@ window.aiNotesPage=async function(){
  }
  function showNotes(n){
   const box=$("notesPreview");box.hidden=false;box.innerHTML='<div class="question-meta"><span>'+esc(n.className)+'</span><span>'+esc(n.subject)+'</span><span>'+esc(n.topic)+'</span></div><h2>'+esc(n.topic)+' — Study Notes</h2><div class="ai-notes-content">'+markdownHtml(n.content)+'</div><div class="overview-actions"><button id="downloadNotesPdf" class="success-action">Print / Save as PDF</button></div>';
+  window.renderEduMath?.(box);
   $("downloadNotesPdf").onclick=()=>{try{openPdf(n.topic+" - Study Notes",n.className+" • "+n.subject+" • "+n.topic,n.content)}catch(e){status("notesStatus",e.message,true)}};
  }
  $("generateNotes").onclick=async()=>{
