@@ -63,7 +63,7 @@ window.aiChatPage=async function(){
   list.querySelectorAll("[data-delete-chat]").forEach(x=>x.onclick=async()=>{if(!confirm("यह बातचीत सभी डिवाइसों की History से हटाएँ?"))return;const id=x.dataset.deleteChat;chats=chats.filter(c=>c.id!==id);if(activeId===id)activeId=chats[0]?.id||null;save();try{await api("deleteAiTutorChat",{id})}catch(e){console.warn("Cloud history delete:",e.message)}renderHistory();renderChat()});
  }
  if(isStudent&&!classValue){$("tutorStatus").textContent="पहले Student Profile में अपनी कक्षा भरें।";$("tutorSend").disabled=true;return;}
- try{const cloud=await api("listAiTutorChats");const local=new Map(chats.map(c=>[c.id,c]));(cloud.chats||[]).forEach(c=>{if(!local.has(c.id))local.set(c.id,{...c,updatedAt:Date.now()})});chats=Array.from(local.values()).slice(0,60);}catch(e){console.warn("Cloud history load:",e.message)}
+ try{const cloud=await api("listAiTutorChats");const local=new Map(chats.map(c=>[c.id,c]));(cloud.chats||[]).forEach(c=>{if(!local.has(c.id))local.set(c.id,{...c,updatedAt:Date.now()})});chats=Array.from(local.values()).slice(0,60);if(!activeId)activeId=chats[0]?.id||null;}catch(e){console.warn("Cloud history load:",e.message)}
  renderHistory();renderChat();
  $("newTutorChat").onclick=()=>{activeId=null;renderHistory();renderChat();$("efChatSidebar").classList.remove("mobile-open");$("tutorQuestion").focus()};
  $("toggleChatHistory").onclick=()=>$("efChatSidebar").classList.toggle("mobile-open");
