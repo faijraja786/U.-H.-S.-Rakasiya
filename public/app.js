@@ -125,14 +125,16 @@ function closeWorkspaceMenu(){
   $("menuToggle").setAttribute("aria-expanded","false");
 }
 function render(){
-  $("premiumTopAction").hidden=role!=="student";
-  let tabs=studentTabs;
+  const premiumAction=$("premiumTopAction");
+  if(premiumAction){premiumAction.hidden=false;premiumAction.style.display=role==="student"?"inline-flex":"none";}
+  let tabs=studentTabs.filter(x=>x[0]!=="premium");
   if(role==="teacher")tabs=[["home","Home"],["notices","Important Notice"],["teacher","Teacher Workspace"],["analytics","Teacher Analytics"]];
   if(role==="admin")tabs=[["home","Home"],["aichat","AI Study Chat"],["ainotes","AI Notes PDF"],["notices","Important Notice"],["teacher","Teacher Workspace"],["memberships","Premium Members"],["admin","Admin Dashboard"],["activity","Activity Log"]];
   if(role==="superadmin")tabs=[["home","Home"],["aichat","AI Study Chat"],["ainotes","AI Notes PDF"],["notices","Important Notice"],["overview","Overview"],["teacher","Teacher Workspace"],["memberships","Premium Members"],["admin","Admin Dashboard"],["activity","Activity Log"],["super","Super Admin"]];
   const pages={overview:superOverviewPage,progress:studentProgressPage,analytics:teacherAnalyticsPage,activity:adminActivityPage,home:role==="superadmin"?superHomePage:homePage,aichat:()=>window.aiChatPage(),ainotes:()=>window.aiNotesPage(),notices:importantNoticesPage,quiz:quizPage,notes:notesPage,pyq:pyqPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,memberships:membershipAdminPage,admin:adminPage,aiquestions:aiQuestionBankPage,createquiz:createQuizPage,objectivebuilder:()=>quizBuilderPage("objective"),subjectivebuilder:()=>quizBuilderPage("subjective"),notesupload:()=>contentUploadPage("note"),pyqupload:()=>contentUploadPage("pyq"),super:superPage};
   // Internal workflow pages are intentionally not sidebar items. Keep them routable.
   if(!tabs.some(x=>x[0]===tab)&&!pages[tab])tab=tabs[0][0];
+  tabs=tabs.filter(x=>x[0]!=="premium");
   $("nav").innerHTML='<div class="nav-section-label">MENU</div>'+tabs.map(x=>'<button data-tab="'+x[0]+'" class="nav-link '+(tab===x[0]?"active":"")+'"><span class="nav-icon">'+({overview:"◈",home:"⌂",aichat:"✦",ainotes:"▤",notices:"📢",quiz:"▤",notes:"▧",leaderboard:"♛",results:"◷",doubts:"✉",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜"}[x[0]]||"•")+'</span><span>'+x[1]+"</span></button>").join("");
   $("nav").querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render();closeWorkspaceMenu()});
   if($("premiumTopAction"))$("premiumTopAction").onclick=()=>{if($("premiumDialog")?.showModal)$("premiumDialog").showModal()};
