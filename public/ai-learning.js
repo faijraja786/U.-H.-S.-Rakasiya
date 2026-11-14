@@ -34,9 +34,9 @@ function markdownHtml(source){
   return line.trim()?"<p>"+safe+"</p>":"<div class=\"pdf-gap\"></div>";
  }).join("");
 }
-function openPdf(title,meta,content){
+function openPdf(title,meta,content,images=[]){
  const w=window.open("","_blank");if(!w){throw Error("PDF Print window खुल नहीं सकी। Browser में Pop-ups allow करें।");}
- w.document.open();w.document.write('<!doctype html><html lang="hi"><head><meta charset="utf-8"><title>'+esc(title)+'</title><style>@page{size:A4;margin:18mm}body{font-family:Arial,"Noto Sans Devanagari",sans-serif;color:#172033;line-height:1.65;font-size:12pt}h1{font-size:22pt;color:#163a70;margin-bottom:4px}h2{font-size:16pt;color:#204d82;border-bottom:1px solid #dbe4ef;padding-bottom:4px;margin-top:22px}h3{font-size:13pt;color:#204d82;margin-top:16px}.meta{color:#53657d;border-bottom:2px solid #dbe4ef;padding-bottom:12px;margin-bottom:20px}.pdf-bullet{margin:4px 0 4px 16px}.pdf-gap{height:6px}.footer{margin-top:28px;padding-top:8px;border-top:1px solid #ddd;color:#667;font-size:9pt}@media print{button{display:none}}</style></head><body><h1>'+esc(title)+'</h1><div class="meta">'+esc(meta)+'</div>'+markdownHtml(content)+'<div class="footer">EduFuture • U.H.S. Rakasiya • AI-assisted study material — शिक्षक/विद्यार्थी उपयोग से पहले तथ्य जाँच लें।</div><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$","$"],["\\[","\\]"]],processEscapes:true}};<\/script><script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script><script>window.onload=()=>setTimeout(async()=>{try{await MathJax.typesetPromise()}catch(e){}window.print()},1000)<\/script></body></html>');
+ w.document.open();w.document.write('<!doctype html><html lang="hi"><head><meta charset="utf-8"><title>'+esc(title)+'</title><style>@page{size:A4;margin:18mm}body{font-family:Arial,"Noto Sans Devanagari",sans-serif;color:#172033;line-height:1.65;font-size:12pt}h1{font-size:22pt;color:#163a70;margin-bottom:4px}h2{font-size:16pt;color:#204d82;border-bottom:1px solid #dbe4ef;padding-bottom:4px;margin-top:22px}h3{font-size:13pt;color:#204d82;margin-top:16px}.meta{color:#53657d;border-bottom:2px solid #dbe4ef;padding-bottom:12px;margin-bottom:20px}.pdf-bullet{margin:4px 0 4px 16px}.pdf-gap{height:6px}.footer{margin-top:28px;padding-top:8px;border-top:1px solid #ddd;color:#667;font-size:9pt}@media print{button{display:none}}</style></head><body><h1>'+esc(title)+'</h1><div class="meta">'+esc(meta)+'</div>'+markdownHtml(content)+(images||[]).map(url=>'<img src="'+esc(url)+'" style="display:block;max-width:100%;max-height:650px;object-fit:contain;margin:18px auto;page-break-inside:avoid">').join("")+'<div class="footer">EduFuture • U.H.S. Rakasiya • AI-assisted study material — शिक्षक/विद्यार्थी उपयोग से पहले तथ्य जाँच लें।</div><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$","$"],["\\[","\\]"]],processEscapes:true}};<\/script><script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script><script>window.onload=()=>setTimeout(async()=>{try{await MathJax.typesetPromise()}catch(e){}window.print()},1000)<\/script></body></html>');
  w.document.close();
 }
 window.aiChatPage=async function(){
@@ -99,10 +99,11 @@ window.aiNotesPage=async function(){
    $("recentAiNotes").querySelectorAll("[data-delete-note]").forEach(b=>b.onclick=async()=>{if(!confirm("इस Notes को हमेशा के लिए Delete करें?"))return;b.disabled=true;try{await api("deleteAiNote",{id:b.dataset.deleteNote});await recent();$("notesPreview").hidden=true;status("notesStatus","Notes Delete हो गए।")}catch(e){b.disabled=false;status("notesStatus",e.message,true)}});
   }catch(e){$("recentAiNotes").textContent=e.message}
  }
- function showNotes(n){
+ async function uploadNoteImages(noteId,files){const paths=[];for(const file of files){const token=await auth.currentUser.getIdToken();const response=await fetch(API_BASE.replace(/\/+$/, "")+"/api/content-upload/"+encodeURIComponent(noteId),{method:"POST",headers:{Authorization:"Bearer "+token,"Content-Type":"application/octet-stream","X-File-Name":encodeURIComponent(file.name),"X-File-Type":file.type},body:file});const payload=await response.json().catch(()=>({}));if(!response.ok)throw Error(payload.error?.message||"चित्र upload नहीं हुआ।");paths.push(payload.data.storagePath);}await api("saveAiNoteImages",{id:noteId,paths});}
+function showNotes(n){
   const box=$("notesPreview");box.hidden=false;box.innerHTML='<div class="ef-note-preview-head"><div><span>'+esc(n.className)+' • '+esc(n.subject)+'</span><h2>'+esc(n.topic)+'</h2></div><button id="downloadNotesPdf" class="success-action">PDF बनाएँ / Print करें</button></div><div class="ai-notes-content">'+markdownHtml(n.content)+'</div><div class="ef-preview-publish"><span>'+(n.published?"विद्यार्थियों के लिए Published":"अभी Draft है")+'</span><button id="previewPublish" class="secondary">'+(n.published?"Unpublish":"Publish")+'</button></div>';
   ensureMathJax(box);
-  $("downloadNotesPdf").onclick=()=>{try{openPdf(n.topic+" - Study Notes",n.className+" • "+n.subject+" • "+n.topic,n.content)}catch(e){status("notesStatus",e.message,true)}};
+  $("downloadNotesPdf").onclick=()=>{try{openPdf(n.topic+" - Study Notes",n.className+" • "+n.subject+" • "+n.topic,n.content,n.imageUrls||[])}catch(e){status("notesStatus",e.message,true)}};
   $("previewPublish").onclick=async()=>{try{await api("publishAiNote",{id:n.id,published:!n.published});n.published=!n.published;showNotes(n);await recent()}catch(e){status("notesStatus",e.message,true)}};
  }
  $("generateNotes").onclick=async()=>{
@@ -110,7 +111,7 @@ window.aiNotesPage=async function(){
   if(button.disabled)return;
   if(!data.className||!data.subject||!data.topic||!data.command){status("notesStatus","कक्षा, विषय, अध्याय और निर्देश भरें।",true);return;}
   button.disabled=true;status("notesStatus","AI आसान हिन्दी में Notes तैयार कर रहा है…");
-  try{const n=await api("generateAiNotes",data);showNotes(n);status("notesStatus","Notes बन गए। PDF बनाएँ या विद्यार्थियों के लिए Publish करें।");await recent()}
+  try{let n=await api("generateAiNotes",data);const files=Array.from($("notesImages").files||[]).slice(0,8);if(files.length){status("notesStatus","Notes बन गए। चित्र PDF में जोड़े जा रहे हैं…");await uploadNoteImages(n.id,files);const saved=await api("listAiNotes");n=(saved.notes||[]).find(x=>x.id===n.id)||n;}showNotes(n);status("notesStatus","Notes और चित्र तैयार हैं। PDF बनाएँ या विद्यार्थियों के लिए Publish करें।");await recent()}
   catch(e){status("notesStatus",e.message,true)}
   finally{button.disabled=false}
  };
