@@ -772,6 +772,22 @@ async function run(name, req) {
       return { ok: true, updated: Boolean(previousGrade), pendingReview, score: finalScore, subjectiveScore };
     }
 
+    case "listAiTutorChats": {
+      const snap = await db.collection("users").doc(uid).collection("aiTutorChats").orderBy("updatedAt", "desc").limit(60).get();
+      return { chats: snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) };
+    }
+    case "saveAiTutorChat": {
+      const id=String(d.id||"").trim().slice(0,100);
+      if(!id||!Array.isArray(d.messages))fail("invalid-argument","Chat ID और messages जरूरी हैं।");
+      const messages=d.messages.slice(-100).map(m=>({role:m.role==="model"?"model":"user",text:String(m.text||"").slice(0,12000)})).filter(m=>m.text);
+      const history=Array.isArray(d.history)?d.history.slice(-8).map(m=>({role:m.role==="model"?"model":"user",text:String(m.text||"").slice(0,1500)})).filter(m=>m.text):[];
+      await db.collection("users").doc(uid).collection("aiTutorChats").doc(id).set({title:String(d.title||"नई बातचीत").slice(0,100),messages,history,updatedAt:FieldValue.serverTimestamp()},{merge:true});
+      return {ok:true};
+    }
+    case "deleteAiTutorChat": {
+      const id=String(d.id||"").trim().slice(0,100);if(!id)fail("invalid-argument","Chat ID जरूरी है।");
+      await db.collection("users").doc(uid).collection("aiTutorChats").doc(id).delete();return {ok:true};
+    }
     case "aiTutorChat": {
       const currentRole = await roleOf(uid);
       if (!["student","admin","superadmin"].includes(currentRole)) fail("permission-denied","AI Study Chat केवल Student और Admin के लिए उपलब्ध है।");
