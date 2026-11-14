@@ -1115,6 +1115,7 @@ async function run(name, req) {
       if (!snap.exists || snap.data().status !== "pending") fail("not-found", "यह pending AI draft नहीं मिला।");
       if (decision === "reject") {
         await ref.update({ status: "rejected", reviewedBy: uid, reviewedAt: FieldValue.serverTimestamp() });
+        await recordAdminActivity(uid,"reject","questionDraft",id,{topic:snap.data().topic||""});
         return { ok: true, status: "rejected" };
       }
       const original = snap.data();
@@ -1130,6 +1131,7 @@ async function run(name, req) {
         if (!text || (type === "objective" && (options.length !== 4 || options.some(x=>!x) || !Number.isInteger(answer) || answer<0 || answer>3))) fail("invalid-argument", "प्रश्न, चारों विकल्प और सही उत्तर जाँचें।");
         if (type === "subjective" && (!modelAnswer || !explanation)) fail("invalid-argument", "Subjective प्रश्न का Model Answer और Explanation जरूरी है।");
         await ref.update({ text, options, answer, modelAnswer, explanation, marks, status:"draft", savedAsDraftBy:uid, savedAsDraftAt:FieldValue.serverTimestamp() });
+        await recordAdminActivity(uid,"saveDraft","questionDraft",id,{topic:original.topic||""});
         return { ok:true, status:"draft" };
       }
       const edited = d.question && typeof d.question === "object" ? d.question : {};
@@ -1156,6 +1158,7 @@ async function run(name, req) {
         tx.create(bankRef, bankQuestion);
         tx.update(ref, { status: "approved", reviewedBy: uid, reviewedAt: FieldValue.serverTimestamp(), questionBankId: bankRef.id, reviewedQuestion: { text, options, answer, modelAnswer, explanation: bankQuestion.explanation, marks: bankQuestion.marks } });
       });
+      await recordAdminActivity(uid,"approve","questionDraft",id,{questionBankId:bankRef.id,topic:original.topic||""});
       return { ok: true, status: "approved", questionBankId: bankRef.id };
     }
     case "setQuestionDraftStatus": {
@@ -1211,6 +1214,7 @@ async function run(name, req) {
       await ref.update({ text, options, answer, modelAnswer, topic: String(edited.topic ?? original.topic ?? "").trim().slice(0,160),
         explanation: String(edited.explanation ?? original.explanation ?? "").trim().slice(0,2000),
         marks: Math.min(20,Math.max(1,Number(edited.marks ?? original.marks)||1)), updatedBy: uid, updatedAt: FieldValue.serverTimestamp() });
+      await recordAdminActivity(uid,"edit","questionBank",id,{topic:String(edited.topic??original.topic??"")});
       return { ok: true };
     }
     default:
