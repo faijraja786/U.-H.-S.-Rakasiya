@@ -371,3 +371,46 @@ input,textarea,select{color:#111827;background:#fff}
 #recentAiNotes .admin-row{gap:12px;align-items:center}
 #recentAiNotes .admin-row small{display:block;color:#68788f;margin-top:4px}
 @media(max-width:600px){.tutor-message{max-width:96%}.tutor-chat{padding:10px;max-height:55vh}}
+
+
+/* AI Tutor & study workspace refresh */
+.ai-workspace{display:grid;grid-template-columns:250px minmax(0,1fr);gap:16px;min-height:650px;max-width:1180px;margin:0 auto}
+.ai-history,.ai-chat-shell{background:#fff;border:1px solid #e5eaf3;border-radius:20px;overflow:hidden;box-shadow:0 12px 35px #1725540b}
+.ai-history{padding:14px;display:flex;flex-direction:column;gap:12px}
+.ai-history-head{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#172554}
+.ai-history-head button{padding:8px 10px;font-size:12px}
+.ai-history-row{display:flex;align-items:center;gap:5px;padding:5px;border-radius:11px}
+.ai-history-row.active,.ai-history-row:hover{background:#f0f4ff}
+.ai-history-open{background:transparent;color:#26324a;text-align:left;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:9px 7px;font-size:13px;font-weight:600}
+.ai-history-delete{background:transparent;color:#94a3b8;padding:6px 9px;font-size:19px}
+.ai-history-delete:hover{color:#dc2626;background:#fee2e2}
+.ai-history-empty{color:#94a3b8;font-size:13px;text-align:center;padding:22px 6px}
+.ai-chat-shell{display:flex;flex-direction:column;min-height:650px;background:linear-gradient(180deg,#fff 0%,#fbfcff 100%)}
+.ai-chat-header{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid #edf0f6}
+.ai-avatar,.ai-welcome-icon{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,#4f46e5,#8b5cf6);color:#fff;font-size:22px}
+.ai-chat-header b{display:block;color:#172554}.ai-chat-header small{display:block;color:#718096;margin-top:3px}
+.ai-online{margin-left:auto;color:#059669;font-size:12px;font-weight:700}
+.ai-class-strip{display:flex;align-items:center;gap:10px;padding:8px 20px;background:#f8faff;border-bottom:1px solid #edf0f6}
+.ai-class-strip label{white-space:nowrap}.ai-class-strip select{width:auto;min-width:105px;margin:0;padding:7px 10px}.ai-class-strip span{font-size:12px;color:#8491a5}
+.tutor-chat{flex:1;min-height:380px;max-height:58vh;overflow:auto;padding:22px clamp(12px,4vw,42px);display:flex;flex-direction:column;gap:15px;scroll-behavior:smooth}
+.tutor-welcome{margin:auto;text-align:center;max-width:480px;color:#64748b;padding:22px 10px}
+.tutor-welcome .ai-welcome-icon{margin:0 auto 14px;width:54px;height:54px;font-size:27px;border-radius:18px}
+.tutor-welcome h3{color:#172554;font-size:22px;margin:8px 0}.tutor-welcome p{line-height:1.7}
+.ai-prompt-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:18px}
+.ai-prompt-chips button{background:#f3f5ff;color:#4338ca;border:1px solid #e0e7ff;border-radius:18px;padding:9px 12px;font-size:12px}
+.tutor-message{max-width:min(88%,720px);padding:13px 16px;border:1px solid #e6eaf2;border-radius:16px;background:#fff;line-height:1.75;overflow-wrap:anywhere;box-shadow:0 4px 14px #17255408}
+.tutor-message>b{display:block;font-size:12px;color:#4f46e5;margin-bottom:5px}
+.tutor-user{align-self:flex-end;background:#eef2ff;border-color:#dfe5ff;border-bottom-right-radius:5px}
+.tutor-ai{align-self:flex-start;border-bottom-left-radius:5px}
+.tutor-message-body{font-size:15px;color:#263247}.tutor-message-body mjx-container{max-width:100%;overflow-x:auto;overflow-y:hidden}
+.tutor-message-body pre{white-space:pre-wrap;background:#111827;color:#e5e7eb;padding:12px;border-radius:10px;overflow:auto}
+.ai-composer{display:flex;align-items:flex-end;gap:10px;margin:0 18px;padding:9px 10px 9px 16px;border:1px solid #dce3f1;border-radius:20px;background:#fff;box-shadow:0 8px 25px #1725540d}
+.ai-composer:focus-within{border-color:#818cf8;box-shadow:0 0 0 3px #c7d2fe66}
+.ai-composer textarea{border:0!important;box-shadow:none!important;outline:0!important;resize:none;min-height:42px;max-height:130px;margin:0;padding:10px 0;background:transparent}
+.ai-composer button{width:42px;height:42px;flex:0 0 42px;border-radius:14px;padding:0;font-size:20px}
+.ai-chat-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 20px 14px;color:#94a3b8;font-size:11px}
+.ai-chat-foot .text-button{font-size:11px;padding:6px}
+.ai-note-actions{display:flex;gap:7px;flex-wrap:wrap}.ai-note-actions button{padding:8px 11px;font-size:12px}
+.ai-notes-content{max-width:850px;margin:18px auto;padding:clamp(16px,4vw,38px);border:1px solid #e4eaf4;border-radius:16px;background:#fff;line-height:1.8}
+.ai-notes-content h1,.ai-notes-content h2,.ai-notes-content h3{color:#243b75}
+@media(max-width:760px){.ai-workspace{grid-template-columns:1fr;min-height:0}.ai-history{order:2;padding:10px}.ai-history-head{padding:3px}.ai-history-row{display:inline-flex;max-width:100%;width:100%}#tutorHistoryList{max-height:145px;overflow:auto}.ai-chat-shell{min-height:calc(100dvh - 220px)}.tutor-chat{min-height:340px;max-height:52dvh;padding:16px 12px}.tutor-message{max-width:94%}.ai-chat-header{padding:13px}.ai-class-strip{padding:8px 12px}.ai-chat-foot{padding:9px 12px;align-items:flex-start}.ai-chat-foot span{max-width:65%}}
