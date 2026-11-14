@@ -80,12 +80,12 @@ window.aiChatPage=async function(){
  $("toggleChatHistory").onclick=()=>$("efChatSidebar").classList.toggle("mobile-open");
  $("clearTutorHistory").onclick=()=>{if(!confirm("इस डिवाइस की पूरी AI Chat History हटाएँ?"))return;chats=[];activeId=null;save();renderHistory();renderChat();$("tutorStatus").textContent="History साफ हो गई।"};
  async function send(){
-  const button=$("tutorSend"),question=$("tutorQuestion").value.trim(),className=$("tutorClass").value.trim();if(button.disabled||!question)return;
+  const button=$("tutorSend"),question=$("tutorQuestion").value.trim(),className=$("tutorClass").value.trim();if(button.disabled||(!question&&!selectedImage))return;
   if(!className){$("tutorStatus").textContent="कक्षा चुनें।";return;}
   let c=chats.find(x=>x.id===activeId);if(!c){c={id:newId(),title:question.slice(0,48),messages:[],history:[],updatedAt:Date.now()};chats.unshift(c);activeId=c.id;}
-  c.messages.push({role:"user",text:question,...(selectedImage?{imageData:selectedImage.dataUrl}:{})});$("tutorQuestion").value="";save();renderHistory();renderChat();button.disabled=true;$("tutorStatus").textContent="सरल हिन्दी में जवाब तैयार हो रहा है…";
+  c.messages.push({role:"user",text:question||"इस चित्र को समझाइए",...(selectedImage?{imageData:selectedImage.dataUrl}:{})});$("tutorQuestion").value="";save();renderHistory();renderChat();button.disabled=true;$("tutorStatus").textContent="सरल हिन्दी में जवाब तैयार हो रहा है…";
   try{
-   const image=selectedImage;const result=await api("aiTutorChat",{className,subject:"सामान्य पढ़ाई",topic:"कक्षा "+className+" का पाठ्यक्रम",question,history:c.history||[],image:image?{mimeType:image.mimeType,data:image.base64}:null});
+   const image=selectedImage;const result=await api("aiTutorChat",{className,subject:"सामान्य पढ़ाई",topic:"कक्षा "+className+" का पाठ्यक्रम",question:question||"इस चित्र को देखकर पढ़ाई से जुड़ी जानकारी समझाइए।",history:c.history||[],image:image?{mimeType:image.mimeType,data:image.base64}:null});
    const answer=String(result.answer||"");c.messages.push({role:"model",text:""});const target=c.messages[c.messages.length-1];
    for(let i=0;i<answer.length;i+=36){target.text=answer.slice(0,i+36);renderChat(false);await new Promise(resolve=>setTimeout(resolve,24));}
    c.history=[...(c.history||[]),{role:"user",text:question},{role:"model",text:answer}].slice(-8);save();renderChat(true);$("tutorStatus").textContent="जवाब तैयार है।";
