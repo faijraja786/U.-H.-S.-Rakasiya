@@ -1412,6 +1412,7 @@ app.post("/api/:name", authenticate, async (req, res) => {
   if (["generateQuestionDraft","generatePracticeFromAnswer"].includes(req.params.name)) { req.setTimeout(180000); res.setTimeout(180000); }
   if (req.params.name === "generateAiNotes") { req.setTimeout(300000); res.setTimeout(300000); }
   if (req.params.name === "aiTutorChat") { req.setTimeout(110000); res.setTimeout(110000); }
+  if (req.params.name === "adminGenerateMedia") { req.setTimeout(300000); res.setTimeout(300000); }
   try {
     const data = await run(req.params.name, req);
     return res.json({ data });
