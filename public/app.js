@@ -135,7 +135,7 @@ function render(){
   // Internal workflow pages are intentionally not sidebar items. Keep them routable.
   if(!tabs.some(x=>x[0]===tab)&&!pages[tab])tab=tabs[0][0];
   tabs=tabs.filter(x=>x[0]!=="premium");
-  $("nav").innerHTML='<div class="nav-section-label">MENU</div>'+tabs.map(x=>'<button data-tab="'+x[0]+'" class="nav-link '+(tab===x[0]?"active":"")+'"><span class="nav-icon">'+({overview:"◈",home:"⌂",aichat:"✦",ainotes:"▤",notices:"📢",quiz:"▤",notes:"▧",leaderboard:"♛",results:"◷",doubts:"✉",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜"}[x[0]]||"•")+'</span><span>'+x[1]+"</span></button>").join("");
+  $("nav").innerHTML='<div class="nav-section-label">मेन्यू</div>'+tabs.map(x=>'<button data-tab="'+x[0]+'" class="nav-link '+(tab===x[0]?"active":"")+'"><span class="nav-icon">'+({overview:"◈",home:"⌂",aichat:"✦",ainotes:"▤",notices:"📢",quiz:"▤",notes:"▧",leaderboard:"♛",results:"◷",doubts:"✉",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜"}[x[0]]||"•")+'</span><span>'+x[1]+"</span></button>").join("");
   $("nav").querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render();closeWorkspaceMenu()});
   if($("premiumTopAction"))$("premiumTopAction").onclick=()=>{if($("premiumDialog")?.showModal)$("premiumDialog").showModal()};
   if($("premiumDialogClose"))$("premiumDialogClose").onclick=()=> $("premiumDialog").close();
