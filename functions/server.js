@@ -958,27 +958,30 @@ async function run(name, req) {
         await recordAdminActivity(uid,"generate","ai-media",mediaId,{kind});
         return {kind,url,path};
       }
-      const start=await fetch("https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview:predictLongRunning?key="+encodeURIComponent(apiKey),{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({instances:[{prompt}],parameters:{aspectRatio:"16:9",durationSeconds:8,numberOfVideos:1,resolution:"720p"}})
-      });
-      let operation={};try{operation=await start.json()}catch{}
-      if(!start.ok||!operation.name)fail(start.status===429?"resource-exhausted":"unavailable",operation.error?.message||"Video generation शुरू नहीं हो सकी। हो सकता है आपके API project में Veo access उपलब्ध न हो।");
-      let completed=null;
-      for(let attempt=0;attempt<24;attempt++){
-        await new Promise(resolve=>setTimeout(resolve,10000));
-        const poll=await fetch("https://generativelanguage.googleapis.com/v1beta/"+operation.name+"?key="+encodeURIComponent(apiKey));
-        let state={};try{state=await poll.json()}catch{}
-        if(!poll.ok)fail("unavailable",state.error?.message||"Video की स्थिति नहीं मिल सकी।");
-        if(state.done){completed=state;break;}
+      // Veo 3.1 Preview was retired in Gemini API on 2026-10-22.
+      // Use Gemini Omni Flash through the Interactions API instead.
+      const response=await geminiHttpsRequest(
+        "https://generativelanguage.googleapis.com/v1beta/interactions",
+        JSON.stringify({
+          model:"gemini-omni-1.1-flash",
+          input:prompt,
+          response_format:{type:"video",aspect_ratio:"16:9",resolution:"720p"}
+        }),
+        300000,
+        {"x-goog-api-key":apiKey}
+      );
+      let payload={};try{payload=JSON.parse(response.raw||"{}")}catch{}
+      if(!response.ok){
+        const message=payload.error?.message||("Gemini video API request failed ("+response.status+").");
+        fail(response.status===429?"resource-exhausted":"unavailable",message);
       }
-      if(!completed)fail("deadline-exceeded","वीडियो बनने में अधिक समय लग रहा है। थोड़ी देर बाद फिर कोशिश करें।");
-      if(completed.error)fail("unavailable",completed.error.message||"वीडियो नहीं बन पाया।");
-      const videoUri=completed.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri||completed.response?.generatedVideos?.[0]?.video?.uri;
-      if(!videoUri)fail("unavailable","Gemini ने तैयार वीडियो का लिंक नहीं लौटाया।");
-      const download=await fetch(videoUri,{headers:{"x-goog-api-key":apiKey}});
-      if(!download.ok)fail("unavailable","तैयार वीडियो डाउनलोड नहीं हो सका।");
-      const videoBytes=Buffer.from(await download.arrayBuffer());
+      const videoPart=(payload.steps||[])
+        .filter(step=>step.type==="model_output")
+        .flatMap(step=>step.content||[])
+        .find(part=>part.type==="video"&&part.data);
+      const videoData=videoPart?.data||payload.output_video?.data||payload.outputVideo?.data||"";
+      if(!videoData)fail("unavailable",payload.error?.message||"Gemini Omni ने वीडियो डेटा नहीं लौटाया।");
+      const videoBytes=Buffer.from(videoData,"base64");
       if(!videoBytes.length||videoBytes.length>50*1024*1024)fail("failed-precondition","वीडियो खाली है या 50 MB से बड़ा है।");
       const path="admin-ai-media/"+mediaId+"/generated.mp4";
       await supabaseStorageRequest("/object/"+encodeURIComponent(storageBucket)+"/"+storagePathUrl(path),{method:"POST",headers:{"Content-Type":"video/mp4","x-upsert":"true"},body:videoBytes});
