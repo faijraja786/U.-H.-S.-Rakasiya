@@ -781,7 +781,7 @@ async function run(name, req) {
       const topic = String(d.topic || "").trim().slice(0, 160);
       const type = d.type === "subjective" ? "subjective" : "objective";
       const difficulty = ["easy","medium","hard"].includes(d.difficulty) ? d.difficulty : "medium";
-      const count = Math.min(15, Math.max(1, Number(d.count) || 5));
+      const count = Math.min(100, Math.max(10, Number(d.count) || 10));
       if (!className || !subject || !topic) fail("invalid-argument", "Class, Subject और Chapter/Topic भरना जरूरी है।");
       const model = "gemini-3.5-flash-lite";
       const prompt = [
@@ -797,19 +797,19 @@ async function run(name, req) {
       const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent?key=" + encodeURIComponent(apiKey);
       const requestBody = JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 2048 }
+        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 8192 }
       });
       let response, raw = "", payload = {};
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          response = await geminiHttpsRequest(endpoint, requestBody, 75000);
+          response = await geminiHttpsRequest(endpoint, requestBody, 150000);
         } catch (error) {
           if (attempt === 0 && error.code !== "ETIMEDOUT" && error.code !== "RESPONSE_TOO_LARGE") {
             await new Promise(resolve => setTimeout(resolve, 700));
             continue;
           }
           const timeoutError = new Error(error.code === "ETIMEDOUT"
-            ? "Gemini ने 75 सेकंड में जवाब नहीं दिया। कम प्रश्नों के साथ फिर कोशिश करें।"
+            ? "Gemini ने 150 सेकंड में जवाब नहीं दिया। कम प्रश्नों के साथ फिर कोशिश करें।"
             : "Gemini से सुरक्षित कनेक्शन नहीं बन पाया। थोड़ी देर बाद फिर कोशिश करें।");
           timeoutError.code = error.code === "ETIMEDOUT" ? "deadline-exceeded" : "unavailable";
           throw timeoutError;
@@ -909,6 +909,25 @@ async function run(name, req) {
       });
       return { ok: true, status: "approved", questionBankId: bankRef.id };
     }
+    case "updateQuestionBankQuestion": {
+      await requireAdmin(req);
+      const id = String(d.id || "").trim();
+      if (!id) fail("invalid-argument", "Question ID जरूरी है।");
+      const ref = db.doc("questionBank/" + id), snap = await ref.get();
+      if (!snap.exists || snap.data().status !== "approved") fail("not-found", "Approved प्रश्न नहीं मिला।");
+      const original = snap.data(), edited = d.question && typeof d.question === "object" ? d.question : {};
+      const text = String(edited.text ?? original.text).trim().slice(0,3000);
+      const type = original.type === "subjective" ? "subjective" : "objective";
+      const options = type === "objective" ? (Array.isArray(edited.options) ? edited.options : original.options).slice(0,4).map(x=>String(x||"").trim().slice(0,500)) : [];
+      const answer = type === "objective" ? Number(edited.answer ?? original.answer) : null;
+      const modelAnswer = type === "subjective" ? String(edited.modelAnswer ?? original.modelAnswer ?? "").trim().slice(0,5000) : "";
+      if (!text || (type === "objective" && (options.length !== 4 || options.some(x=>!x) || !Number.isInteger(answer) || answer<0 || answer>3))) fail("invalid-argument", "प्रश्न, चारों विकल्प और सही उत्तर जाँचें।");
+      if (type === "subjective" && !modelAnswer) fail("invalid-argument", "Subjective प्रश्न का Model Answer जरूरी है।");
+      await ref.update({ text, options, answer, modelAnswer, topic: String(edited.topic ?? original.topic ?? "").trim().slice(0,160),
+        explanation: String(edited.explanation ?? original.explanation ?? "").trim().slice(0,2000),
+        marks: Math.min(20,Math.max(1,Number(edited.marks ?? original.marks)||1)), updatedBy: uid, updatedAt: FieldValue.serverTimestamp() });
+      return { ok: true };
+    }
     default:
       fail("not-found", "Unknown API action.");
   }
@@ -998,7 +1017,7 @@ app.post("/api/notice-upload/:id", express.raw({type:"application/octet-stream",
   }
 });
 app.post("/api/:name", authenticate, async (req, res) => {
-  if (req.params.name === "generateQuestionDraft") { req.setTimeout(90000); res.setTimeout(90000); }
+  if (req.params.name === "generateQuestionDraft") { req.setTimeout(180000); res.setTimeout(180000); }
   try {
     const data = await run(req.params.name, req);
     return res.json({ data });
