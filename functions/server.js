@@ -520,6 +520,80 @@ async function run(name, req) {
         (relative.startsWith("/storage/v1/") ? base + relative : base + "/storage/v1" + (relative.startsWith("/") ? relative : "/" + relative));
       return { url, expiresIn: 300 };
     }
+    case "discoverPyqPapers": {
+      await requireAdmin(req);
+      const board=String(d.board||"").trim().slice(0,100);
+      const className=String(d.className||"").trim().slice(0,30);
+      const subject=String(d.subject||"").trim().slice(0,80);
+      const year=String(d.year||"").trim();
+      if(!board||!className||!subject||!/^20\d{2}$/.test(year)||Number(year)>2100) fail("invalid-argument","Board, Class, Subject and a valid Year are required.");
+      const apiKey=String(process.env.GEMINI_API_KEY||"").trim();
+      if(!apiKey) fail("failed-precondition","Gemini API key is not configured on the server.");
+      const prompt=[
+        "You are a careful research assistant finding real previous-year school board examination question papers.",
+        "Use Google Search. Search for the exact board, class, subject and examination year. Prefer the board's own official website and official PDF/archive pages.",
+        "Return only verifiable papers. Never invent a paper, URL, subject, date or board. Do not include sample papers, model papers, syllabus pages or answer keys unless they are clearly the actual question paper.",
+        "Return ONLY a JSON array. Each object must have: title, subject, year, sourceIndex (zero-based index of the matching web source in your grounded search results), description.",
+        "If no reliable question paper is found, return an empty array. Do not make up results.",
+        "Board: "+board,
+        "Class: "+className,
+        "Subject: "+subject,
+        "Exam year: "+year
+      ].join("\n");
+      const endpoint="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key="+encodeURIComponent(apiKey);
+      const response=await geminiHttpsRequest(endpoint,JSON.stringify({
+        contents:[{role:"user",parts:[{text:prompt}]}],
+        tools:[{google_search:{}}],
+        generationConfig:{temperature:0.15,maxOutputTokens:2600}
+      }),90000);
+      let payload={};try{payload=JSON.parse(response.raw||"{}")}catch{}
+      if(!response.ok)fail(response.status===429?"resource-exhausted":"unavailable",payload.error?.message||"AI web search is temporarily unavailable.");
+      const candidate=payload.candidates?.[0]||{};
+      const raw=String(candidate.content?.parts?.map(x=>x.text||"").join("")||"").trim().replace(/^\x60{3}(?:json)?/i,"").replace(/\x60{3}$/,"");
+      let found=[];try{found=JSON.parse(raw)}catch{}
+      if(!Array.isArray(found))fail("unavailable","AI search returned an unreadable result. Please try again.");
+      const chunks=candidate.groundingMetadata?.groundingChunks||[];
+      const sources=chunks.map(x=>x.web).filter(x=>x&&/^https?:\/\//i.test(String(x.uri||"")));
+      const results=[];
+      for(const item of found.slice(0,15)){
+        const index=Number(item.sourceIndex);
+        const source=Number.isInteger(index)?sources[index]:null;
+        if(!source?.uri)continue;
+        const sourceUrl=String(source.uri).slice(0,1800);
+        const title=String(item.title||source.title||"Question Paper").trim().slice(0,180);
+        const ref=db.collection("pyqDiscovery").doc();
+        const record={title,board,className,subject:String(item.subject||subject).slice(0,80),year,description:String(item.description||"Found by EduFuture AI. Verify the source before publishing.").slice(0,500),sourceUrl,sourceTitle:String(source.title||title).slice(0,240),status:"pending",createdBy:uid,createdAt:FieldValue.serverTimestamp()};
+        await ref.set(record);
+        results.push({id:ref.id,...record,createdAt:null});
+      }
+      await recordAdminActivity(uid,"discover","pyq",board+"-"+className+"-"+year,{subject,count:results.length});
+      return {results,checkedSources:sources.length};
+    }
+    case "listPyqDiscovery": {
+      await requireAdmin(req);
+      const snap=await db.collection("pyqDiscovery").where("status","==","pending").limit(100).get();
+      return {results:snap.docs.map(x=>({id:x.id,...x.data()}))};
+    }
+    case "reviewPyqDiscovery": {
+      await requireAdmin(req);
+      const id=String(d.id||"").trim(),decision=d.decision==="approve"?"approve":d.decision==="reject"?"reject":"";
+      if(!id||!decision)fail("invalid-argument","A discovery ID and review decision are required.");
+      const ref=db.doc("pyqDiscovery/"+id),snap=await ref.get();
+      if(!snap.exists)fail("not-found","Discovered paper not found.");
+      const item=snap.data();
+      if(item.status!=="pending")return {ok:true,status:item.status,alreadyReviewed:true};
+      if(decision==="reject"){
+        await ref.update({status:"rejected",reviewedBy:uid,reviewedAt:FieldValue.serverTimestamp()});
+        await recordAdminActivity(uid,"reject","pyq",id,{title:item.title||""});
+        return {ok:true,status:"rejected"};
+      }
+      if(!/^https?:\/\//i.test(String(item.sourceUrl||""))||!String(item.className||"").trim()||!/^20\d{2}$/.test(String(item.year||"")))fail("failed-precondition","The source link or paper metadata is incomplete.");
+      const contentRef=db.collection("content").doc();
+      await contentRef.set({title:String(item.title||"Question Paper").slice(0,180),subject:String(item.subject||"General").slice(0,80),type:"pyq",board:String(item.board||"").slice(0,100),className:String(item.className||"").slice(0,30),year:String(item.year||""),description:String(item.description||"").slice(0,500),url:String(item.sourceUrl),storagePath:"",published:true,sourceTitle:String(item.sourceTitle||""),sourceUrl:String(item.sourceUrl),createdBy:uid,createdAt:FieldValue.serverTimestamp(),aiDiscovered:true});
+      await ref.update({status:"approved",publishedContentId:contentRef.id,reviewedBy:uid,reviewedAt:FieldValue.serverTimestamp()});
+      await recordAdminActivity(uid,"publish","pyq",contentRef.id,{title:item.title||"",board:item.board||"",year:item.year||""});
+      return {ok:true,status:"approved",contentId:contentRef.id};
+    }
     case "addContent": {
       await requireAdmin(req);
       if (!String(d.title || "").trim() || (!d.storagePath && !/^https?:\/\//i.test(String(d.url || "")))) fail("invalid-argument", "Title और valid file link जरूरी है।");
@@ -529,10 +603,11 @@ async function run(name, req) {
       const type = String(d.type || "note");
       const className = type === "pyq" ? String(d.className || "").trim().slice(0,30) : "";
       const year = type === "pyq" ? String(d.year || "").trim() : "";
-      if (type === "pyq" && (!className || !/^20\d{2}$/.test(year) || Number(year) > 2100)) fail("invalid-argument", "PYQ के लिए सही Class और Year जरूरी है।");
+      const board = type === "pyq" ? String(d.board || "").trim().slice(0,100) : "";
+      if (type === "pyq" && (!className || !/^20\d{2}$/.test(year) || Number(year) > 2100)) fail("invalid-argument", "PYQ Class and valid Year are required.");
       await ref.set({
         title: String(d.title).trim(), subject: String(d.subject || "General"),
-        type, className, year, description: String(d.description || ""),
+        type, className, year, board, description: String(d.description || ""),
         url: String(d.url || ""), storagePath: String(d.storagePath || ""), published: d.published !== false,
         createdBy: uid, createdAt: FieldValue.serverTimestamp()
       });
