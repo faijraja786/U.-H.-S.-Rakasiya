@@ -48,7 +48,7 @@ async function uploadNoticeFile(id,file){
   return result.data;
 }
 const esc = v => String(v ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-await setPersistence(auth,browserLocalPersistence);
+try{await setPersistence(auth,browserLocalPersistence)}catch(e){console.warn("EduFuture: browser persistence unavailable; continuing with default Firebase Auth persistence.",e)}
 let user=null, role="student", tab="home", activeQuiz=null, answers={}, timer=null;
 
 function msg(t,ok=false){$("authMessage").textContent=t;$("authMessage").className=ok?"success":"error"}
