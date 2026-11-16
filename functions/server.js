@@ -526,10 +526,14 @@ async function run(name, req) {
       const contentId = String(d.id || "").trim();
       if (d.storagePath && (!contentId || !String(d.storagePath).startsWith(contentId + "/"))) fail("invalid-argument", "Storage path मान्य नहीं है।");
       const ref = contentId ? db.collection("content").doc(contentId) : db.collection("content").doc();
+      const type = String(d.type || "note");
+      const className = type === "pyq" ? String(d.className || "").trim().slice(0,30) : "";
+      const year = type === "pyq" ? String(d.year || "").trim() : "";
+      if (type === "pyq" && (!className || !/^20\\d{2}$/.test(year) || Number(year) > 2100)) fail("invalid-argument", "PYQ के लिए सही Class और Year जरूरी है।");
       await ref.set({
         title: String(d.title).trim(), subject: String(d.subject || "General"),
-        type: String(d.type || "note"), description: String(d.description || ""),
-        url: String(d.url), storagePath: String(d.storagePath || ""), published: d.published !== false,
+        type, className, year, description: String(d.description || ""),
+        url: String(d.url || ""), storagePath: String(d.storagePath || ""), published: d.published !== false,
         createdBy: uid, createdAt: FieldValue.serverTimestamp()
       });
       return { id: ref.id };
