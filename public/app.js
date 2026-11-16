@@ -645,24 +645,29 @@ async function importantNoticesPage(){
 
 async function pyqDiscoveryAdminPage(){
  if(!["admin","superadmin"].includes(role))return;
- panel("AI PYQ Finder",'<div class="ef-library-intro"><h2>Discover Previous Year Papers</h2><p>AI searches the web for real board question papers. Every result stays private until an Admin or Super Admin reviews and publishes it.</p></div><section class="item"><div class="grid"><div><label>Board (optional)</label><input id="discoverBoard" placeholder="Any recognized board"></div><div><label>Class (optional)</label><select id="discoverClass"><option value="">All classes</option>'+Array.from({length:12},(_,i)=>'<option value="Class '+(i+1)+'">Class '+(i+1)+'</option>').join("")+'</select></div><div><label>Subject (optional)</label><input id="discoverSubject" placeholder="All subjects"></div><div><label>Exam Year</label><input id="discoverYear" type="number" min="2000" max="2100" placeholder="e.g. 2025"></div></div><button id="runPyqDiscovery" class="success-action">Search the Web with AI</button><p id="discoverStatus" class="hint">Enter only a year to search across Indian boards, or add optional filters.</p></section><section class="item"><div class="ef-preview-publish"><h3>Pending Review</h3><button id="refreshPyqDiscovery" class="secondary">Refresh</button></div><div id="pyqDiscoveryResults">Loading…</div></section>');
+ panel("AI PYQ Finder",'<div class="ef-library-intro"><h2>Discover Previous Year Papers</h2><p>Find real previous-year papers by topic, board and exam year. Every result stays private until an Admin or Super Admin reviews and publishes it.</p></div><section class="item"><div class="grid"><div><label>Topic</label><input id="discoverTopic" placeholder="e.g. Light Reflection and Refraction" required></div><div><label>Board (optional)</label><input id="discoverBoard" placeholder="e.g. BSEB, CBSE, ICSE"></div><div><label>Class (optional)</label><select id="discoverClass"><option value="">All classes</option>'+Array.from({length:12},(_,i)=>'<option value="Class '+(i+1)+'">Class '+(i+1)+'</option>').join("")+'</select></div><div><label>Subject (optional)</label><input id="discoverSubject" placeholder="e.g. Science"></div><div><label>Exam Year</label><input id="discoverYear" type="number" min="2000" max="2100" placeholder="e.g. 2025" required></div></div><button id="runPyqDiscovery" class="success-action">Search the Web with AI</button><p id="discoverStatus" class="hint">Enter a topic and exam year. Add a board to narrow the search.</p></section><section class="item"><div class="ef-preview-publish"><h3>Pending Review</h3><button id="refreshPyqDiscovery" class="secondary">Refresh</button></div><div id="pyqDiscoveryResults">Loading…</div></section>');
  const status=$("discoverStatus"),results=$("pyqDiscoveryResults");
  async function refresh(){
   results.textContent="Loading pending papers…";
   try{
    const data=await call("listPyqDiscovery"),rows=data.results||[];
-   results.innerHTML=rows.length?rows.map(x=>'<article class="ef-library-card"><div class="question-meta"><span>'+esc(x.board||"Board")+'</span><span>'+esc(x.className||"")+' • '+esc(x.year||"")+'</span></div><h3>'+esc(x.title||"Question Paper")+'</h3><p>'+esc(x.subject||"")+' — '+esc(x.description||"")+'</p><p><a href="'+esc(x.sourceUrl||"#")+'" target="_blank" rel="noopener noreferrer">Review Source Website ↗</a></p><div class="overview-actions"><button data-approve-pyq="'+esc(x.id)+'">Approve & Publish</button><button class="danger" data-reject-pyq="'+esc(x.id)+'">Reject</button></div></article>').join(""):'<div class="empty-state">No papers are waiting for review.</div>';
+   results.innerHTML=rows.length?rows.map(x=>'<article class="ef-library-card"><div class="question-meta"><span>'+esc(x.board||"Board")+'</span><span>'+esc(x.className||"")+' • '+esc(x.year||"")+'</span></div><h3>'+esc(x.title||"Question Paper")+'</h3><p><b>Topic:</b> '+esc(x.topic||"")+' • '+esc(x.subject||"")+'</p><p>'+esc(x.description||"")+'</p><p><a href="'+esc(x.sourceUrl||"#")+'" target="_blank" rel="noopener noreferrer">Review Source Website ↗</a></p><div class="overview-actions"><button data-approve-pyq="'+esc(x.id)+'">Approve & Publish</button><button class="danger" data-reject-pyq="'+esc(x.id)+'">Reject</button></div></article>').join(""):'<div class="empty-state">No papers are waiting for review.</div>';
    results.querySelectorAll("[data-approve-pyq]").forEach(b=>b.onclick=async()=>{b.disabled=true;try{await call("reviewPyqDiscovery",{id:b.dataset.approvePyq,decision:"approve"});await refresh()}catch(e){alertMsg(e.message);b.disabled=false}});
    results.querySelectorAll("[data-reject-pyq]").forEach(b=>b.onclick=async()=>{b.disabled=true;try{await call("reviewPyqDiscovery",{id:b.dataset.rejectPyq,decision:"reject"});await refresh()}catch(e){alertMsg(e.message);b.disabled=false}});
   }catch(e){results.textContent=e.message}
  }
  $("refreshPyqDiscovery").onclick=refresh;
  $("runPyqDiscovery").onclick=async()=>{
-  const b=$("runPyqDiscovery"),board=$("discoverBoard").value.trim(),className=$("discoverClass").value,subject=$("discoverSubject").value.trim(),year=String($("discoverYear").value||"").trim();
+  const b=$("runPyqDiscovery"),topic=$("discoverTopic").value.trim(),board=$("discoverBoard").value.trim(),className=$("discoverClass").value,subject=$("discoverSubject").value.trim(),year=String($("discoverYear").value||"").trim();
+  if(!topic){status.textContent="Enter a topic to search for.";return}
   if(!/^20\\d{2}$/.test(year)||Number(year)>2100){status.textContent="Enter a valid four-digit exam year.";return}
-  b.disabled=true;status.textContent="Searching the web and checking source links…";
-  try{const data=await call("discoverPyqPapers",{board,className,subject,year});status.innerHTML=esc((data.results||[]).length+" possible paper(s) found and added to Pending Review.")+((data.searchQueries||[]).length?'<details><summary>Google Search queries used</summary><ul>'+data.searchQueries.map(q=>"<li>"+esc(q)+"</li>").join("")+"</ul></details>":"");await refresh()}
-  catch(e){status.textContent=e.message}
+  b.disabled=true;status.textContent="Searching Google for real papers matching the topic, board and year…";
+  try{
+   const data=await call("discoverPyqPapers",{topic,board,className,subject,year}),count=(data.results||[]).length;
+   status.textContent=count?count+" result(s) added to Pending Review. Checked "+Number(data.checkedSources||0)+" web sources.":"No matching paper was verified. Checked "+Number(data.checkedSources||0)+" web sources. Try a broader topic or another year.";
+   await refresh();
+   if((data.searchQueries||[]).length){const details=document.createElement("details"),summary=document.createElement("summary"),list=document.createElement("ul");summary.textContent="Google Search queries used";data.searchQueries.forEach(q=>{const li=document.createElement("li");li.textContent=q;list.append(li)});details.append(summary,list);status.append(details)}
+  }catch(e){status.textContent=e.message}
   finally{b.disabled=false}
  };
  await refresh();
