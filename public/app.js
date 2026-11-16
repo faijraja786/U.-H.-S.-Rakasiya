@@ -660,7 +660,7 @@ async function pyqDiscoveryAdminPage(){
  $("runPyqDiscovery").onclick=async()=>{
   const b=$("runPyqDiscovery"),topic=$("discoverTopic").value.trim(),board=$("discoverBoard").value.trim(),className=$("discoverClass").value,subject=$("discoverSubject").value.trim(),year=String($("discoverYear").value||"").trim();
   if(!topic){status.textContent="Enter a topic to search for.";return}
-  if(!/^20\\d{2}$/.test(year)||Number(year)>2100){status.textContent="Enter a valid four-digit exam year.";return}
+  if(!/^20\d{2}$/.test(year)||Number(year)>2100){status.textContent="Enter a valid four-digit exam year.";return}
   b.disabled=true;status.textContent="Searching Google for real papers matching the topic, board and year…";
   try{
    const data=await call("discoverPyqPapers",{topic,board,className,subject,year}),count=(data.results||[]).length;
