@@ -529,7 +529,7 @@ async function run(name, req) {
       const type = String(d.type || "note");
       const className = type === "pyq" ? String(d.className || "").trim().slice(0,30) : "";
       const year = type === "pyq" ? String(d.year || "").trim() : "";
-      if (type === "pyq" && (!className || !/^20\\d{2}$/.test(year) || Number(year) > 2100)) fail("invalid-argument", "PYQ के लिए सही Class और Year जरूरी है।");
+      if (type === "pyq" && (!className || !/^20\d{2}$/.test(year) || Number(year) > 2100)) fail("invalid-argument", "PYQ के लिए सही Class और Year जरूरी है।");
       await ref.set({
         title: String(d.title).trim(), subject: String(d.subject || "General"),
         type, className, year, description: String(d.description || ""),
@@ -915,7 +915,7 @@ async function run(name, req) {
         "Use very simple everyday Hindi suitable for the declared class. Prefer familiar school textbook terms used in Bihar/NCERT books. Avoid difficult, artificial or machine-translated Hindi. Explain every new term in one short sentence.",
         "Keep the answer clear and not unnecessarily long. Use short headings, numbered steps and one simple example. For maths, show the standard school-book formula first, then substitute values step by step. End with one short practice question.",
         "Do not invent textbook page numbers, board syllabus claims, citations or facts. If unsure, clearly say so.",
-        "For mathematics, preserve exact mathematical notation. Write inline formulas as \\( ... \\) and display formulas as \\[ ... \\]. Use standard LaTeX commands such as \\frac{a}{b}, \\sqrt{x}, x^2, \\times, \\div, \\le and \\ge; never replace formulas with vague words or malformed symbols.",
+        "For mathematics, preserve exact mathematical notation. Write inline formulas as \\( ... \\) and display formulas as \\[ ... \\]. Use standard LaTeX commands such as \\frac{a}{b}, \\sqrt{x}, x^2, \\times, \div, \\le and \\ge; never replace formulas with vague words or malformed symbols.",
         "Do not ask for personal information. Avoid adult, dangerous or harmful content.",
         "Student class: " + className,
         "Latest student question: " + question
