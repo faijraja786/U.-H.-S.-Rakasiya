@@ -404,7 +404,7 @@ async function plannerPage(){
 }
 async function tasksPage(){
   const ref=collection(db,"users",user.uid,"tasks"),s=await getDocs(ref);
-  panel("Daily Targets",'<div class="inline-form"><input id="newTask" placeholder="Today's goal"><button id="addTask">Add</button></div>'+(s.empty?"<p>No goals yet.</p>":s.docs.map(d=>'<label class="task-row"><input type="checkbox" data-task="'+d.id+'" '+(d.data().done?"checked":"")+'> <span class="'+(d.data().done?"done":"")+'">'+esc(d.data().text)+'</span></label>').join("")));
+  panel("Daily Targets",'<div class="inline-form"><input id="newTask" placeholder="Today&#39;s goal"><button id="addTask">Add</button></div>'+(s.empty?"<p>No goals yet.</p>":s.docs.map(d=>'<label class="task-row"><input type="checkbox" data-task="'+d.id+'" '+(d.data().done?"checked":"")+'> <span class="'+(d.data().done?"done":"")+'">'+esc(d.data().text)+'</span></label>').join("")));
   $("addTask").onclick=async()=>{const t=$("newTask").value.trim();if(!t)return alertMsg("Enter a goal first.");await addDoc(ref,{text:t,done:false,createdAt:serverTimestamp()});tasksPage()};
   $("view").querySelectorAll("[data-task]").forEach(x=>x.onchange=async()=>{await updateDoc(doc(ref,x.dataset.task),{done:x.checked});x.nextElementSibling.classList.toggle("done",x.checked)});
 }
