@@ -656,7 +656,7 @@ async function pyqDiscoveryAdminPage(){
   const b=$("runPyqDiscovery"),board=$("discoverBoard").value.trim(),className=$("discoverClass").value,subject=$("discoverSubject").value.trim(),year=String($("discoverYear").value||"").trim();
   if(!/^20\\d{2}$/.test(year)||Number(year)>2100){status.textContent="Enter a valid four-digit exam year.";return}
   b.disabled=true;status.textContent="Searching the web and checking source links…";
-  try{const data=await call("discoverPyqPapers",{board,className,subject,year});status.textContent=(data.results||[]).length+" possible paper(s) found and added to Pending Review.";await refresh()}
+  try{const data=await call("discoverPyqPapers",{board,className,subject,year});status.innerHTML=esc((data.results||[]).length+" possible paper(s) found and added to Pending Review.")+((data.searchQueries||[]).length?'<details><summary>Google Search queries used</summary><ul>'+data.searchQueries.map(q=>"<li>"+esc(q)+"</li>").join("")+"</ul></details>":"");await refresh()}
   catch(e){status.textContent=e.message}
   finally{b.disabled=false}
  };
