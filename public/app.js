@@ -333,7 +333,20 @@ function formatAiNotesContent(source){
 }
 async function contentLibraryPage(kind,title){
   const s=await getDocs(query(collection(db,"content"),where("published","==",true)));
-  const docs=s.docs.filter(d=>(d.data().type||"note")===kind);
+  let docs=s.docs.filter(d=>(d.data().type||"note")===kind);
+  if(kind==="pyq"){
+    const profileSnap=await getDoc(doc(db,"roles",user.uid)),profile=profileSnap.exists()?profileSnap.data():{};
+    const className=String(profile.className||"").trim();
+    const normalizeClass=v=>String(v||"").toLowerCase().replace(/^(class|कक्षा)\\s*/i,"").replace(/[^\\p{L}\\p{N}]/gu,"");
+    docs=docs.filter(d=>normalizeClass(d.data().className)===normalizeClass(className));
+    const years=[...new Set(docs.map(d=>String(d.data().year||"")).filter(Boolean))].sort((a,b)=>Number(b)-Number(a));
+    let selectedYear="all";
+    const cards=()=>docs.filter(d=>selectedYear==="all"||String(d.data().year||"")===selectedYear).map(d=>{const x=d.data();return '<article class="ef-library-card"><div class="question-meta"><span>'+esc(x.subject||"General")+'</span><span>वर्ष '+esc(x.year||"—")+'</span></div><h3>'+esc(x.title)+'</h3><p>'+esc(x.description)+'</p>'+(x.storagePath?'<button class="secondary" data-secure-download="'+esc(d.id)+'">Open / Download</button>':'<a href="'+esc(x.url||"")+'" target="_blank" rel="noopener">Open / Download</a>')+'</article>'}).join("");
+    panel(title,'<div class="ef-library-intro"><h2>पिछले वर्षों के प्रश्न</h2><p>आपकी कक्षा के अनुसार प्रश्नपत्र।</p></div><div class="item"><b>आपकी कक्षा: '+esc(className||"उपलब्ध नहीं")+'</b><label for="pyqYearFilter">वर्ष चुनें</label><select id="pyqYearFilter"><option value="all">सभी वर्ष</option>'+years.map(y=>'<option value="'+esc(y)+'">'+esc(y)+'</option>').join("")+'</select></div><div id="pyqCards" class="ef-library-grid">'+(cards()||'<div class="empty-state">आपकी कक्षा के लिए अभी कोई PYQ उपलब्ध नहीं है।</div>')+'</div>');
+    const bindDownloads=()=>{$("view").querySelectorAll("[data-secure-download]").forEach(b=>b.onclick=async()=>{try{b.disabled=true;const result=await call("getContentDownload",{id:b.dataset.secureDownload});window.location.assign(result.url)}catch(e){alertMsg("फ़ाइल नहीं खुल सकी: "+e.message)}finally{b.disabled=false}})};
+    $("pyqYearFilter").onchange=()=>{selectedYear=$("pyqYearFilter").value;$("pyqCards").innerHTML=cards()||'<div class="empty-state">इस वर्ष का कोई PYQ उपलब्ध नहीं है।</div>';bindDownloads()};
+    bindDownloads();return;
+  }
   let aiNotes=[];
   if(kind==="note"){try{const r=await call("listPublishedAiNotes");aiNotes=r.notes||[]}catch(e){console.warn("AI published notes:",e.message)}}
   const uploaded=docs.map(d=>{const x=d.data();return '<article class="ef-library-card"><div class="question-meta"><span>'+esc(x.subject||"General")+'</span><span>STUDY NOTES</span></div><h3>'+esc(x.title)+'</h3><p>'+esc(x.description)+'</p>'+(x.storagePath?'<button class="secondary" data-secure-download="'+esc(d.id)+'">Open / Download</button>':'<a href="'+esc(x.url||"")+'" target="_blank" rel="noopener">Open / Download</a>')+'</article>'}).join("");
@@ -624,7 +637,7 @@ async function importantNoticesPage(){
 async function contentUploadPage(kind){
   if(role!=="admin"&&role!=="superadmin")return;
   const isPyq=kind==="pyq",prefix=isPyq?"pyq":"note",title=isPyq?"PYQ":"Notes";
-  panel("Upload "+title,'<button class="text-button" id="backContent">← Admin Dashboard</button><div class="builder-heading"><span class="eyebrow">EDUFUTURE • CONTENT LIBRARY</span><h2>'+title+' Upload</h2><p>एक बार में कई PDF / documents चुनें। हर फ़ाइल अलग item बनेगी।</p></div><label>'+title+' Title (एकाधिक फ़ाइलों के लिए आधार नाम)</label><input id="'+prefix+'Title" placeholder="'+title+' title"><label>Subject</label><input id="'+prefix+'Subject" placeholder="जैसे Science"><label>Description</label><textarea id="'+prefix+'Description" rows="3"></textarea><label>एक या अधिक PDF / DOC / PPT / Image (प्रति फ़ाइल अधिकतम 30 MB)</label><input id="'+prefix+'File" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp"><label>या एक Hosted File URL</label><input id="'+prefix+'Url" type="url" placeholder="https://..."><p id="'+prefix+'Status" class="hint">एकाधिक फ़ाइलें चुन सकते हैं।</p><button id="'+prefix+'Save" class="success-action">Upload '+title+'</button><section class="item"><h3>Manage '+title+'</h3><div id="'+prefix+'List">Loading…</div></section>');
+  panel("Upload "+title,'<button class="text-button" id="backContent">← Admin Dashboard</button><div class="builder-heading"><span class="eyebrow">EDUFUTURE • CONTENT LIBRARY</span><h2>'+title+' Upload</h2><p>एक बार में कई PDF / documents चुनें। हर फ़ाइल अलग item बनेगी।</p></div><label>'+title+' Title (एकाधिक फ़ाइलों के लिए आधार नाम)</label><input id="'+prefix+'Title" placeholder="'+title+' title"><label>Subject</label><input id="'+prefix+'Subject" placeholder="जैसे Science">'+(isPyq?'<label>Class / कक्षा</label><input id="pyqClass" maxlength="30" placeholder="जैसे Class 10"><label>Year / वर्ष</label><input id="pyqYear" type="number" min="2000" max="2100" placeholder="जैसे 2025">':'')+'<label>Description</label><textarea id="'+prefix+'Description" rows="3"></textarea><label>एक या अधिक PDF / DOC / PPT / Image (प्रति फ़ाइल अधिकतम 30 MB)</label><input id="'+prefix+'File" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp"><label>या एक Hosted File URL</label><input id="'+prefix+'Url" type="url" placeholder="https://..."><p id="'+prefix+'Status" class="hint">एकाधिक फ़ाइलें चुन सकते हैं।</p><button id="'+prefix+'Save" class="success-action">Upload '+title+'</button><section class="item"><h3>Manage '+title+'</h3><div id="'+prefix+'List">Loading…</div></section>');
   $("backContent").onclick=()=>{tab="admin";render()};
   async function refresh(){
     try{
@@ -638,23 +651,25 @@ async function contentUploadPage(kind){
     const b=$(prefix+"Save"),files=Array.from($(prefix+"File").files||[]),url=$(prefix+"Url").value.trim();b.disabled=true;
     try{
       const base=$(prefix+"Title").value.trim(),subject=$(prefix+"Subject").value.trim();
+      const className=isPyq?$("pyqClass").value.trim():"",year=isPyq?String($("pyqYear").value).trim():"";
       if(!base||!subject)throw Error("Title और Subject भरना जरूरी है।");
+      if(isPyq&&(!className||!/^20\\d{2}$/.test(year)||Number(year)>2100))throw Error("PYQ के लिए Class और सही Year भरें।");
       if(files.length&&url)throw Error("एक साथ files और Hosted URL न दें।");
       if(!files.length&&!url)throw Error("कम-से-कम एक फ़ाइल या Hosted URL चुनें।");
       if(files.length>20)throw Error("एक बार में अधिकतम 20 फ़ाइलें upload करें।");
       const allowed=/\.(pdf|doc|docx|ppt|pptx|png|jpe?g|webp)$/i;
       for(const f of files){if(f.size>30*1024*1024)throw Error(f.name+" 30 MB से बड़ी है।");if(!allowed.test(f.name))throw Error(f.name+" का file type supported नहीं है।")}
-      if(!files.length){const id=doc(collection(db,"content")).id;await call("addContent",{id,title:base,subject,type:kind,description:$(prefix+"Description").value,url,published:true})}
+      if(!files.length){const id=doc(collection(db,"content")).id;await call("addContent",{id,title:base,subject,type:kind,className,year,description:$(prefix+"Description").value,url,published:true})}
       else{
         for(let i=0;i<files.length;i++){
           const file=files[i],id=doc(collection(db,"content")).id;
           $(prefix+"Status").textContent="Upload "+(i+1)+"/"+files.length+": "+file.name;
           const uploaded=await uploadContentFile(id,file),fileTitle=files.length===1?base:base+" - "+file.name.replace(/\.[^.]+$/,"");
-          await call("addContent",{id,storagePath:uploaded.storagePath,title:fileTitle,subject,type:kind,description:$(prefix+"Description").value,url:"",published:true});
+          await call("addContent",{id,storagePath:uploaded.storagePath,title:fileTitle,subject,type:kind,className,year,description:$(prefix+"Description").value,url:"",published:true});
         }
       }
       alertMsg(files.length?files.length+" "+title+" files upload हो गईं।":title+" link publish हो गया।");
-      $(prefix+"Title").value="";$(prefix+"Subject").value="";$(prefix+"Description").value="";$(prefix+"Url").value="";$(prefix+"File").value="";$(prefix+"Status").textContent="Upload पूरा हुआ।";await refresh();
+      $(prefix+"Title").value="";$(prefix+"Subject").value="";if(isPyq){$("pyqClass").value="";$("pyqYear").value=""}$(prefix+"Description").value="";$(prefix+"Url").value="";$(prefix+"File").value="";$(prefix+"Status").textContent="Upload पूरा हुआ।";await refresh();
     }catch(e){$(prefix+"Status").textContent=e.message;alertMsg(e.message)}finally{b.disabled=false}
   };
   refresh();
