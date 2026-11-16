@@ -523,50 +523,60 @@ async function run(name, req) {
     case "discoverPyqPapers": {
       await requireAdmin(req);
       const board=String(d.board||"").trim().slice(0,100);
+      const topic=String(d.topic||"").trim().slice(0,140);
       const className=String(d.className||"").trim().slice(0,30);
       const subject=String(d.subject||"").trim().slice(0,80);
       const year=String(d.year||"").trim();
-      if(!/^20\d{2}$/.test(year)||Number(year)>2100) fail("invalid-argument","A valid four-digit Year is required.");
+      if(!topic) fail("invalid-argument","Enter a topic to search for.");
+      if(!/^20\\d{2}$/.test(year)||Number(year)>2100) fail("invalid-argument","A valid four-digit Year is required.");
       const apiKey=String(process.env.GEMINI_API_KEY||"").trim();
       if(!apiKey) fail("failed-precondition","Gemini API key is not configured on the server.");
       const prompt=[
-        "You are a careful research assistant finding real previous-year school board examination question papers.",
-        "Use Google Search to find previous-year examination question papers from Indian school boards for the requested year. Search broadly across CBSE, CISCE, state boards and other recognized boards. Apply optional board, class and subject filters only when supplied. Prefer official board websites and official PDF/archive pages.",
-        "Return only verifiable papers. Never invent a paper, URL, subject, date or board. Do not include sample papers, model papers, syllabus pages or answer keys unless they are clearly the actual question paper.",
-        "Return ONLY a JSON array. Each object must have: title, board, className, subject, year, sourceIndex (zero-based index of the matching web source in your grounded search results), description.",
-        "If no reliable question paper is found, return an empty array. Do not make up results.",
-        "Optional board filter: "+(board||"Any recognized Indian board"),
-        "Optional class filter: "+(className||"Any class"),
-        "Optional subject filter: "+(subject||"Any subject"),
-        "Exam year: "+year
-      ].join("\n");
+        "You are a careful web research assistant. Find REAL previous-year examination question papers, not newly generated questions.",
+        "Use Google Search. Search specifically for the exact topic, exam year and board requested. Try several query variations including topic + board + class + year + question paper PDF. Prefer official board websites and reliable paper archives.",
+        "Only include results that are actual previous-year examination question papers. Exclude sample papers, model papers, solutions-only pages, syllabus pages, coaching practice sets and unrelated results.",
+        "Return ONLY a JSON array. Each object must contain title, board, className, subject, topic, year, sourceUrl, description. sourceUrl MUST exactly match a URL in the Google Search grounded sources. Never invent a URL. Do not use sourceIndex.",
+        "Return at most 12 distinct verified papers. If none can be verified, return an empty array. Never fabricate results.",
+        "Requested topic: "+topic,
+        "Requested exam year: "+year,
+        "Requested board: "+(board||"Any Indian school board"),
+        "Requested class: "+(className||"Any class"),
+        "Requested subject: "+(subject||"Any subject")
+      ].join("\\n");
       const endpoint="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key="+encodeURIComponent(apiKey);
       const response=await geminiHttpsRequest(endpoint,JSON.stringify({
         contents:[{role:"user",parts:[{text:prompt}]}],
         tools:[{google_search:{}}],
-        generationConfig:{temperature:0.15,maxOutputTokens:2600}
+        generationConfig:{temperature:0.1,maxOutputTokens:5000}
       }),90000);
       let payload={};try{payload=JSON.parse(response.raw||"{}")}catch{}
       if(!response.ok)fail(response.status===429?"resource-exhausted":"unavailable",payload.error?.message||"AI web search is temporarily unavailable.");
       const candidate=payload.candidates?.[0]||{};
-      const raw=String(candidate.content?.parts?.map(x=>x.text||"").join("")||"").trim().replace(/^\x60{3}(?:json)?/i,"").replace(/\x60{3}$/,"");
-      let found=[];try{found=JSON.parse(raw)}catch{}
+      let raw=String(candidate.content?.parts?.map(x=>x.text||"").join("")||"").trim();
+      raw=raw.replace(/^\\x60{3}(?:json)?\\s*/i,"").replace(/\\s*\\x60{3}$/,"");
+      let found=[];try{found=JSON.parse(raw)}catch{
+        const first=raw.indexOf("["),last=raw.lastIndexOf("]");
+        if(first>=0&&last>first){try{found=JSON.parse(raw.slice(first,last+1))}catch{}}
+      }
       if(!Array.isArray(found))fail("unavailable","AI search returned an unreadable result. Please try again.");
       const chunks=candidate.groundingMetadata?.groundingChunks||[];
-      const sources=chunks.map(x=>x.web).filter(x=>x&&/^https?:\/\//i.test(String(x.uri||"")));
+      const sources=chunks.map(x=>x.web).filter(x=>x&&/^https?:\\/\\//i.test(String(x.uri||"")));
+      const normalizeUrl=value=>{try{const u=new URL(String(value));u.hash="";u.search="";return u.toString().replace(/\\/$/,"").toLowerCase()}catch{return ""}};
+      const grounded=new Map(sources.map(source=>[normalizeUrl(source.uri),source]));
       const results=[];
-      for(const item of found.slice(0,15)){
-        const index=Number(item.sourceIndex);
-        const source=Number.isInteger(index)?sources[index]:null;
+      for(const item of found.slice(0,12)){
+        const requestedUrl=normalizeUrl(item.sourceUrl||"");
+        let source=requestedUrl?grounded.get(requestedUrl):null;
+        if(!source){const index=Number(item.sourceIndex);source=Number.isInteger(index)?sources[index]:null;}
         if(!source?.uri)continue;
         const sourceUrl=String(source.uri).slice(0,1800);
         const title=String(item.title||source.title||"Question Paper").trim().slice(0,180);
         const ref=db.collection("pyqDiscovery").doc();
-        const record={title,board:String(item.board||board||"").slice(0,100),className:String(item.className||className||"").slice(0,30),subject:String(item.subject||subject||"General").slice(0,80),year,description:String(item.description||"Found by EduFuture AI. Verify the source before publishing.").slice(0,500),sourceUrl,sourceTitle:String(source.title||title).slice(0,240),status:"pending",createdBy:uid,createdAt:FieldValue.serverTimestamp()};
+        const record={title,board:String(item.board||board||"").slice(0,100),className:String(item.className||className||"").slice(0,30),subject:String(item.subject||subject||"General").slice(0,80),topic:String(item.topic||topic).slice(0,140),year,description:String(item.description||"Found by EduFuture AI. Verify the source before publishing.").slice(0,500),sourceUrl,sourceTitle:String(source.title||title).slice(0,240),status:"pending",createdBy:uid,createdAt:FieldValue.serverTimestamp()};
         await ref.set(record);
         results.push({id:ref.id,...record,createdAt:null});
       }
-      await recordAdminActivity(uid,"discover","pyq",board+"-"+className+"-"+year,{subject,count:results.length});
+      await recordAdminActivity(uid,"discover","pyq",board+"-"+topic+"-"+year,{subject,count:results.length,checkedSources:sources.length});
       return {results,checkedSources:sources.length,searchQueries:candidate.groundingMetadata?.webSearchQueries||[]};
     }
     case "listPyqDiscovery": {
