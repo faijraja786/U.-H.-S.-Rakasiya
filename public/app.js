@@ -337,7 +337,7 @@ async function contentLibraryPage(kind,title){
   if(kind==="pyq"){
     const profileSnap=await getDoc(doc(db,"roles",user.uid)),profile=profileSnap.exists()?profileSnap.data():{};
     const className=String(profile.className||"").trim();
-    const normalizeClass=v=>String(v||"").toLowerCase().replace(/^(class|कक्षा)\\s*/i,"").replace(/[^\\p{L}\\p{N}]/gu,"");
+    const normalizeClass=v=>String(v||"").toLowerCase().replace(/^(class|कक्षा)\s*/i,"").replace(/[^\p{L}\p{N}]/gu,"");
     docs=docs.filter(d=>normalizeClass(d.data().className)===normalizeClass(className));
     const years=[...new Set(docs.map(d=>String(d.data().year||"")).filter(Boolean))].sort((a,b)=>Number(b)-Number(a));
     let selectedYear="all";
@@ -653,7 +653,7 @@ async function contentUploadPage(kind){
       const base=$(prefix+"Title").value.trim(),subject=$(prefix+"Subject").value.trim();
       const className=isPyq?$("pyqClass").value.trim():"",year=isPyq?String($("pyqYear").value).trim():"";
       if(!base||!subject)throw Error("Title और Subject भरना जरूरी है।");
-      if(isPyq&&(!className||!/^20\\d{2}$/.test(year)||Number(year)>2100))throw Error("PYQ के लिए Class और सही Year भरें।");
+      if(isPyq&&(!className||!/^20\d{2}$/.test(year)||Number(year)>2100))throw Error("PYQ के लिए Class और सही Year भरें।");
       if(files.length&&url)throw Error("एक साथ files और Hosted URL न दें।");
       if(!files.length&&!url)throw Error("कम-से-कम एक फ़ाइल या Hosted URL चुनें।");
       if(files.length>20)throw Error("एक बार में अधिकतम 20 फ़ाइलें upload करें।");
