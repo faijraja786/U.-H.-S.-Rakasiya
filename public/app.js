@@ -337,7 +337,7 @@ async function contentLibraryPage(kind,title){
   if(kind==="pyq"){
     const profileSnap=await getDoc(doc(db,"roles",user.uid)),profile=profileSnap.exists()?profileSnap.data():{};
     const className=String(profile.className||"").trim();
-    const normalizeClass=v=>String(v||"").toLowerCase().replace(/^(class|कक्षा)\\s*/i,"").replace(/[^\\p{L}\\p{N}]/gu,"");
+    const normalizeClass=v=>String(v||"").toLowerCase().replace(/^(class|कक्षा)\s*/i,"").replace(/[^\p{L}\p{N}]/gu,"");
     docs=docs.filter(d=>normalizeClass(d.data().className)===normalizeClass(className));
     const boards=[...new Set(docs.map(d=>String(d.data().board||"")).filter(Boolean))].sort();
     const subjects=[...new Set(docs.map(d=>String(d.data().subject||"")).filter(Boolean))].sort();
