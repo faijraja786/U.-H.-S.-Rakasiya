@@ -526,18 +526,18 @@ async function run(name, req) {
       const className=String(d.className||"").trim().slice(0,30);
       const subject=String(d.subject||"").trim().slice(0,80);
       const year=String(d.year||"").trim();
-      if(!board||!className||!subject||!/^20\d{2}$/.test(year)||Number(year)>2100) fail("invalid-argument","Board, Class, Subject and a valid Year are required.");
+      if(!/^20\d{2}$/.test(year)||Number(year)>2100) fail("invalid-argument","A valid four-digit Year is required.");
       const apiKey=String(process.env.GEMINI_API_KEY||"").trim();
       if(!apiKey) fail("failed-precondition","Gemini API key is not configured on the server.");
       const prompt=[
         "You are a careful research assistant finding real previous-year school board examination question papers.",
-        "Use Google Search. Search for the exact board, class, subject and examination year. Prefer the board's own official website and official PDF/archive pages.",
+        "Use Google Search to find previous-year examination question papers from Indian school boards for the requested year. Search broadly across CBSE, CISCE, state boards and other recognized boards. Apply optional board, class and subject filters only when supplied. Prefer official board websites and official PDF/archive pages.",
         "Return only verifiable papers. Never invent a paper, URL, subject, date or board. Do not include sample papers, model papers, syllabus pages or answer keys unless they are clearly the actual question paper.",
-        "Return ONLY a JSON array. Each object must have: title, subject, year, sourceIndex (zero-based index of the matching web source in your grounded search results), description.",
+        "Return ONLY a JSON array. Each object must have: title, board, className, subject, year, sourceIndex (zero-based index of the matching web source in your grounded search results), description.",
         "If no reliable question paper is found, return an empty array. Do not make up results.",
-        "Board: "+board,
-        "Class: "+className,
-        "Subject: "+subject,
+        "Optional board filter: "+(board||"Any recognized Indian board"),
+        "Optional class filter: "+(className||"Any class"),
+        "Optional subject filter: "+(subject||"Any subject"),
         "Exam year: "+year
       ].join("\n");
       const endpoint="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key="+encodeURIComponent(apiKey);
@@ -562,7 +562,7 @@ async function run(name, req) {
         const sourceUrl=String(source.uri).slice(0,1800);
         const title=String(item.title||source.title||"Question Paper").trim().slice(0,180);
         const ref=db.collection("pyqDiscovery").doc();
-        const record={title,board,className,subject:String(item.subject||subject).slice(0,80),year,description:String(item.description||"Found by EduFuture AI. Verify the source before publishing.").slice(0,500),sourceUrl,sourceTitle:String(source.title||title).slice(0,240),status:"pending",createdBy:uid,createdAt:FieldValue.serverTimestamp()};
+        const record={title,board:String(item.board||board||"").slice(0,100),className:String(item.className||className||"").slice(0,30),subject:String(item.subject||subject||"General").slice(0,80),year,description:String(item.description||"Found by EduFuture AI. Verify the source before publishing.").slice(0,500),sourceUrl,sourceTitle:String(source.title||title).slice(0,240),status:"pending",createdBy:uid,createdAt:FieldValue.serverTimestamp()};
         await ref.set(record);
         results.push({id:ref.id,...record,createdAt:null});
       }
@@ -587,7 +587,7 @@ async function run(name, req) {
         await recordAdminActivity(uid,"reject","pyq",id,{title:item.title||""});
         return {ok:true,status:"rejected"};
       }
-      if(!/^https?:\/\//i.test(String(item.sourceUrl||""))||!String(item.className||"").trim()||!/^20\d{2}$/.test(String(item.year||"")))fail("failed-precondition","The source link or paper metadata is incomplete.");
+      if(!/^https?:\/\//i.test(String(item.sourceUrl||""))||!String(item.board||"").trim()||!String(item.className||"").trim()||!/^20\d{2}$/.test(String(item.year||"")))fail("failed-precondition","The source link, board, class or year is incomplete. Reject this result and search again.");
       const contentRef=db.collection("content").doc();
       await contentRef.set({title:String(item.title||"Question Paper").slice(0,180),subject:String(item.subject||"General").slice(0,80),type:"pyq",board:String(item.board||"").slice(0,100),className:String(item.className||"").slice(0,30),year:String(item.year||""),description:String(item.description||"").slice(0,500),url:String(item.sourceUrl),storagePath:"",published:true,sourceTitle:String(item.sourceTitle||""),sourceUrl:String(item.sourceUrl),createdBy:uid,createdAt:FieldValue.serverTimestamp(),aiDiscovered:true});
       await ref.update({status:"approved",publishedContentId:contentRef.id,reviewedBy:uid,reviewedAt:FieldValue.serverTimestamp()});
