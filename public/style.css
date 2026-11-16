@@ -683,3 +683,10 @@ a{color:#347fc0}
  .ef-chat-top .ef-icon-btn{display:inline-flex;align-items:center;justify-content:center}
  .ef-chat-sidebar.mobile-open:after{content:"";position:fixed;inset:0 0 0 100%;width:100vw;background:#15243b66;pointer-events:none}
 }
+
+@media(min-width:801px){
+ .ef-chat-page.history-hidden{grid-template-columns:minmax(0,1fr)}
+ .ef-chat-page.history-hidden .ef-chat-sidebar{display:none}
+ .ef-chat-page .ef-icon-btn{display:inline-flex;align-items:center;justify-content:center}
+ .ef-chat-page .ef-history-close{display:grid;place-items:center}
+}
