@@ -119,7 +119,7 @@ async function showStudentProfileSetup(current,profile={}){
     }catch(e){$("profileSetupStatus").textContent=e.message;button.disabled=false}
   };
 }
-const studentTabs=[["home","डैशबोर्ड"],["progress","मेरी प्रगति"],["aichat","AI पढ़ाई सहायक"],["notices","सूचनाएँ"],["quiz","ऑनलाइन टेस्ट"],["notes","स्टडी नोट्स"],["pyq","पिछले वर्षों के प्रश्न"],["leaderboard","मेरिट सूची"],["results","मेरे परिणाम"],["doubts","सवाल पूछें"],["tasks","आज के लक्ष्य"],["planner","पढ़ाई की योजना"],["cards","फ्लैशकार्ड"]];
+const studentTabs=[["home","Dashboard"],["progress","My Progress"],["aichat","AI Study Tutor"],["notices","Notices"],["quiz","Online Tests"],["notes","Study Notes"],["pyq","Previous Year Papers"],["leaderboard","Leaderboard"],["results","My Results"],["doubts","Ask a Question"],["tasks","Daily Goals"],["planner","Study Planner"],["cards","Flashcards"]];
 function closeWorkspaceMenu(){
   $("app").classList.remove("menu-open");
   $("menuToggle").setAttribute("aria-expanded","false");
@@ -128,7 +128,7 @@ function render(){
   const premiumAction=$("premiumTopAction");
   if(premiumAction){premiumAction.hidden=false;premiumAction.style.display="inline-flex";}
   let tabs=studentTabs.filter(x=>x[0]!=="premium");
-  if(role==="teacher")tabs=[["home","डैशबोर्ड"],["notices","सूचनाएँ"],["teacher","शिक्षक कार्यक्षेत्र"],["analytics","प्रदर्शन रिपोर्ट"]];
+  if(role==="teacher")tabs=[["home","Dashboard"],["notices","Notices"],["teacher","Teacher Workspace"],["analytics","Performance Reports"]];
   if(role==="admin")tabs=[["home","Dashboard"],["aichat","AI Study Tutor"],["ainotes","AI Notes PDF"],["notices","Notices"],["teacher","Teacher Workspace"],["pyqdiscover","AI PYQ Finder"],["memberships","Premium Members"],["admin","Management"],["activity","Activity Log"]];
   if(role==="superadmin")tabs=[["home","Dashboard"],["aichat","AI Study Tutor"],["ainotes","AI Notes PDF"],["notices","Notices"],["overview","Institution Report"],["teacher","Teacher Workspace"],["pyqdiscover","AI PYQ Finder"],["memberships","Premium Members"],["admin","Management"],["activity","Activity Log"],["super","System Control"]];
   const pages={overview:superOverviewPage,progress:studentProgressPage,analytics:teacherAnalyticsPage,activity:adminActivityPage,pyqdiscover:pyqDiscoveryAdminPage,home:role==="superadmin"?superHomePage:homePage,aichat:()=>window.aiChatPage(),ainotes:()=>window.aiNotesPage(),notices:importantNoticesPage,quiz:quizPage,notes:notesPage,pyq:pyqPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,memberships:membershipAdminPage,admin:adminPage,aiquestions:aiQuestionBankPage,createquiz:createQuizPage,objectivebuilder:()=>quizBuilderPage("objective"),subjectivebuilder:()=>quizBuilderPage("subjective"),notesupload:()=>contentUploadPage("note"),pyqupload:()=>contentUploadPage("pyq"),super:superPage};
@@ -698,7 +698,7 @@ async function contentUploadPage(kind){
         }
       }
       alertMsg(files.length?files.length+" "+title+" files upload हो गईं।":title+" link publish हो गया।");
-      $(prefix+"Title").value="";$(prefix+"Subject").value="";if(isPyq){$("pyqClass").value="";$("pyqYear").value=""}$(prefix+"Description").value="";$(prefix+"Url").value="";$(prefix+"File").value="";$(prefix+"Status").textContent="Upload पूरा हुआ।";await refresh();
+      $(prefix+"Title").value="";$(prefix+"Subject").value="";if(isPyq){$("pyqBoard").value="";$("pyqClass").value="";$("pyqYear").value=""}$(prefix+"Description").value="";$(prefix+"Url").value="";$(prefix+"File").value="";$(prefix+"Status").textContent="Upload पूरा हुआ।";await refresh();
     }catch(e){$(prefix+"Status").textContent=e.message;alertMsg(e.message)}finally{b.disabled=false}
   };
   refresh();
