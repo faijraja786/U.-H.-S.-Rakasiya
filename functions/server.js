@@ -567,7 +567,7 @@ async function run(name, req) {
         results.push({id:ref.id,...record,createdAt:null});
       }
       await recordAdminActivity(uid,"discover","pyq",board+"-"+className+"-"+year,{subject,count:results.length});
-      return {results,checkedSources:sources.length};
+      return {results,checkedSources:sources.length,searchQueries:candidate.groundingMetadata?.webSearchQueries||[]};
     }
     case "listPyqDiscovery": {
       await requireAdmin(req);
