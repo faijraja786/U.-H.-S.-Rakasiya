@@ -129,9 +129,9 @@ function render(){
   if(premiumAction){premiumAction.hidden=false;premiumAction.style.display="inline-flex";}
   let tabs=studentTabs.filter(x=>x[0]!=="premium");
   if(role==="teacher")tabs=[["home","डैशबोर्ड"],["notices","सूचनाएँ"],["teacher","शिक्षक कार्यक्षेत्र"],["analytics","प्रदर्शन रिपोर्ट"]];
-  if(role==="admin")tabs=[["home","डैशबोर्ड"],["aichat","AI पढ़ाई सहायक"],["ainotes","AI नोट्स PDF"],["notices","सूचनाएँ"],["teacher","शिक्षक कार्यक्षेत्र"],["memberships","प्रीमियम सदस्य"],["admin","प्रबंधन"],["activity","गतिविधि लॉग"]];
-  if(role==="superadmin")tabs=[["home","डैशबोर्ड"],["aichat","AI पढ़ाई सहायक"],["ainotes","AI नोट्स PDF"],["notices","सूचनाएँ"],["overview","संस्थान रिपोर्ट"],["teacher","शिक्षक कार्यक्षेत्र"],["memberships","प्रीमियम सदस्य"],["admin","प्रबंधन"],["activity","गतिविधि लॉग"],["super","मुख्य नियंत्रण"]];
-  const pages={overview:superOverviewPage,progress:studentProgressPage,analytics:teacherAnalyticsPage,activity:adminActivityPage,home:role==="superadmin"?superHomePage:homePage,aichat:()=>window.aiChatPage(),ainotes:()=>window.aiNotesPage(),notices:importantNoticesPage,quiz:quizPage,notes:notesPage,pyq:pyqPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,memberships:membershipAdminPage,admin:adminPage,aiquestions:aiQuestionBankPage,createquiz:createQuizPage,objectivebuilder:()=>quizBuilderPage("objective"),subjectivebuilder:()=>quizBuilderPage("subjective"),notesupload:()=>contentUploadPage("note"),pyqupload:()=>contentUploadPage("pyq"),super:superPage};
+  if(role==="admin")tabs=[["home","Dashboard"],["aichat","AI Study Tutor"],["ainotes","AI Notes PDF"],["notices","Notices"],["teacher","Teacher Workspace"],["pyqdiscover","AI PYQ Finder"],["memberships","Premium Members"],["admin","Management"],["activity","Activity Log"]];
+  if(role==="superadmin")tabs=[["home","Dashboard"],["aichat","AI Study Tutor"],["ainotes","AI Notes PDF"],["notices","Notices"],["overview","Institution Report"],["teacher","Teacher Workspace"],["pyqdiscover","AI PYQ Finder"],["memberships","Premium Members"],["admin","Management"],["activity","Activity Log"],["super","System Control"]];
+  const pages={overview:superOverviewPage,progress:studentProgressPage,analytics:teacherAnalyticsPage,activity:adminActivityPage,pyqdiscover:pyqDiscoveryAdminPage,home:role==="superadmin"?superHomePage:homePage,aichat:()=>window.aiChatPage(),ainotes:()=>window.aiNotesPage(),notices:importantNoticesPage,quiz:quizPage,notes:notesPage,pyq:pyqPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,memberships:membershipAdminPage,admin:adminPage,aiquestions:aiQuestionBankPage,createquiz:createQuizPage,objectivebuilder:()=>quizBuilderPage("objective"),subjectivebuilder:()=>quizBuilderPage("subjective"),notesupload:()=>contentUploadPage("note"),pyqupload:()=>contentUploadPage("pyq"),super:superPage};
   // Internal workflow pages are intentionally not sidebar items. Keep them routable.
   if(!tabs.some(x=>x[0]===tab)&&!pages[tab])tab=tabs[0][0];
   tabs=tabs.filter(x=>x[0]!=="premium");
@@ -632,6 +632,32 @@ async function importantNoticesPage(){
     }catch(e){$("noticeStatus").textContent=e.message;alertMsg(e.message)}finally{b.disabled=false}
   };
   await refresh();
+}
+
+
+async function pyqDiscoveryAdminPage(){
+ if(!["admin","superadmin"].includes(role))return;
+ panel("AI PYQ Finder",'<div class="ef-library-intro"><h2>Discover Previous Year Papers</h2><p>AI searches the web for real board question papers. Every result stays private until an Admin or Super Admin reviews and publishes it.</p></div><section class="item"><div class="grid"><div><label>Board</label><input id="discoverBoard" placeholder="e.g. CBSE, Bihar Board, CISCE"></div><div><label>Class</label><select id="discoverClass"><option value="">Select class</option>'+Array.from({length:12},(_,i)=>'<option value="Class '+(i+1)+'">Class '+(i+1)+'</option>').join("")+'</select></div><div><label>Subject</label><input id="discoverSubject" placeholder="e.g. Mathematics"></div><div><label>Exam Year</label><input id="discoverYear" type="number" min="2000" max="2100" placeholder="e.g. 2025"></div></div><button id="runPyqDiscovery" class="success-action">Search the Web with AI</button><p id="discoverStatus" class="hint">AI will look for official board archives and verified paper links.</p></section><section class="item"><div class="ef-preview-publish"><h3>Pending Review</h3><button id="refreshPyqDiscovery" class="secondary">Refresh</button></div><div id="pyqDiscoveryResults">Loading…</div></section>');
+ const status=$("discoverStatus"),results=$("pyqDiscoveryResults");
+ async function refresh(){
+  results.textContent="Loading pending papers…";
+  try{
+   const data=await call("listPyqDiscovery"),rows=data.results||[];
+   results.innerHTML=rows.length?rows.map(x=>'<article class="ef-library-card"><div class="question-meta"><span>'+esc(x.board||"Board")+'</span><span>'+esc(x.className||"")+' • '+esc(x.year||"")+'</span></div><h3>'+esc(x.title||"Question Paper")+'</h3><p>'+esc(x.subject||"")+' — '+esc(x.description||"")+'</p><p><a href="'+esc(x.sourceUrl||"#")+'" target="_blank" rel="noopener noreferrer">Review Source Website ↗</a></p><div class="overview-actions"><button data-approve-pyq="'+esc(x.id)+'">Approve & Publish</button><button class="danger" data-reject-pyq="'+esc(x.id)+'">Reject</button></div></article>').join(""):'<div class="empty-state">No papers are waiting for review.</div>';
+   results.querySelectorAll("[data-approve-pyq]").forEach(b=>b.onclick=async()=>{b.disabled=true;try{await call("reviewPyqDiscovery",{id:b.dataset.approvePyq,decision:"approve"});await refresh()}catch(e){alertMsg(e.message);b.disabled=false}});
+   results.querySelectorAll("[data-reject-pyq]").forEach(b=>b.onclick=async()=>{b.disabled=true;try{await call("reviewPyqDiscovery",{id:b.dataset.rejectPyq,decision:"reject"});await refresh()}catch(e){alertMsg(e.message);b.disabled=false}});
+  }catch(e){results.textContent=e.message}
+ }
+ $("refreshPyqDiscovery").onclick=refresh;
+ $("runPyqDiscovery").onclick=async()=>{
+  const b=$("runPyqDiscovery"),board=$("discoverBoard").value.trim(),className=$("discoverClass").value,subject=$("discoverSubject").value.trim(),year=String($("discoverYear").value||"").trim();
+  if(!board||!className||!subject||!/^20\\d{2}$/.test(year)||Number(year)>2100){status.textContent="Enter Board, Class, Subject and a valid four-digit year.";return}
+  b.disabled=true;status.textContent="Searching the web and checking source links…";
+  try{const data=await call("discoverPyqPapers",{board,className,subject,year});status.textContent=(data.results||[]).length+" possible paper(s) found and added to Pending Review.";await refresh()}
+  catch(e){status.textContent=e.message}
+  finally{b.disabled=false}
+ };
+ await refresh();
 }
 
 async function contentUploadPage(kind){
