@@ -101,7 +101,12 @@ onAuthStateChanged(auth,async u=>{
     tab="home";
     if(role==="student"&&(!profile.displayName||!profile.className)){showStudentProfileSetup(u,profile);return;}
     render();
-  }catch(e){await signOut(u).catch(()=>{});openLogin();msg("Role verification failed: "+e.message)}
+  }catch(e){
+    console.error("EduFuture role verification failed:",e);
+    openApp();
+    panel("Connection issue",'<p class="error">We could not verify your account right now. Your sign-in session has been kept safe. Check your internet connection and try again.</p><button id="retryRoleVerification" class="primary">Retry</button>');
+    $("retryRoleVerification").onclick=()=>window.location.reload();
+  }
 });
 
 async function showStudentProfileSetup(current,profile={}){
