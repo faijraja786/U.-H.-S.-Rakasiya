@@ -528,7 +528,7 @@ async function run(name, req) {
       const subject=String(d.subject||"").trim().slice(0,80);
       const year=String(d.year||"").trim();
       if(!topic) fail("invalid-argument","Enter a topic to search for.");
-      if(!/^20\\d{2}$/.test(year)||Number(year)>2100) fail("invalid-argument","A valid four-digit Year is required.");
+      if(!/^20\d{2}$/.test(year)||Number(year)>2100) fail("invalid-argument","A valid four-digit Year is required.");
       const apiKey=String(process.env.GEMINI_API_KEY||"").trim();
       if(!apiKey) fail("failed-precondition","Gemini API key is not configured on the server.");
       const prompt=[
@@ -542,7 +542,7 @@ async function run(name, req) {
         "Requested board: "+(board||"Any Indian school board"),
         "Requested class: "+(className||"Any class"),
         "Requested subject: "+(subject||"Any subject")
-      ].join("\\n");
+      ].join("\n");
       const endpoint="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key="+encodeURIComponent(apiKey);
       const response=await geminiHttpsRequest(endpoint,JSON.stringify({
         contents:[{role:"user",parts:[{text:prompt}]}],
@@ -553,15 +553,15 @@ async function run(name, req) {
       if(!response.ok)fail(response.status===429?"resource-exhausted":"unavailable",payload.error?.message||"AI web search is temporarily unavailable.");
       const candidate=payload.candidates?.[0]||{};
       let raw=String(candidate.content?.parts?.map(x=>x.text||"").join("")||"").trim();
-      raw=raw.replace(/^\\x60{3}(?:json)?\\s*/i,"").replace(/\\s*\\x60{3}$/,"");
+      raw=raw.replace(/^\x60{3}(?:json)?\s*/i,"").replace(/\s*\x60{3}$/,"");
       let found=[];try{found=JSON.parse(raw)}catch{
         const first=raw.indexOf("["),last=raw.lastIndexOf("]");
         if(first>=0&&last>first){try{found=JSON.parse(raw.slice(first,last+1))}catch{}}
       }
       if(!Array.isArray(found))fail("unavailable","AI search returned an unreadable result. Please try again.");
       const chunks=candidate.groundingMetadata?.groundingChunks||[];
-      const sources=chunks.map(x=>x.web).filter(x=>x&&/^https?:\\/\\//i.test(String(x.uri||"")));
-      const normalizeUrl=value=>{try{const u=new URL(String(value));u.hash="";u.search="";return u.toString().replace(/\\/$/,"").toLowerCase()}catch{return ""}};
+      const sources=chunks.map(x=>x.web).filter(x=>x&&/^https?:\/\//i.test(String(x.uri||"")));
+      const normalizeUrl=value=>{try{const u=new URL(String(value));u.hash="";u.search="";return u.toString().replace(/\/$/,"").toLowerCase()}catch{return ""}};
       const grounded=new Map(sources.map(source=>[normalizeUrl(source.uri),source]));
       const results=[];
       for(const item of found.slice(0,12)){
