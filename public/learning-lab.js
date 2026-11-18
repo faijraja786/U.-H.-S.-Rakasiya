@@ -48,28 +48,30 @@ document.addEventListener("click",async event=>{
  event.preventDefault();
  const chat=$("tutorChat");if(!chat)return;
  if($("customAiTestForm")){$("customAiTestForm").scrollIntoView({behavior:"smooth"});return;}
- const form=document.createElement("section");form.id="customAiTestForm";form.className="ef-custom-test-form";form.innerHTML='<div class="ef-lab-title"><span>AI CHAT • PERSONAL PRACTICE</span><h3>Create your own test</h3><p>यह private practice test है—इसमें कोई rank या leaderboard नहीं दिखेगा।</p></div><div class="ef-form-grid"><div><label>Subject</label><input id="customTestSubject" placeholder="Maths / Science"></div><div><label>Chapter / Topic</label><input id="customTestTopic" placeholder="Electricity / Algebra"></div><div><label>Difficulty</label><select id="customTestDifficulty"><option>Easy</option><option selected>Medium</option><option>Hard</option></select></div><div><label>Questions</label><select id="customTestCount"><option>5</option><option selected>10</option><option>15</option></select></div></div><div class="ef-test-duration"><label>Test time limit</label><select id="customTestDuration"><option value="5">5 minutes</option><option value="10" selected>10 minutes</option><option value="15">15 minutes</option><option value="20">20 minutes</option><option value="30">30 minutes</option></select></div><button id="generateCustomAiTest" class="primary">Generate private test</button><p id="customTestStatus" class="hint"></p><div id="customTestQuestions"></div>';
+ const form=document.createElement("section");form.id="customAiTestForm";form.className="ef-custom-test-form";form.innerHTML='<div class="ef-lab-title"><span>EDUFUTURE • AI अभ्यास</span><h3>अपना अभ्यास टेस्ट बनाएँ</h3><p>यह निजी अभ्यास है। प्रश्न और विकल्प हर बार नए क्रम में दिखेंगे।</p></div><div class="ef-form-grid"><div><label>विषय</label><input id="customTestSubject" placeholder="जैसे: गणित / विज्ञान"></div><div><label>अध्याय / टॉपिक</label><input id="customTestTopic" placeholder="जैसे: प्रकाश / बीजगणित"></div><div><label>कठिनाई स्तर</label><select id="customTestDifficulty"><option value="Easy">आसान</option><option value="Medium" selected>मध्यम</option><option value="Hard">कठिन</option></select></div><div><label>प्रश्नों की संख्या</label><select id="customTestCount"><option>5</option><option selected>10</option><option>15</option><option>20</option><option>25</option><option>30</option><option>40</option><option>50</option></select></div></div><div class="ef-test-duration"><span>⏱ समय अपने-आप तय होगा</span><small>लगभग 1.2 मिनट प्रति प्रश्न • टेस्ट शुरू होते ही उलटी गिनती चलेगी</small></div><button id="generateCustomAiTest" class="primary">हिंदी में टेस्ट तैयार करें</button><p id="customTestStatus" class="hint" aria-live="polite"></p><div id="customTestQuestions"></div>';
  chat.append(form);form.scrollIntoView({behavior:"smooth"});
 
  $("generateCustomAiTest").onclick=async()=>{
-  const b=$("generateCustomAiTest"),subject=$("customTestSubject").value.trim(),topic=$("customTestTopic").value.trim(),difficulty=$("customTestDifficulty").value,count=Number($("customTestCount").value),minutes=Number($("customTestDuration").value),className=$("tutorClass")?.value||"Class 10";
-  if(!subject||!topic){$("customTestStatus").textContent="Subject और chapter भरें।";return;}
-  b.disabled=true;$("customTestStatus").textContent="प्रश्न तैयार हो रहे हैं… कृपया इस पेज को बंद न करें।";
+  const b=$("generateCustomAiTest"),subject=$("customTestSubject").value.trim(),topic=$("customTestTopic").value.trim(),difficulty=$("customTestDifficulty").value,count=Number($("customTestCount").value),minutes=Math.max(5,Math.ceil(count*1.2)),className=$("tutorClass")?.value||"Class 10";
+  if(!subject||!topic){$("customTestStatus").textContent="कृपया विषय और अध्याय दोनों भरें।";return;}
+  b.disabled=true;$("customTestStatus").textContent="आपके लिए हिंदी में "+count+" प्रश्न तैयार हो रहे हैं…";
   try{
    const result=await api("generatePrivateCustomTest",{className,subject,topic,difficulty,count});
-   const qs=(result.questions||[]).slice(0,count);
-   if(qs.length!==count||qs.some(q=>!q.question||!Array.isArray(q.options)||q.options.length!==4||!Number.isInteger(q.answer)||q.answer<0||q.answer>3))throw Error("AI ने अधूरे प्रश्न दिए। फिर से Generate करें।");
+   const rawQuestions=(result.questions||[]).slice(0,count);
+   if(rawQuestions.length!==count||rawQuestions.some(q=>!q.question||!Array.isArray(q.options)||q.options.length!==4||!Number.isInteger(q.answer)||q.answer<0||q.answer>3))throw Error("AI ने अधूरे प्रश्न दिए। फिर से प्रयास करें।");
+   const shuffleArray=a=>{const x=[...a];for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]];}return x;};
+   const qs=shuffleArray(rawQuestions).map(q=>{const opts=shuffleArray(q.options.map((label,i)=>({label,correct:i===q.answer})));return {...q,options:opts.map(x=>x.label),answer:opts.findIndex(x=>x.correct)};});
    let index=0,answers={},secondsLeft=minutes*60,timerId=null,finished=false;
    const resultBox=$("customTestQuestions");
    function finishTest(auto=false){
     if(finished)return;finished=true;if(timerId)clearInterval(timerId);
     const score=qs.reduce((n,q,i)=>n+(answers[i]===q.answer?1:0),0);
     const used=minutes*60-secondsLeft;
-    resultBox.innerHTML='<div class="ef-lab-result"><small>'+(auto?'समय पूरा • Auto submitted':'Private practice result')+'</small><strong>'+score+' / '+qs.length+'</strong><span>समय: '+Math.floor(used/60)+' मिनट '+(used%60)+' सेकंड • कोई rank या leaderboard नहीं।</span></div>'+qs.map((q,i)=>'<article class="ef-test-review"><b>Q'+(i+1)+'. '+esc(q.question)+'</b><p>आपका उत्तर: '+(answers[i]===undefined?"नहीं दिया":esc(q.options[answers[i]]))+'</p><p>सही उत्तर: '+esc(q.options[q.answer])+'</p><p>'+esc(q.explanation||"")+'</p></article>').join("");
+    resultBox.innerHTML='<div class="ef-lab-result"><small>'+(auto?'समय पूरा • टेस्ट अपने-आप जमा हुआ':'अभ्यास का परिणाम')+'</small><strong>'+score+' / '+qs.length+'</strong><span>समय: '+Math.floor(used/60)+' मिनट '+(used%60)+' सेकंड • कोई rank या leaderboard नहीं।</span></div>'+qs.map((q,i)=>'<article class="ef-test-review"><b>Q'+(i+1)+'. '+esc(q.question)+'</b><p>आपका उत्तर: '+(answers[i]===undefined?"उत्तर नहीं दिया":esc(q.options[answers[i]]))+'</p><p>सही उत्तर: '+esc(q.options[q.answer])+'</p><p>'+esc(q.explanation||"")+'</p></article>').join("");
    }
    function draw(){
     const q=qs[index];
-    resultBox.innerHTML='<div class="ef-test-top"><div><small>QUESTION '+(index+1)+' / '+qs.length+'</small><div class="ef-test-progress-track"><span style="width:'+((index+1)/qs.length*100)+'%"></span></div></div><div class="ef-test-clock" id="customTestTimer">⏱ '+Math.floor(secondsLeft/60)+':'+String(secondsLeft%60).padStart(2,"0")+'</div></div><h4>'+esc(q.question)+'</h4>'+q.options.map((o,i)=>'<label class="ef-test-option"><input type="radio" name="customTestAnswer" value="'+i+'" '+(answers[index]===i?"checked":"")+'>'+esc(o)+'</label>').join("")+'<div class="ef-test-nav">'+(index?'<button id="customTestPrev" class="secondary">Previous</button>':'<span></span>')+(index<qs.length-1?'<button id="customTestNext" class="primary">Next</button>':'<button id="customTestSubmit" class="primary">Submit test</button>')+'</div>';
+    resultBox.innerHTML='<div class="ef-test-top"><div><small>प्रश्न '+(index+1)+' / '+qs.length+'</small><div class="ef-test-progress-track"><span style="width:'+((index+1)/qs.length*100)+'%"></span></div></div><div class="ef-test-clock" id="customTestTimer">⏱ '+Math.floor(secondsLeft/60)+':'+String(secondsLeft%60).padStart(2,"0")+'</div></div><h4>'+esc(q.question)+'</h4>'+q.options.map((o,i)=>'<label class="ef-test-option"><input type="radio" name="customTestAnswer" value="'+i+'" '+(answers[index]===i?"checked":"")+'>'+esc(o)+'</label>').join("")+'<div class="ef-test-nav">'+(index?'<button id="customTestPrev" class="secondary">पिछला</button>':'<span></span>')+(index<qs.length-1?'<button id="customTestNext" class="primary">अगला</button>':'<button id="customTestSubmit" class="primary">टेस्ट जमा करें</button>')+'</div>';
     resultBox.querySelectorAll('input[name="customTestAnswer"]').forEach(x=>x.onchange=()=>answers[index]=Number(x.value));
     $("customTestPrev")?.addEventListener("click",()=>{index--;draw()});
     $("customTestNext")?.addEventListener("click",()=>{index++;draw()});
@@ -77,7 +79,7 @@ document.addEventListener("click",async event=>{
    }
    draw();
    timerId=setInterval(()=>{if(finished)return;secondsLeft=Math.max(0,secondsLeft-1);const clock=$("customTestTimer");if(clock)clock.textContent="⏱ "+Math.floor(secondsLeft/60)+":"+String(secondsLeft%60).padStart(2,"0");if(secondsLeft===0)finishTest(true);},1000);
-   $("customTestStatus").textContent="टेस्ट तैयार है। "+minutes+" मिनट का समय शुरू हो गया है।";
+   $("customTestStatus").textContent="टेस्ट तैयार है। आपके पास "+minutes+" मिनट हैं। शुभकामनाएँ!";
   }catch(e){$("customTestStatus").textContent=e.message;}finally{b.disabled=false;}
  };
 });
