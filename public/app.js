@@ -339,6 +339,12 @@ function formatAiNotesContent(source){
 async function contentLibraryPage(kind,title){
   const s=await getDocs(query(collection(db,"content"),where("published","==",true)));
   let docs=s.docs.filter(d=>(d.data().type||"note")===kind);
+  if(kind==="note"){
+    const profileSnap=await getDoc(doc(db,"roles",user.uid)),profile=profileSnap.exists()?profileSnap.data():{};
+    const className=String(profile.className||"").trim();
+    const norm=v=>String(v||"").toLowerCase().replace(/^(class|कक्षा)\s*/i,"").replace(/[^\p{L}\p{N}]/gu,"");
+    if(className)docs=docs.filter(d=>!d.data().className||norm(d.data().className)===norm(className));
+  }
   if(kind==="pyq"){
     const profileSnap=await getDoc(doc(db,"roles",user.uid)),profile=profileSnap.exists()?profileSnap.data():{};
     const className=String(profile.className||"").trim();
