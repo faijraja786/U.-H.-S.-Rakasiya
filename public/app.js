@@ -682,7 +682,7 @@ async function pyqDiscoveryAdminPage(){
 async function contentUploadPage(kind){
   if(role!=="admin"&&role!=="superadmin")return;
   const isPyq=kind==="pyq",prefix=isPyq?"pyq":"note",title=isPyq?"PYQ":"Notes";
-  panel("Upload "+title,'<button class="text-button" id="backContent">← Admin Dashboard</button><div class="builder-heading"><span class="eyebrow">EDUFUTURE • CONTENT LIBRARY</span><h2>'+title+' Upload</h2><p>एक बार में कई PDF / documents चुनें। हर फ़ाइल अलग item बनेगी।</p></div><label>'+title+' Title (एकाधिक फ़ाइलों के लिए आधार नाम)</label><input id="'+prefix+'Title" placeholder="'+title+' title"><label>Subject</label><input id="'+prefix+'Subject" placeholder="For example, Science">'+(isPyq?'<label>Board</label><input id="pyqBoard" maxlength="100" placeholder="e.g. CBSE, Bihar Board, CISCE"><label>Class</label><input id="pyqClass" maxlength="30" placeholder="e.g. Class 10"><label>Year</label><input id="pyqYear" type="number" min="2000" max="2100" placeholder="e.g. 2025">':'')+'<label>Description</label><textarea id="'+prefix+'Description" rows="3"></textarea><label>एक या अधिक PDF / DOC / PPT / Image (प्रति फ़ाइल अधिकतम 30 MB)</label><input id="'+prefix+'File" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp"><label>या एक Hosted File URL</label><input id="'+prefix+'Url" type="url" placeholder="https://..."><p id="'+prefix+'Status" class="hint">एकाधिक फ़ाइलें चुन सकते हैं।</p><button id="'+prefix+'Save" class="success-action">Upload '+title+'</button><section class="item"><h3>Manage '+title+'</h3><div id="'+prefix+'List">Loading…</div></section>');
+  panel("Upload "+title,'<button class="text-button" id="backContent">← Admin Dashboard</button><div class="builder-heading"><span class="eyebrow">EDUFUTURE • CONTENT LIBRARY</span><h2>'+title+' Upload</h2><p>एक बार में कई PDF / documents चुनें। हर फ़ाइल अलग item बनेगी।</p></div><label>'+title+' Title (एकाधिक फ़ाइलों के लिए आधार नाम)</label><input id="'+prefix+'Title" placeholder="'+title+' title"><label>Subject</label><input id="'+prefix+'Subject" placeholder="For example, Science">'+(isPyq?'<label>Board</label><input id="pyqBoard" maxlength="100" placeholder="e.g. CBSE, Bihar Board, CISCE"><label>Class</label><input id="pyqClass" maxlength="30" placeholder="e.g. Class 10"><label>Year</label><input id="pyqYear" type="number" min="2000" max="2100" placeholder="e.g. 2025">':'<label>Class (optional — leave blank for all classes)</label><input id="noteClass" maxlength="30" placeholder="e.g. Class 9, Class 10, Class 11, Class 12">')+'<label>Description</label><textarea id="'+prefix+'Description" rows="3"></textarea><label>एक या अधिक PDF / DOC / PPT / Image (प्रति फ़ाइल अधिकतम 30 MB)</label><input id="'+prefix+'File" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp"><label>या एक Hosted File URL</label><input id="'+prefix+'Url" type="url" placeholder="https://..."><p id="'+prefix+'Status" class="hint">एकाधिक फ़ाइलें चुन सकते हैं।</p><button id="'+prefix+'Save" class="success-action">Upload '+title+'</button><section class="item"><h3>Manage '+title+'</h3><div id="'+prefix+'List">Loading…</div></section>');
   $("backContent").onclick=()=>{tab="admin";render()};
   async function refresh(){
     try{
@@ -696,7 +696,7 @@ async function contentUploadPage(kind){
     const b=$(prefix+"Save"),files=Array.from($(prefix+"File").files||[]),url=$(prefix+"Url").value.trim();b.disabled=true;
     try{
       const base=$(prefix+"Title").value.trim(),subject=$(prefix+"Subject").value.trim();
-      const className=isPyq?$("pyqClass").value.trim():"",year=isPyq?String($("pyqYear").value).trim():"",board=isPyq?$("pyqBoard").value.trim():"";
+      const className=isPyq?$("pyqClass").value.trim():$("noteClass").value.trim(),year=isPyq?String($("pyqYear").value).trim():"",board=isPyq?$("pyqBoard").value.trim():"";
       if(!base||!subject)throw Error("Title और Subject भरना जरूरी है।");
       if(isPyq&&(!board||!className||!/^20\d{2}$/.test(year)||Number(year)>2100))throw Error("Enter Board, Class and a valid Year.");
       if(files.length&&url)throw Error("एक साथ files और Hosted URL न दें।");
@@ -714,7 +714,7 @@ async function contentUploadPage(kind){
         }
       }
       alertMsg(files.length?files.length+" "+title+" files upload हो गईं।":title+" link publish हो गया।");
-      $(prefix+"Title").value="";$(prefix+"Subject").value="";if(isPyq){$("pyqBoard").value="";$("pyqClass").value="";$("pyqYear").value=""}$(prefix+"Description").value="";$(prefix+"Url").value="";$(prefix+"File").value="";$(prefix+"Status").textContent="Upload पूरा हुआ।";await refresh();
+      $(prefix+"Title").value="";$(prefix+"Subject").value="";if(isPyq){$("pyqBoard").value="";$("pyqClass").value="";$("pyqYear").value=""}else if($("noteClass"))$("noteClass").value="";$(prefix+"Description").value="";$(prefix+"Url").value="";$(prefix+"File").value="";$(prefix+"Status").textContent="Upload पूरा हुआ।";await refresh();
     }catch(e){$(prefix+"Status").textContent=e.message;alertMsg(e.message)}finally{b.disabled=false}
   };
   refresh();
