@@ -973,6 +973,52 @@ async function run(name, req) {
       await ref.update({imagePaths:paths,updatedAt:FieldValue.serverTimestamp()});
       return {ok:true};
     }
+    case "generatePersonalStudyPlan": {
+      const currentRole=await roleOf(uid);
+      if(!["student","admin","superadmin"].includes(currentRole))fail("permission-denied","यह सुविधा केवल Student और Admin के लिए उपलब्ध है।");
+      const apiKey=String(process.env.GEMINI_API_KEY||"").trim();
+      if(!apiKey)fail("failed-precondition","Gemini API Key Render में उपलब्ध नहीं है।");
+      const profileSnap=await db.doc("roles/"+uid).get(),profile=profileSnap.exists?profileSnap.data():{};
+      const className=currentRole==="student"?String(profile.className||"").trim():String(d.className||"").trim();
+      if(!className)fail("failed-precondition","पहले Student Profile में अपनी कक्षा भरें।");
+      const weak=String(d.weak||"").trim().slice(0,1600),goal=String(d.goal||"").trim().slice(0,180);
+      if(!weak)fail("invalid-argument","कमजोर विषय और Chapters लिखें।");
+      const hours=Math.min(4,Math.max(1,Number(d.hours)||2));
+      const target=String(d.date||"निर्धारित नहीं").slice(0,30);
+      const prompt=["You are EduFuture, a supportive school study planner for an Indian student.","Create a realistic 7-day personal study plan in simple Hindi.","Class: "+className,"Daily available study time: "+hours+" hours. Keep the plan within this time and include short breaks.","Target date: "+target,"Weak subjects and chapters: "+weak,"Goal: "+goal,"Include a day-wise timetable, focused practice, revision, rest and a weekly self-check. Avoid unhealthy schedules, pressure, guarantees of marks, or invented syllabus claims."].join("\n");
+      const endpoint="https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key="+encodeURIComponent(apiKey);
+      const response=await geminiHttpsRequest(endpoint,JSON.stringify({contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:2400,temperature:0.35}}),60000);
+      let payload={};try{payload=JSON.parse(response.raw||"{}")}catch{}
+      if(!response.ok)fail(response.status===429?"resource-exhausted":"unavailable",payload.error?.message||"Study Plan अभी नहीं बन सका।");
+      const answer=String(payload.candidates?.[0]?.content?.parts?.map(x=>x.text||"").join("")||"").trim();
+      if(!answer)fail("unavailable","AI से Study Plan खाली मिला।");
+      return {answer,className};
+    }
+    case "generatePrivateCustomTest": {
+      const currentRole=await roleOf(uid);
+      if(!["student","admin","superadmin"].includes(currentRole))fail("permission-denied","यह सुविधा केवल Student और Admin के लिए उपलब्ध है।");
+      const apiKey=String(process.env.GEMINI_API_KEY||"").trim();
+      if(!apiKey)fail("failed-precondition","Gemini API Key Render में उपलब्ध नहीं है।");
+      const profileSnap=await db.doc("roles/"+uid).get(),profile=profileSnap.exists?profileSnap.data():{};
+      const className=currentRole==="student"?String(profile.className||"").trim():String(d.className||"").trim();
+      if(!className)fail("failed-precondition","पहले Student Profile में अपनी कक्षा भरें।");
+      const subject=String(d.subject||"").trim().slice(0,80),topic=String(d.topic||"").trim().slice(0,160);
+      const difficulty=["Easy","Medium","Hard"].includes(d.difficulty)?d.difficulty:"Medium";
+      const count=Math.min(15,Math.max(5,Number(d.count)||10));
+      if(!subject||!topic)fail("invalid-argument","Subject और Chapter भरें।");
+      const prompt=["Create exactly "+count+" original multiple-choice questions for an Indian school student.","Class: "+className,"Subject: "+subject,"Chapter/topic: "+topic,"Difficulty: "+difficulty,"Use accurate class-appropriate concepts. Exactly four options per question. Include a concise Hindi explanation.","Return ONLY valid JSON, no markdown, with this exact shape: {\"questions\":[{\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"answer\":0,\"explanation\":\"...\"}]}","The answer field must be a zero-based integer from 0 to 3. Do not include rank, leaderboard, student identity or scoring claims."].join("\n");
+      const endpoint="https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key="+encodeURIComponent(apiKey);
+      const response=await geminiHttpsRequest(endpoint,JSON.stringify({contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:3600,temperature:0.25,responseMimeType:"application/json"}}),75000);
+      let payload={};try{payload=JSON.parse(response.raw||"{}")}catch{}
+      if(!response.ok)fail(response.status===429?"resource-exhausted":"unavailable",payload.error?.message||"Private Test अभी नहीं बन सका।");
+      const raw=String(payload.candidates?.[0]?.content?.parts?.map(x=>x.text||"").join("")||"").trim().replace(/^\x60{3}(?:json)?/i,"").replace(/\x60{3}$/,"").trim();
+      let parsed;try{parsed=JSON.parse(raw)}catch{fail("unavailable","AI से सही Test format नहीं मिला। फिर कोशिश करें।");}
+      const questions=Array.isArray(parsed.questions)?parsed.questions:[];
+      if(questions.length!==count)fail("unavailable","AI ने पूरे प्रश्न नहीं दिए। फिर कोशिश करें।");
+      const clean=questions.map(q=>({question:String(q.question||"").slice(0,1200),options:Array.isArray(q.options)?q.options.slice(0,4).map(x=>String(x).slice(0,400)):[],answer:Number(q.answer),explanation:String(q.explanation||"").slice(0,1000)}));
+      if(clean.some(q=>!q.question||q.options.length!==4||!Number.isInteger(q.answer)||q.answer<0||q.answer>3))fail("unavailable","AI ने कुछ अधूरे प्रश्न दिए। फिर कोशिश करें।");
+      return {questions:clean,className,subject,topic,difficulty};
+    }
     case "aiTutorChat": {
       const currentRole = await roleOf(uid);
       if (!["student","admin","superadmin"].includes(currentRole)) fail("permission-denied","AI Study Chat केवल Student और Admin के लिए उपलब्ध है।");
