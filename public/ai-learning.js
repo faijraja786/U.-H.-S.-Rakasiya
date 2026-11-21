@@ -1,0 +1,168 @@
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { API_BASE } from "./firebase-config.js";
+
+const auth=getAuth(),db=getFirestore();
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+async function api(name,data={}){
+ const user=auth.currentUser;if(!user)throw Error("Please sign in first.");
+ const token=await user.getIdToken();
+ const response=await fetch(API_BASE.replace(/\/+$/,"")+"/api/"+encodeURIComponent(name),{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},body:JSON.stringify({data})});
+ const payload=await response.json().catch(()=>({}));
+ if(!response.ok)throw Error(payload.error?.message||"Unable to connect to the server.");
+ return payload.data;
+}
+async function extractStudyPdfText(file){
+ if(!window.pdfjsLib){
+  await new Promise((resolve,reject)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";s.onload=resolve;s.onerror=()=>reject(Error("PDF reader load नहीं हो सका।"));document.head.appendChild(s);});
+ }
+ const pdfjs=window.pdfjsLib;if(!pdfjs)throw Error("PDF reader उपलब्ध नहीं है।");
+ pdfjs.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+ const pdf=await pdfjs.getDocument({data:await file.arrayBuffer()}).promise;
+ const pages=[];for(let n=1;n<=Math.min(pdf.numPages,8);n++){const page=await pdf.getPage(n),content=await page.getTextContent();pages.push(content.items.map(x=>x.str||"").join(" "));}
+ const extracted=pages.join(" ").replace(/\s+/g," ").trim();
+ if(!extracted)throw Error("इस PDF में पढ़ने योग्य text नहीं मिला। Scanned PDF के लिए OCR वाला संस्करण चाहिए।");
+ return extracted.slice(0,1900);
+}
+function ensureMathJax(target){
+ if(!window.MathJax){
+  window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]],processEscapes:true,packages:{"[+]":["ams"]}},options:{skipHtmlTags:["script","noscript","style","textarea","pre","code"]},startup:{typeset:false}};
+  const script=document.createElement("script");script.src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js";script.async=true;document.head.appendChild(script);
+  script.addEventListener("load",()=>window.MathJax.typesetPromise?.([target]).catch(()=>{}),{once:true});
+ }else if(window.MathJax.typesetPromise)window.MathJax.typesetPromise([target]).catch(()=>{});
+}
+window.renderEduMath=ensureMathJax;
+function page(title,body){$("view").innerHTML='<section class="panel"><h2>'+esc(title)+'</h2>'+body+'</section>';}
+function status(id,text,isError=false){const el=$(id);if(el){el.textContent=text;el.className=isError?"error":"hint";}}
+function markdownHtml(source){
+ return String(source||"").split(/\r?\n/).map(line=>{
+  const safe=esc(line).replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/\*(.+?)\*/g,"<em>$1</em>");
+  if(/^###\s/.test(line))return "<h3>"+safe.replace(/^###\s/,"")+"</h3>";
+  if(/^##\s/.test(line))return "<h2>"+safe.replace(/^##\s/,"")+"</h2>";
+  if(/^#\s/.test(line))return "<h1>"+safe.replace(/^#\s/,"")+"</h1>";
+  if(/^\s*[-*]\s/.test(line))return "<p class=\"pdf-bullet\">• "+safe.replace(/^\s*[-*]\s/,"")+"</p>";
+  if(/^\d+[.)]\s/.test(line))return "<p class=\"pdf-bullet\">"+safe+"</p>";
+  return line.trim()?"<p>"+safe+"</p>":"<div class=\"pdf-gap\"></div>";
+ }).join("");
+}
+function pdfNotesContent(content){
+ let html=markdownHtml(content),index=0,items=[];
+ html=html.replace(/<h([1-3])>(.*?)<\/h[1-3]>/g,(_match,level,title)=>{const id="ef-pdf-section-"+(++index);items.push({id,title});return '<h'+level+' id="'+id+'">'+title+'</h'+level+'>';});
+ const toc=items.length?'<nav class="ef-pdf-toc"><h2>Table of Contents</h2><ol>'+items.map(x=>'<li><a href="#'+x.id+'">'+x.title+'</a></li>').join("")+'</ol></nav>':"";
+ return toc+html;
+}
+function openPdf(title,meta,content,images=[]){
+ const w=window.open("","_blank");if(!w){throw Error("Could not open the PDF print window. Allow pop-ups in your browser.");}
+ w.document.open();w.document.write('<!doctype html><html lang="hi"><head><meta charset="utf-8"><title>'+esc(title)+'</title><style>@page{size:A4;margin:18mm}body{font-family:Arial,"Noto Sans Devanagari",sans-serif;color:#172033;line-height:1.65;font-size:12pt}h1{font-size:22pt;color:#163a70;margin-bottom:4px}h2{font-size:16pt;color:#204d82;border-bottom:1px solid #dbe4ef;padding-bottom:4px;margin-top:22px}h3{font-size:13pt;color:#204d82;margin-top:16px}.meta{color:#53657d;border-bottom:2px solid #dbe4ef;padding-bottom:12px;margin-bottom:20px}.pdf-bullet{margin:4px 0 4px 16px}.pdf-gap{height:6px}.footer{margin-top:28px;padding-top:8px;border-top:1px solid #ddd;color:#667;font-size:9pt}@media print{button{display:none}}</style></head><body><h1>'+esc(title)+'</h1><div class="meta">'+esc(meta)+'</div>'+pdfNotesContent(content)+(images||[]).map(url=>'<img src="'+esc(url)+'" style="display:block;max-width:100%;max-height:650px;object-fit:contain;margin:18px auto;page-break-inside:avoid">').join("")+'<div class="footer">EduFuture • U.H.S. Rakasiya • AI-assisted study material — शिक्षक/विद्यार्थी उपयोग से पहले तथ्य जाँच लें।</div><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$","$"],["\\[","\\]"]],processEscapes:true}};<\/script><script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script><script>window.onload=()=>setTimeout(async()=>{try{await MathJax.typesetPromise()}catch(e){}window.print()},1000)<\/script></body></html>');
+ w.document.close();
+}
+async function renderExplainerVideo(scenes){
+ if(!window.MediaRecorder||!HTMLCanvasElement.prototype.captureStream)throw Error("Animated video export is not supported in this browser. Use the latest version of Chrome or Edge.");
+ const canvas=document.createElement("canvas");canvas.width=1280;canvas.height=720;
+ const ctx=canvas.getContext("2d");const stream=canvas.captureStream(24);
+ const mime=["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm"].find(x=>MediaRecorder.isTypeSupported(x));
+ if(!mime)throw Error("WebM recording is not available in this browser.");
+ const recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:2200000});
+ const chunks=[];recorder.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data);};
+ const finished=new Promise((resolve,reject)=>{recorder.onstop=()=>resolve(new Blob(chunks,{type:"video/webm"}));recorder.onerror=()=>reject(Error("Video recording was interrupted."));});
+ const duration=4800,total=duration*scenes.length,start=performance.now();
+ const wrap=(text,x,y,maxWidth,lineHeight,maxLines=4)=>{ctx.font="32px Arial, sans-serif";let line="",count=0;for(const word of String(text||"").split(/\s+/)){const test=line?line+" "+word:word;if(ctx.measureText(test).width>maxWidth&&line){ctx.fillText(line,x,y);y+=lineHeight;line=word;if(++count>=maxLines-1)break;}else line=test;}if(line)ctx.fillText(line,x,y);};
+ function frame(now){
+  const elapsed=now-start,index=Math.min(scenes.length-1,Math.floor(elapsed/duration)),local=elapsed-index*duration,scene=scenes[index]||{};
+  const fade=Math.min(1,local/350,(duration-local)/350);
+  const grad=ctx.createLinearGradient(0,0,1280,720);grad.addColorStop(0,"#10264d");grad.addColorStop(1,"#246a83");ctx.fillStyle=grad;ctx.fillRect(0,0,1280,720);
+  ctx.globalAlpha=Math.max(.15,Math.min(1,fade));ctx.fillStyle="#70d6c7";ctx.beginPath();ctx.arc(1110,150,105,0,Math.PI*2);ctx.fill();ctx.fillStyle="rgba(255,255,255,.10)";ctx.fillRect(0,0,1280,12);
+  ctx.fillStyle="#d7fff7";ctx.font="bold 24px Arial, sans-serif";ctx.fillText("EDUFUTURE  •  STUDY EXPLAINER",76,76);
+  ctx.fillStyle="#ffffff";ctx.font="bold 54px Arial, sans-serif";wrap(scene.heading||"महत्वपूर्ण बिंदु",76,220,1080,66,2);
+  ctx.fillStyle="#e8f2ff";wrap(scene.text||"",76,360,1050,52,5);
+  ctx.fillStyle="rgba(255,255,255,.72)";ctx.font="22px Arial, sans-serif";ctx.fillText("Scene "+(index+1)+" / "+scenes.length,76,655);
+  ctx.fillStyle="rgba(255,255,255,.22)";ctx.fillRect(76,680,1128,7);ctx.fillStyle="#70d6c7";ctx.fillRect(76,680,1128*(elapsed/total),7);
+  ctx.globalAlpha=1;
+  if(elapsed<total)requestAnimationFrame(frame);else recorder.stop();
+ }
+ recorder.start();requestAnimationFrame(frame);
+ const blob=await finished;stream.getTracks().forEach(t=>t.stop());
+ if(!blob.size)throw Error("The generated video is empty.");
+ return URL.createObjectURL(blob);
+}
+window.aiChatPage=async function(){
+ const snap=await getDoc(doc(db,"roles",auth.currentUser.uid)),profile=snap.exists()?snap.data():{};
+ const classValue=String(profile.className||""),isStudent=profile.role==="student",isAdmin=["admin","superadmin"].includes(profile.role),storageKey="edufuture-ai-chat-"+auth.currentUser.uid;
+ const classOptions=isStudent?'<option value="'+esc(classValue)+'">'+esc(classValue||"Select Class")+'</option>':['6','7','8','9','10','11','12'].map(x=>'<option value="Class '+x+'" '+(classValue.toLowerCase().replace("class ","")===x?"selected":"")+' >Class '+x+'</option>').join("");
+ let chats=[];try{chats=JSON.parse(localStorage.getItem(storageKey)||"[]");if(!Array.isArray(chats))chats=[];}catch{}
+ let activeId=chats[0]?.id||null;
+ const save=()=>{try{localStorage.setItem(storageKey,JSON.stringify(chats.slice(0,60)));}catch{}const c=chats.find(x=>x.id===activeId);if(c)api("saveAiTutorChat",{id:c.id,title:c.title,messages:c.messages,history:c.history||[]}).catch(e=>console.warn("Cloud history save:",e.message));};
+ const newId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+ $("view").innerHTML='<section class="ef-chat-page"><aside class="ef-chat-sidebar" id="efChatSidebar"><div class="ef-side-top"><div class="ef-brand-mini"><span>✦</span><div><b>EduFuture AI</b><small>Your personal learning assistant</small></div></div><button id="closeChatHistory" class="ef-history-close" type="button" aria-label="Close chat history">×</button><button id="newTutorChat" class="ef-new-chat">＋ New Chat</button></div><div class="ef-history-title">CHAT HISTORY</div><div id="tutorHistoryList" class="ef-history-list"></div><div class="ef-side-bottom"><span>Class '+esc(classValue||"—")+'</span><span>Study questions only</span></div></aside><section class="ef-chat-main"><header class="ef-chat-top"><button id="toggleChatHistory" class="ef-icon-btn" aria-label="Open chat history">☰</button><div><b>AI Study Tutor</b><small>Clear explanations • Step by step</small></div><button class="ef-chat-test-launch" type="button" data-ai-custom-test>＋ Create private test</button><span class="ef-class-pill">Class <select id="tutorClass" '+(isStudent?"disabled":"")+'>'+classOptions+'</select></span></header><div id="tutorChat" class="ef-chat-messages" aria-live="polite"></div><footer class="ef-chat-footer"><div class="ef-chat-compose"><button id="tutorAttach" type="button" aria-label="Attach an image or PDF">＋</button>'+(isAdmin?'<select id="tutorMediaMode" aria-label="AI Media Mode"><option value="chat">Chat</option><option value="image">Generate image</option><option value="video">Generate video</option></select>':"")+'<input id="tutorImage" type="file" accept="image/png,image/jpeg,image/webp,application/pdf,.pdf" hidden><textarea id="tutorQuestion" rows="1" maxlength="3000" placeholder="Ask your study question…"></textarea><button id="tutorSend" aria-label="Send question" type="button">➤</button></div><div id="tutorImagePreview" class="ef-image-preview" hidden></div><div class="ef-chat-footnote"><span id="tutorStatus">Math formulas are formatted like a textbook.</span><button id="clearTutorHistory" type="button">Clear History</button></div></footer></section></section>';
+ const chat=$("tutorChat"),list=$("tutorHistoryList");let selectedImage=null,selectedPdfText="",selectedPdfName="";
+ function renderChat(forceBottom=true){
+  const keepBottom=forceBottom||(chat.scrollHeight-chat.scrollTop-chat.clientHeight<110),previousTop=chat.scrollTop;
+  const c=chats.find(x=>x.id===activeId);chat.innerHTML="";
+  if(!c||!c.messages.length){chat.innerHTML='<div class="ef-welcome"><div class="ef-welcome-mark">✦</div><p class="ef-welcome-kicker">EDUFUTURE LEARNING</p><h1>What would you like to learn today?</h1><p>Class '+esc(classValue||"Select")+' के किसी भी विषय से सवाल पूछें। जवाब आसान हिन्दी में मिलेगा।</p><div class="ef-suggestions"><button data-prompt="Explain this question simply with an example.">Explain Simply</button><button data-prompt="Solve this math question step by step using standard formulas.">Step-by-Step Math</button><button data-prompt="Give me five practice questions with answers on this topic.">Practice Questions</button></div></div>';}
+  else c.messages.forEach((m,index)=>{const el=document.createElement("article");el.className="ef-message "+(m.role==="user"?"ef-user-message":"ef-ai-message");const label=document.createElement("b");label.textContent=m.role==="user"?"You":"✦ EduFuture";const body=document.createElement("div");body.className="ef-message-body";body.innerHTML=markdownHtml(m.text);el.append(label,body);if(m.role==="user"&&m.imageData){const img=document.createElement("img");img.className="ef-chat-image";img.src=m.imageData;img.alt="Image attached to the question";el.append(img);}if(m.mediaUrl&&m.mediaType==="image"){const media=document.createElement("img");media.className="ef-chat-image";media.src=m.mediaUrl;media.alt="AI-generated image";el.append(media);}if(m.mediaUrl&&m.mediaType==="video"){const media=document.createElement("video");media.className="ef-chat-video";media.src=m.mediaUrl;media.controls=true;media.playsInline=true;el.append(media);if(m.mediaDownloadUrl){const link=document.createElement("a");link.href=m.mediaDownloadUrl;link.download="edufuture-explainer.webm";link.textContent="Download Video (WebM)";link.className="ef-download-link";el.append(link);}}if(m.role==="model"&&m.text){const actions=document.createElement("div");actions.className="ef-answer-actions";actions.innerHTML='<button data-copy-answer="'+index+'">Copy</button><button data-regenerate="'+index+'">Regenerate</button><button data-answer-quiz="'+index+'">Create Quiz</button><button data-answer-feedback="'+index+'">Report Issue</button>';el.append(actions);}chat.append(el);});
+  chat.querySelectorAll("[data-prompt]").forEach(x=>x.onclick=()=>{$("tutorQuestion").value=x.dataset.prompt;$("tutorQuestion").focus()});
+  chat.querySelectorAll("[data-copy-answer]").forEach(b=>b.onclick=async()=>{const m=chats.find(x=>x.id===activeId)?.messages[Number(b.dataset.copyAnswer)];if(m)try{await navigator.clipboard.writeText(m.text);$("tutorStatus").textContent="उत्तर Copy हो गया।"}catch{$("tutorStatus").textContent="Copy नहीं हो सका।"}});
+  chat.querySelectorAll("[data-regenerate]").forEach(b=>b.onclick=async()=>{const c=chats.find(x=>x.id===activeId),i=Number(b.dataset.regenerate),q=c?.messages[i-1],m=c?.messages[i];if(!q||!m)return;$("tutorStatus").textContent="Generating a new answer…";try{const r=await api("aiTutorChat",{className:$("tutorClass").value,question:q.text,history:[]});m.text=r.answer;save();renderChat(true);$("tutorStatus").textContent="New answer is ready."}catch(e){$("tutorStatus").textContent=e.message}});
+  chat.querySelectorAll("[data-answer-quiz]").forEach(b=>b.onclick=async()=>{const m=chats.find(x=>x.id===activeId)?.messages[Number(b.dataset.answerQuiz)];if(!m)return;$("tutorStatus").textContent="Creating practice quiz…";try{const r=await api("generatePracticeFromAnswer",{answer:m.text,className:$("tutorClass").value});const box=document.createElement("section");box.className="ef-practice-card";box.innerHTML="<h3>Practice Quiz</h3>"+r.questions.map((q,i)=>'<p><b>'+(i+1)+'. '+esc(q.text)+'</b></p>'+q.options.map((o,j)=>'<label><input type="radio" name="practice'+i+'" value="'+j+'"> '+esc(o)+'</label>').join("")+'<button type="button" data-practice-check="'+i+'">Check</button><p id="practice-result-'+i+'"></p>').join("");chat.append(box);r.questions.forEach((q,i)=>box.querySelector('[data-practice-check="'+i+'"]').onclick=()=>{const v=box.querySelector('input[name="practice'+i+'"]:checked');box.querySelector("#practice-result-"+i).textContent=!v?"विकल्प Select।":Number(v.value)===q.answer?"Correct answer!":"Correct answer: "+q.options[q.answer]+" — "+q.explanation;});chat.scrollTop=chat.scrollHeight;$("tutorStatus").textContent="Quiz is ready."}catch(e){$("tutorStatus").textContent=e.message}});
+  chat.querySelectorAll("[data-answer-feedback]").forEach(b=>b.onclick=async()=>{const m=chats.find(x=>x.id===activeId)?.messages[Number(b.dataset.answerFeedback)];if(!m)return;const note=prompt("What is incorrect in this answer?");if(note===null)return;try{await api("saveAiTutorFeedback",{rating:"incorrect",text:note,question:chats.find(x=>x.id===activeId)?.messages[Number(b.dataset.answerFeedback)-1]?.text||"",chatId:activeId});$("tutorStatus").textContent="Feedback submitted."}catch(e){$("tutorStatus").textContent=e.message}});
+
+  ensureMathJax(chat);requestAnimationFrame(()=>{if(keepBottom)chat.scrollTop=chat.scrollHeight;else chat.scrollTop=previousTop;});
+ }
+ function renderHistory(){
+  list.innerHTML=chats.length?chats.map(c=>'<div class="ef-history-row '+(c.id===activeId?"active":"")+'"><button class="ef-history-open" data-open-chat="'+esc(c.id)+'">'+esc(c.title||"New Chat")+'</button><button class="ef-history-delete" data-delete-chat="'+esc(c.id)+'" aria-label="बातचीत हटाएँ">×</button></div>').join(""):'<p class="ef-history-empty">No previous chats yet.</p>';
+  list.querySelectorAll("[data-open-chat]").forEach(x=>x.onclick=()=>{activeId=x.dataset.openChat;renderHistory();renderChat();$("efChatSidebar").classList.remove("mobile-open")});
+  list.querySelectorAll("[data-delete-chat]").forEach(x=>x.onclick=async()=>{if(!confirm("Delete this chat from history on all devices?"))return;const id=x.dataset.deleteChat;chats=chats.filter(c=>c.id!==id);if(activeId===id)activeId=chats[0]?.id||null;save();try{await api("deleteAiTutorChat",{id})}catch(e){console.warn("Cloud history delete:",e.message)}renderHistory();renderChat()});
+ }
+ if(isStudent&&!classValue){$("tutorStatus").textContent="Please set your class in your student profile first.";$("tutorSend").disabled=true;return;}
+ try{const cloud=await api("listAiTutorChats");const local=new Map(chats.map(c=>[c.id,c]));(cloud.chats||[]).forEach(c=>{if(!local.has(c.id))local.set(c.id,{...c,updatedAt:Date.now()})});chats=Array.from(local.values()).slice(0,60);if(!activeId)activeId=chats[0]?.id||null;}catch(e){console.warn("Cloud history load:",e.message)}
+ renderHistory();renderChat();
+ $("newTutorChat").onclick=()=>{activeId=null;renderHistory();renderChat();$("efChatSidebar").classList.remove("mobile-open");$("tutorQuestion").focus()};
+ const sidebar=$("efChatSidebar"),page=sidebar.closest(".ef-chat-page"),historyToggle=$("toggleChatHistory"),isMobile=()=>window.matchMedia("(max-width: 800px)").matches,closeHistory=()=>{if(isMobile())sidebar.classList.remove("mobile-open");else page.classList.add("history-hidden");historyToggle.setAttribute("aria-expanded","false");historyToggle.setAttribute("aria-label","Open chat history")},openHistory=()=>{if(isMobile())sidebar.classList.add("mobile-open");else page.classList.remove("history-hidden");historyToggle.setAttribute("aria-expanded","true");historyToggle.setAttribute("aria-label","Close chat history")};historyToggle.onclick=()=>{const opened=isMobile()?sidebar.classList.contains("mobile-open"):!page.classList.contains("history-hidden");if(opened)closeHistory();else openHistory()};$("closeChatHistory").onclick=closeHistory;document.addEventListener("keydown",e=>{if(e.key==="Escape")closeHistory()});document.addEventListener("click",e=>{if(isMobile()&&sidebar.classList.contains("mobile-open")&&!e.target.closest("#efChatSidebar")&&!e.target.closest("#toggleChatHistory"))closeHistory()});
+ $("clearTutorHistory").onclick=()=>{if(!confirm("Clear all AI chat history on this device?"))return;chats=[];activeId=null;save();renderHistory();renderChat();$("tutorStatus").textContent="Chat history cleared."};
+ async function send(){
+  const button=$("tutorSend"),question=$("tutorQuestion").value.trim(),className=$("tutorClass").value.trim(),mediaMode=isAdmin?($("tutorMediaMode")?.value||"chat"):"chat";if(button.disabled||(!question&&!selectedImage&&!selectedPdfText))return;
+  if(!className){$("tutorStatus").textContent="Select a class.";return;}
+  let c=chats.find(x=>x.id===activeId);if(!c){c={id:newId(),title:question.slice(0,48),messages:[],history:[],updatedAt:Date.now()};chats.unshift(c);activeId=c.id;}
+  c.messages.push({role:"user",text:question||"Explain this image",...(selectedImage?{imageData:selectedImage.dataUrl}:{})});$("tutorQuestion").value="";save();renderHistory();renderChat();button.disabled=true;$("tutorStatus").textContent="Preparing your answer…";
+  try{
+   if(mediaMode==="image"||mediaMode==="video"){if(!isAdmin)throw Error("This feature is available to Admins only.");if(!question)throw Error("Enter instructions for the image or video.");if(mediaMode==="image"){ $("tutorStatus").textContent="AI is generating the image…";const media=await api("adminGenerateMedia",{kind:"image",prompt:question});c.messages.push({role:"model",text:"Your AI-generated image is ready.",mediaType:"image",mediaUrl:media.url});save();renderChat(true);$("tutorStatus").textContent="Image is ready.";return;} $("tutorStatus").textContent="AI is creating the storyboard…";const storyboard=await api("adminGenerateMedia",{kind:"video",prompt:question});$("tutorStatus").textContent="Creating an animated video from scenes…";const videoUrl=await renderExplainerVideo(storyboard.scenes||[]);c.messages.push({role:"model",text:"Your animated study explainer is ready. यह WebM वीडियो है; इसमें AI storyboard के आधार पर text slides और transitions हैं।",mediaType:"video",mediaUrl:videoUrl,mediaDownloadUrl:videoUrl});save();renderChat(true);$("tutorStatus").textContent="Video is ready. You can download it below.";return;}
+   const image=selectedImage;const tutorQuestion=selectedPdfText?("Attached book/PDF ("+selectedPdfName+") text: "+selectedPdfText+" Student question: "+question).slice(0,3000):(question||"इस चित्र को देखकर पढ़ाई से जुड़ी जानकारी समझाइए।");const result=await api("aiTutorChat",{className,subject:"सामान्य पढ़ाई",topic:"Class "+className+" का पाठ्यक्रम",question:tutorQuestion,history:c.history||[],image:image?{mimeType:image.mimeType,data:image.base64}:null});
+   const answer=String(result.answer||"");c.messages.push({role:"model",text:""});const target=c.messages[c.messages.length-1];
+   for(let i=0;i<answer.length;i+=36){target.text=answer.slice(0,i+36);renderChat(false);await new Promise(resolve=>setTimeout(resolve,24));}
+   c.history=[...(c.history||[]),{role:"user",text:question},{role:"model",text:answer}].slice(-8);save();renderChat(true);$("tutorStatus").textContent="Answer is ready.";
+  }catch(e){c.messages.push({role:"model",text:"Could not get an answer: "+e.message});save();renderChat(true);$("tutorStatus").textContent=e.message;}
+  finally{selectedImage=null;selectedPdfText="";selectedPdfName="";$("tutorImage").value="";$("tutorImagePreview").hidden=true;button.disabled=false;$("tutorQuestion").focus();}
+ }
+ $("tutorAttach").onclick=()=>$("tutorImage").click(); $("tutorImage").onchange=async e=>{const file=e.target.files?.[0];if(!file)return;if(file.type==="application/pdf"||file.name.toLowerCase().endsWith(".pdf")){if(file.size>8*1024*1024){$("tutorStatus").textContent="PDF 8 MB से छोटी रखें।";e.target.value="";return;}$("tutorStatus").textContent="PDF के शुरुआती 8 pages पढ़े जा रहे हैं…";try{selectedPdfText=await extractStudyPdfText(file);selectedPdfName=file.name;selectedImage=null;$("tutorImagePreview").hidden=false;$("tutorImagePreview").textContent="📄 "+file.name+" • PDF text ready";$("tutorStatus").textContent="PDF तैयार है। अब अपना सवाल लिखें।";}catch(err){selectedPdfText="";selectedPdfName="";$("tutorStatus").textContent=err.message;e.target.value="";}return;}if(!["image/jpeg","image/png","image/webp"].includes(file.type)||file.size>3*1024*1024){$("tutorStatus").textContent="JPG, PNG या WebP image 3 MB से छोटी चुनें; PDF 8 MB तक।";e.target.value="";return;}selectedPdfText="";selectedPdfName="";const reader=new FileReader();reader.onload=()=>{const dataUrl=String(reader.result||"");selectedImage={dataUrl,mimeType:file.type,base64:dataUrl.split(",")[1]};$("tutorImagePreview").hidden=false;const img=document.createElement("img");img.src=dataUrl;img.alt="Selected image";$("tutorImagePreview").replaceChildren(img);};reader.readAsDataURL(file);}; $("tutorSend").onclick=send;$("tutorQuestion").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}});
+};
+window.aiNotesPage=async function(){
+ const snap=await getDoc(doc(db,"roles",auth.currentUser.uid)),profile=snap.exists()?snap.data():{};
+ if(!["admin","superadmin"].includes(profile.role)){page("Access Denied","<p>This feature is available to Admins only.</p>");return;}
+ page("AI Notes PDF Studio",'<div class="ef-notes-studio"><header class="ef-notes-hero"><span>✦ EDUFUTURE NOTES STUDIO</span><h2>अपने निर्देश से Notes बनाइए</h2><p>कक्षा, विषय और अध्याय Select। AI आसान हिन्दी में पढ़ने योग्य Notes बनाएगा।</p></header><section class="ef-notes-form"><div class="builder-meta-grid"><div><label>कक्षा</label><input id="notesClass" placeholder="Class 10"></div><div><label>विषय</label><input id="notesSubject" placeholder="गणित"></div><div><label>अध्याय / Topic</label><input id="notesTopic" placeholder="वास्तविक संख्याएँ"></div><div><label>भाषा</label><select id="notesLanguage"><option>Hindi</option><option>English</option><option>Bilingual</option></select></div><div><label>Notes का प्रकार</label><select id="notesLevel"><option>Detailed Notes</option><option>Short Revision</option><option>Exam Preparation</option></select></div></div><label for="notesCommand">You क्या-क्या शामिल करवाना चाहते हैं?</label><textarea id="notesCommand" rows="5" maxlength="2500" placeholder="उदाहरण: किताब की भाषा में परिभाषाएँ, सभी सूत्र, हल किए उदाहरण, महत्वपूर्ण प्रश्न और उत्तर शामिल करें।"></textarea><p class="hint">✦ AI Youके अध्याय के अनुसार अपने-You शैक्षणिक चित्र और डायग्राम बनाएगा और Notes तथा PDF में जोड़ेगा।</p><div class="ef-notes-actions"><button id="generateNotes" class="success-action">✦ Notes तैयार करें</button><button id="notesClear" class="secondary">साफ करें</button></div><p id="notesStatus" class="hint" role="status"></p></section><section id="notesPreview" class="ef-notes-preview" hidden></section><section class="ef-recent-notes"><h3>Youके बनाए Notes</h3><p>यहाँ से PDF बनाएँ, विद्यार्थियों के लिए Publish करें या Delete करें।</p><div id="recentAiNotes">लोड हो रहा है…</div></section></div>');
+ async function recent(){
+  try{const result=await api("listAiNotes");$("recentAiNotes").innerHTML=(result.notes||[]).map(n=>'<article class="ef-note-row"><div><b>'+esc(n.topic)+'</b><small>'+esc(n.className)+' • '+esc(n.subject)+' • '+(n.published?'विद्यार्थियों के लिए प्रकाशित':'Draft')+'</small></div><div class="ef-note-actions"><button data-open-note="'+esc(n.id)+'">देखें / PDF</button><button data-publish-note="'+esc(n.id)+'" data-published="'+(n.published?"1":"0")+'">'+(n.published?"Unpublish":"Publish")+'</button><button class="ef-danger" data-delete-note="'+esc(n.id)+'">Delete</button></div></article>').join("")||"<p>अभी कोई Notes नहीं बने हैं।</p>";
+   $("recentAiNotes").querySelectorAll("[data-open-note]").forEach(b=>b.onclick=()=>{const n=result.notes.find(x=>x.id===b.dataset.openNote);if(n)showNotes(n)});
+   $("recentAiNotes").querySelectorAll("[data-publish-note]").forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api("publishAiNote",{id:b.dataset.publishNote,published:b.dataset.published!=="1"});await recent();status("notesStatus",b.dataset.published==="1"?"Notes unpublished.":"Notes published for students.")}catch(e){b.disabled=false;status("notesStatus",e.message,true)}});
+   $("recentAiNotes").querySelectorAll("[data-delete-note]").forEach(b=>b.onclick=async()=>{if(!confirm("Permanently delete these notes?"))return;b.disabled=true;try{await api("deleteAiNote",{id:b.dataset.deleteNote});await recent();$("notesPreview").hidden=true;status("notesStatus","Notes deleted.")}catch(e){b.disabled=false;status("notesStatus",e.message,true)}});
+  }catch(e){$("recentAiNotes").textContent=e.message}
+ }
+ async function uploadNoteImages(noteId,files){const paths=[];for(const file of files){const token=await auth.currentUser.getIdToken();const response=await fetch(API_BASE.replace(/\/+$/, "")+"/api/content-upload/"+encodeURIComponent(noteId),{method:"POST",headers:{Authorization:"Bearer "+token,"Content-Type":"application/octet-stream","X-File-Name":encodeURIComponent(file.name),"X-File-Type":file.type},body:file});const payload=await response.json().catch(()=>({}));if(!response.ok)throw Error(payload.error?.message||"Image upload failed.");paths.push(payload.data.storagePath);}await api("saveAiNoteImages",{id:noteId,paths});}
+function showNotes(n){
+  const box=$("notesPreview");box.hidden=false;box.innerHTML='<div class="ef-note-preview-head"><div><span>'+esc(n.className)+' • '+esc(n.subject)+'</span><h2>'+esc(n.topic)+'</h2></div><button id="downloadNotesPdf" class="success-action">Create PDF / Print</button></div><div class="ai-notes-content">'+markdownHtml(n.content)+'</div>'+(n.imageUrls||[]).map((url,index)=>'<figure class="ef-note-illustration"><img src="'+esc(url)+'" alt="AI द्वारा बनाया गया शैक्षणिक चित्र '+(index+1)+'" loading="lazy"><figcaption>अध्याय का शैक्षणिक चित्र</figcaption></figure>').join("")+(n.illustrationStatus==="failed"&&n.imageErrors?.length?'<p class="error">चित्र नहीं बन पाए: '+esc(n.imageErrors.join(" • "))+'</p>':"")+'<div class="ef-preview-publish"><span>'+(n.published?"विद्यार्थियों के लिए Published":"अभी Draft है")+'</span><button id="previewPublish" class="secondary">'+(n.published?"Unpublish":"Publish")+'</button></div>';
+  ensureMathJax(box);
+  $("downloadNotesPdf").onclick=()=>{try{openPdf(n.topic+" - Study Notes",n.className+" • "+n.subject+" • "+n.topic,n.content,n.imageUrls||[])}catch(e){status("notesStatus",e.message,true)}};
+  $("previewPublish").onclick=async()=>{try{await api("publishAiNote",{id:n.id,published:!n.published});n.published=!n.published;showNotes(n);await recent()}catch(e){status("notesStatus",e.message,true)}};
+ }
+ $("generateNotes").onclick=async()=>{
+  const button=$("generateNotes"),data={className:$("notesClass").value.trim(),subject:$("notesSubject").value.trim(),topic:$("notesTopic").value.trim(),language:$("notesLanguage").value,level:$("notesLevel").value,command:$("notesCommand").value.trim()};
+  if(button.disabled)return;
+  if(!data.className||!data.subject||!data.topic||!data.command){status("notesStatus","Enter the class, subject, chapter, and instructions.",true);return;}
+  button.disabled=true;status("notesStatus","AI is preparing notes in simple Hindi…");
+  try{const n=await api("generateAiNotes",data);showNotes(n);status("notesStatus",n.illustrationStatus==="complete"?"Notes और AI का बनाया Image is ready. PDF बनाएँ या विद्यार्थियों के लिए Publish करें।":n.illustrationStatus==="partial"?"Notes are ready. The illustration was only partially generated, but the notes are available.":"Notes are ready, but illustrations could not be generated: "+(n.imageErrors||[]).join(" • "));await recent()}
+  catch(e){status("notesStatus",e.message,true)}
+  finally{button.disabled=false}
+ };
+ $("notesClear").onclick=()=>{$("notesCommand").value="";$("notesPreview").hidden=true;status("notesStatus","")};
+ await recent();
+};

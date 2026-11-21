@@ -1,0 +1,23 @@
+name: EduFuture checks
+on:
+  push:
+    branches: [feature/complete-dashboards]
+  pull_request:
+    branches: [feature/complete-dashboards]
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install API dependencies
+        working-directory: functions
+        run: npm install
+      - name: Check JavaScript syntax
+        run: |
+          node --check functions/server.js
+          node --input-type=module --check < public/app.js
+          node --check public/sw.js
+          node -e "JSON.parse(require('fs').readFileSync('public/manifest.webmanifest','utf8'))"
