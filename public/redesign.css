@@ -46,3 +46,59 @@ button{background:#438fc9!important;color:#fff!important;border-radius:10px!impo
 .question-label{background:#edf2ff!important;color:#496fce!important}
 .empty-state{background:#f1f7fc!important;border:1px dashed #c8dced!important;border-radius:12px!important;padding:22px!important}
 #premiumTopAction{background:linear-gradient(120deg,#2996cf,#397fb8)!important}
+
+
+/* EduFuture 2026: unified professional blue design system */
+:root{
+  --ef-bg:#f4f8fc;--ef-surface:#ffffff;--ef-text:#18334d;--ef-muted:#667f96;
+  --ef-blue:#2584c7;--ef-blue-dark:#176aa8;--ef-blue-soft:#eaf4fc;
+  --ef-line:#dce8f2;--ef-shadow:0 8px 28px rgba(28,75,112,.07);
+}
+html,body{background:var(--ef-bg)!important;color:var(--ef-text)!important}
+::selection{background:#cfe8fb;color:#123b5b}
+a{color:var(--ef-blue-dark)}
+button,.button,.primary{background:var(--ef-blue)!important;color:#fff!important;border:1px solid var(--ef-blue)!important;transition:background .18s ease,border-color .18s ease,box-shadow .18s ease,transform .18s ease}
+button:hover,.button:hover,.primary:hover{background:var(--ef-blue-dark)!important;border-color:var(--ef-blue-dark)!important;box-shadow:0 5px 14px rgba(37,132,199,.16)!important}
+button:active,.button:active{transform:translateY(1px)}
+button:disabled{opacity:.55;cursor:not-allowed;transform:none!important;box-shadow:none!important}
+button.secondary,.secondary,.text-button{background:#f0f6fb!important;color:#285c83!important;border:1px solid #d9e8f4!important}
+button.secondary:hover,.secondary:hover,.text-button:hover{background:#e3f0fa!important}
+:where(a,button,input,textarea,select,[tabindex]):focus-visible{outline:3px solid #8cc8f0!important;outline-offset:2px!important}
+.panel,.stat,.item,.question,.result-card,.ef-library-card,.ef-feature-page{background:var(--ef-surface)!important;border-color:var(--ef-line)!important;box-shadow:var(--ef-shadow)!important}
+.panel{border-radius:18px!important}
+.panel>h2,.ef-page-heading h2{color:#1b4263!important;letter-spacing:-.025em}
+.eyebrow,.nav-section-label,.question-meta{letter-spacing:.055em}
+.admin-welcome,.dashboard-hero{background:linear-gradient(120deg,#eaf4fc 0%,#f7fbff 72%)!important;border:1px solid #d5e8f6!important}
+.admin-welcome h2,.dashboard-hero h2{color:#194d75!important}
+.stat{border-radius:15px!important;border-top:3px solid var(--ef-blue)!important}
+.stat strong{color:var(--ef-blue-dark)!important}
+.stat:nth-child(n){border-top-color:var(--ef-blue)!important}
+.stat:nth-child(n) strong{color:var(--ef-blue-dark)!important}
+.sidebar{background:#fff!important;border-right:1px solid var(--ef-line)!important}
+.sidebar-brand b{color:#194d75}
+.sidebar-logo{background:var(--ef-blue-soft)!important;color:var(--ef-blue-dark)!important}
+.sidebar .nav-link{color:#47647d!important;border:1px solid transparent!important;transition:background .16s ease,color .16s ease}
+.sidebar .nav-link:hover{background:#f2f7fb!important;color:#205f8e!important}
+.sidebar .nav-link.active,.sidebar .nav-link[data-tab].active{background:var(--ef-blue-soft)!important;color:#175f96!important;border-color:#d5e9f7!important}
+.sidebar .nav-link .nav-icon{background:#edf5fb!important;color:#287db6!important;border-radius:9px!important}
+.sidebar .nav-link.active .nav-icon{background:#dceefa!important;color:#176aa8!important}
+.app-main>.topbar{background:#fff!important;border-bottom:1px solid var(--ef-line)!important}
+#premiumTopAction{background:var(--ef-blue)!important;color:#fff!important;border:1px solid var(--ef-blue)!important}
+input,textarea,select{border-color:#d5e2ed!important;border-radius:10px!important}
+input:focus,textarea:focus,select:focus{border-color:#70b5e3!important;box-shadow:0 0 0 3px #e3f2fc!important;outline:none!important}
+table{border-color:var(--ef-line)}
+th{background:#f0f6fb;color:#315b7c}
+.empty-state{background:#f4f9fd!important;border-color:#cfe2f1!important}
+.quiz-status.available{background:#e8f5ed!important;color:#23734d!important}
+.quiz-status.submitted{background:#edf4fc!important;color:#28618e!important}
+.quiz-status.in-progress{background:#fff6e6!important;color:#94631b!important}
+.app-main>footer{color:#71879b!important}
+@media(max-width:800px){
+ .app-main>.topbar{box-shadow:0 3px 12px rgba(28,75,112,.04)!important}
+ .content{padding-top:16px!important}
+ .panel{border-radius:15px!important}
+ .sidebar{box-shadow:14px 0 34px rgba(19,54,82,.16)!important}
+}
+@media(prefers-reduced-motion:reduce){
+ button,.button,.sidebar .nav-link{transition:none!important}
+}
