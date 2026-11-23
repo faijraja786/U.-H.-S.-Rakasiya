@@ -346,3 +346,50 @@ input,select,textarea{min-height:43px;padding:10px 12px;font-size:14px}
  .ef-page-heading{margin-bottom:16px;padding-bottom:13px}
  .ef-page-heading h2{font-size:21px!important}
 }
+
+
+/* Login, AI workspace and document tools share the same visual language */
+.auth-card{width:min(92%,460px);margin:clamp(22px,7vh,70px) auto;padding:clamp(22px,4vw,34px);border:1px solid #dce8f2;border-radius:22px;background:#fff;box-shadow:0 18px 48px rgba(28,75,112,.09)}
+.auth-card h1{color:#194d75;font-size:30px;letter-spacing:-.03em}
+.auth-card .brand-mark{background:linear-gradient(145deg,#2584c7,#66b6e6);box-shadow:0 9px 22px rgba(37,132,199,.2)}
+.auth-card .login-mode-note{display:grid;gap:5px;margin:18px 0;padding:13px 14px;border-radius:12px;background:#eef6fc;border:1px solid #d9eaf6;color:#315d7e}
+.auth-card .login-mode-note b{font-size:12px}
+.auth-card .login-mode-note span{font-size:11px;line-height:1.5;color:#6e879d}
+.auth-card label{margin:12px 0 5px;color:#405d76}
+.auth-card input{margin:4px 0 10px}
+.auth-card .public-legal-links{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 14px;margin-top:20px;padding-top:14px;border-top:1px solid var(--ef-line)}
+.auth-card .public-legal-links a{font-size:10px;color:#6b879d;text-decoration:none}
+.role-badge{background:#eaf4fc!important;color:#236b9e!important;border:1px solid #d6e9f7}
+.ef-chat-page{height:calc(100dvh - 76px)!important;min-height:0!important;margin:0!important;border:0!important;border-radius:0!important}
+.ef-chat-main{min-height:0}
+.ef-chat-top{background:#fff!important;border-bottom-color:#dce8f2!important}
+.ef-chat-footer{background:#f8fbfe!important;padding-bottom:max(12px,env(safe-area-inset-bottom))!important}
+.ef-chat-compose{border-color:#d5e4f0!important;box-shadow:0 5px 18px rgba(28,75,112,.06)!important}
+.ef-chat-compose:focus-within{border-color:#80bde5!important;box-shadow:0 0 0 3px #eaf4fc!important}
+.ef-chat-compose textarea{font-family:inherit!important}
+.ef-chat-compose button{background:#2584c7!important;color:#fff!important}
+.ef-chat-compose button:hover{background:#176aa8!important}
+.ef-new-chat{background:#eaf4fc!important;color:#245f8b!important;border-color:#d4e7f5!important}
+.ef-chat-sidebar{background:#f6f9fc!important;border-right-color:#dce8f2!important}
+.ef-chat-top .ef-icon-btn{background:#edf5fb!important;color:#315d83!important;border-color:#dce8f2!important}
+.ef-message{box-shadow:0 3px 12px rgba(28,75,112,.05)!important}
+.ef-user-message{background:#eaf4fc!important;border-color:#d6e9f7!important;color:#294e6b!important}
+.ef-ai-message{border-color:#dce8f2!important}
+@media(max-width:800px){
+ .content:has(.ef-chat-page){max-width:none!important;height:calc(100dvh - 68px)!important;min-height:0!important;padding:0!important}
+ .ef-chat-page{height:100%!important;min-height:0!important}
+ .ef-chat-top{height:auto;min-height:64px;flex-wrap:wrap;padding:9px 10px;gap:8px}
+ .ef-chat-top>div{min-width:0;flex:1}
+ .ef-chat-top b{font-size:14px}
+ .ef-chat-top small{font-size:10px}
+ .ef-chat-test-launch{max-width:48%;white-space:normal}
+ .ef-class-pill{margin-left:0;padding:6px 8px;font-size:10px}
+ .ef-chat-messages{padding:14px 12px;gap:14px}
+ .ef-message{max-width:96%;padding:13px 14px}
+ .ef-message-body{font-size:14px}
+ .ef-chat-footer{padding:8px 9px 10px!important}
+ .ef-chat-compose{gap:7px;padding:8px;border-radius:15px}
+ .ef-chat-compose button{width:38px;height:38px;flex-basis:38px}
+ .ef-chat-compose textarea{font-size:14px;min-height:38px}
+ .ef-chat-footnote{font-size:10px}
+}
