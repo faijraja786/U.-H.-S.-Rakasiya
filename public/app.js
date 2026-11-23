@@ -140,7 +140,23 @@ function render(){
   // Internal workflow pages are intentionally not sidebar items. Keep them routable.
   if(!tabs.some(x=>x[0]===tab)&&!pages[tab])tab=tabs[0][0];
   tabs=tabs.filter(x=>x[0]!=="premium");
-  $("nav").innerHTML='<div class="nav-section-label">MENU</div>'+tabs.map(x=>'<button data-tab="'+x[0]+'" class="nav-link '+(tab===x[0]?"active":"")+'"><span class="nav-icon">'+({overview:"◈",home:"⌂",aichat:"✦",learning:"⚗",studyplan:"▤",ainotes:"▤",notices:"📢",quiz:"▤",notes:"▧",leaderboard:"♛",results:"◷",doubts:"✉",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜"}[x[0]]||"•")+'</span><span>'+x[1]+"</span></button>").join("");
+  const navGroups = [
+    {title:"OVERVIEW", ids:["home","overview"]},
+    {title:"LEARN", ids:["aichat","learning","studyplan","ainotes","notes","pyq","notices"]},
+    {title:"PRACTICE", ids:["quiz","createquiz","aiquestions","objectivebuilder","subjectivebuilder","results","progress","leaderboard","doubts","tasks","planner","cards"]},
+    {title:"MANAGE", ids:["teacher","analytics","pyqdiscover","memberships","admin","activity","super"]}
+  ];
+  const navIcon={overview:"◈",home:"⌂",aichat:"✦",learning:"⚗",studyplan:"▤",ainotes:"▤",notices:"◉",quiz:"▣",notes:"▧",pyq:"▤",leaderboard:"♛",results:"◷",doubts:"?",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜",progress:"↗",analytics:"▥",memberships:"◇",activity:"◷",pyqdiscover:"⌕"};
+  $("nav").innerHTML=navGroups.map(group=>{
+    const items=tabs.filter(x=>group.ids.includes(x[0]));
+    return items.length?'<div class="nav-group"><div class="nav-section-label">'+group.title+'</div>'+items.map(x=>'<button data-tab="'+x[0]+'" class="nav-link '+(tab===x[0]?"active":"")+'"><span class="nav-icon">'+(navIcon[x[0]]||"•")+'</span><span>'+x[1]+'</span></button>').join("")+'</div>':"";
+  }).join("");
+  const bottomItems=role==="student"?[["home","Home","⌂"],["learning","Learn","⚗"],["quiz","Tests","▣"],["profile","Profile","●"]]:[["home","Home","⌂"],["teacher","Workspace","▤"],["admin","Manage","⚙"],["profile","Profile","●"]];
+  const bottom=$("mobileBottomNav");
+  if(bottom){
+    bottom.innerHTML=bottomItems.map(x=>'<button type="button" data-bottom="'+x[0]+'" class="'+((x[0]===tab)?"active":"")+'"><span>'+x[2]+'</span><small>'+x[1]+'</small></button>').join("");
+    bottom.querySelectorAll("[data-bottom]").forEach(b=>b.onclick=()=>{const target=b.dataset.bottom;if(target==="profile"){$("profileMenu").hidden=false;$("profileToggle").setAttribute("aria-expanded","true");return}tab=target;render();});
+  }
   $("nav").querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render();closeWorkspaceMenu()});
   if($("premiumTopAction"))$("premiumTopAction").onclick=()=>{if($("premiumDialog")?.showModal)$("premiumDialog").showModal()};
   if($("premiumDialogClose"))$("premiumDialogClose").onclick=()=> $("premiumDialog").close();
