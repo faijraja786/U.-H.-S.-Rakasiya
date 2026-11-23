@@ -393,3 +393,5 @@ input,select,textarea{min-height:43px;padding:10px 12px;font-size:14px}
  .ef-chat-compose textarea{font-size:14px;min-height:38px}
  .ef-chat-footnote{font-size:10px}
 }
+
+.content:has(.ef-chat-page){max-width:none!important;height:calc(100dvh - 76px)!important;min-height:0!important;padding:0!important}
