@@ -332,6 +332,21 @@ async function run(name, req) {
       });
       return { ok: true, reportId: reportRef.id };
     }
+    case "getQuizQuestionReports": {
+      await requireAdmin(req);
+      const snap=await db.collection("quizQuestionReports").orderBy("createdAt","desc").limit(200).get();
+      return {reports:snap.docs.map(x=>({id:x.id,...x.data(),createdAt:x.data().createdAt?.toDate?.().toISOString?.()||null}))};
+    }
+    case "updateQuizQuestionReportStatus": {
+      await requireAdmin(req);
+      const reportId=String(d.reportId||"").trim();
+      const status=String(d.status||"").trim();
+      if(!reportId||!["reviewed","resolved"].includes(status))fail("invalid-argument","Valid report ID और status जरूरी हैं।");
+      const ref=db.doc("quizQuestionReports/"+reportId),snap=await ref.get();
+      if(!snap.exists)fail("not-found","Report नहीं मिली।");
+      await ref.update({status,reviewedBy:uid,updatedAt:FieldValue.serverTimestamp()});
+      return {ok:true};
+    }
     case "startQuiz": {
       if (await roleOf(uid) !== "student") fail("permission-denied", "केवल Student Quiz attempt कर सकता है।");
       const quizId = String(d.id || "");
