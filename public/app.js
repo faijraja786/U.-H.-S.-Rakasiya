@@ -53,7 +53,7 @@ let user=null, role="student", tab="home", activeQuiz=null, answers={}, timer=nu
 
 function msg(t,ok=false){$("authMessage").textContent=t;$("authMessage").className=ok?"success":"error"}
 function alertMsg(t){window.alert(t)}
-function panel(title,body){$("view").innerHTML='<section class="panel"><h2>'+esc(title)+'</h2>'+body+'</section>'}
+function panel(title,body){$("view").innerHTML='<section class="panel ef-page-panel"><header class="ef-page-heading"><span class="eyebrow">U.H.S. RAKASIYA • LEARNING WORKSPACE</span><h2>'+esc(title)+'</h2></header><div class="ef-page-body">'+body+'</div></section>'}
 function dateText(v){if(!v)return "—";const d=new Date(v);return Number.isNaN(d.getTime())?"—":d.toLocaleString("hi-IN")}
 function openApp(){ $("auth").hidden=true;$("app").hidden=false }
 function openLogin(){ $("auth").hidden=false;$("app").hidden=true }
