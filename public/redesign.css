@@ -329,3 +329,20 @@ input,select,textarea{min-height:43px;padding:10px 12px;font-size:14px}
  .ef-exam-actions{gap:8px}
  .leaderboard-banner{padding:18px!important}
 }
+
+
+/* Shared page header and content rhythm for every workspace screen */
+.ef-page-panel{padding:clamp(18px,2.6vw,30px)!important}
+.ef-page-heading{display:flex;flex-direction:column;align-items:flex-start;gap:7px;margin:0 0 22px;padding:0 0 16px;border-bottom:1px solid var(--ef-line)}
+.ef-page-heading .eyebrow{font-size:9px;font-weight:850;letter-spacing:.14em;color:#6c98b9}
+.ef-page-heading h2{margin:0!important;padding:0!important;font-size:clamp(21px,2.2vw,28px)!important;line-height:1.25!important;color:#1b4263!important;letter-spacing:-.025em}
+.ef-page-body{min-width:0}
+.ef-page-body>.grid:first-child{margin-top:0}
+.ef-page-body>.dashboard-hero:first-child,.ef-page-body>.admin-welcome:first-child{margin-top:0}
+.ef-page-body img,.ef-page-body video{max-width:100%;height:auto}
+.ef-page-body pre,.ef-page-body code{max-width:100%;overflow-x:auto}
+@media(max-width:800px){
+ .ef-page-panel{padding:15px!important}
+ .ef-page-heading{margin-bottom:16px;padding-bottom:13px}
+ .ef-page-heading h2{font-size:21px!important}
+}
