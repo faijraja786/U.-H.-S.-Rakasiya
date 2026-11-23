@@ -154,6 +154,7 @@ function render(){
   const bottomItems=role==="student"?[["home","Home","⌂"],["learning","Learn","⚗"],["quiz","Tests","▣"],["profile","Profile","●"]]:[["home","Home","⌂"],["teacher","Workspace","▤"],["admin","Manage","⚙"],["profile","Profile","●"]];
   const bottom=$("mobileBottomNav");
   if(bottom){
+    bottom.hidden = ["aichat","quiz"].includes(tab);
     bottom.innerHTML=bottomItems.map(x=>'<button type="button" data-bottom="'+x[0]+'" class="'+((x[0]===tab)?"active":"")+'"><span>'+x[2]+'</span><small>'+x[1]+'</small></button>').join("");
     bottom.querySelectorAll("[data-bottom]").forEach(b=>b.onclick=()=>{const target=b.dataset.bottom;if(target==="profile"){$("profileMenu").hidden=false;$("profileToggle").setAttribute("aria-expanded","true");return}tab=target;render();});
   }
