@@ -33,7 +33,7 @@ function ensureMathJax(target){
  }else if(window.MathJax.typesetPromise)window.MathJax.typesetPromise([target]).catch(()=>{});
 }
 window.renderEduMath=ensureMathJax;
-function page(title,body){$("view").innerHTML='<section class="panel"><h2>'+esc(title)+'</h2>'+body+'</section>';}
+function page(title,body){$("view").innerHTML='<section class="panel ef-page-panel"><header class="ef-page-heading"><span class="eyebrow">U.H.S. RAKASIYA • LEARNING WORKSPACE</span><h2>'+esc(title)+'</h2></header><div class="ef-page-body">'+body+'</div></section>';}
 function status(id,text,isError=false){const el=$(id);if(el){el.textContent=text;el.className=isError?"error":"hint";}}
 function markdownHtml(source){
  return String(source||"").split(/\r?\n/).map(line=>{
