@@ -102,3 +102,36 @@ th{background:#f0f6fb;color:#315b7c}
 @media(prefers-reduced-motion:reduce){
  button,.button,.sidebar .nav-link{transition:none!important}
 }
+
+
+/* Student dashboard: clear hierarchy and responsive learning actions */
+.ef-dashboard-hero{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:26px!important;min-height:230px!important;padding:clamp(22px,3.5vw,38px)!important;overflow:hidden!important;position:relative!important}
+.ef-hero-copy{position:relative;z-index:2;max-width:690px}
+.ef-hero-copy h2{font-size:clamp(25px,3.2vw,36px)!important;line-height:1.18!important;margin:12px 0!important;letter-spacing:-.035em}
+.ef-hero-copy p{color:#59758d!important;line-height:1.75!important;max-width:620px!important;margin:0 0 20px!important}
+.ef-hero-actions{display:flex;flex-wrap:wrap;gap:10px}
+.ef-hero-actions button{min-width:140px}
+.ef-hero-art{position:relative;flex:0 0 190px;width:190px;height:165px;display:grid;place-items:center}
+.ef-hero-symbol{width:94px;height:94px;display:grid;place-items:center;border-radius:28px;background:linear-gradient(145deg,#2584c7,#66b6e6);color:#fff;font-size:32px;font-weight:850;letter-spacing:-.06em;box-shadow:0 16px 35px #2584c733;transform:rotate(-7deg)}
+.ef-orbit{position:absolute;border:1px solid #9bc9e7;border-radius:50%;transform:rotate(-25deg)}
+.ef-orbit-one{width:155px;height:82px}
+.ef-orbit-two{width:180px;height:115px;transform:rotate(45deg);border-color:#c0dff2}
+.ef-float{position:absolute;background:#fff;border:1px solid #d9eaf6;border-radius:10px;padding:7px 10px;font-size:11px;font-weight:800;color:#276b9b;box-shadow:0 6px 16px #24577b12}
+.ef-float-top{right:0;top:12px}.ef-float-bottom{left:0;bottom:8px}
+.ef-section-heading{display:flex;align-items:end;justify-content:space-between;gap:12px;margin:28px 2px 13px}
+.ef-section-heading h3{font-size:18px;color:#214765;margin:4px 0 0;letter-spacing:-.02em}
+.ef-live-label{font-size:11px;color:#71879b;display:flex;align-items:center;gap:7px}
+.ef-live-label i{width:7px;height:7px;border-radius:50%;background:#31a477;display:inline-block;box-shadow:0 0 0 3px #e3f5ec}
+.ef-dashboard-stats{gap:12px!important}
+.ef-dashboard-stats .stat{min-width:0;padding:17px!important}
+.ef-dashboard-stats .stat strong{font-size:clamp(21px,2.3vw,27px)!important;overflow-wrap:anywhere}
+.ef-action-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.ef-action-card{display:flex!important;align-items:center!important;gap:12px!important;min-height:88px!important;padding:15px!important;text-align:left!important;background:#fff!important;color:#234761!important;border:1px solid #dce8f2!important;border-radius:14px!important;box-shadow:0 4px 14px #214d6c08!important}
+.ef-action-card:hover{background:#f5faff!important;border-color:#a9d1ec!important;box-shadow:0 8px 20px #214d6c12!important;transform:translateY(-2px)}
+.ef-action-card>span:nth-child(2){display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.ef-action-card b{font-size:13px;color:#214765}
+.ef-action-card small{font-size:11px;line-height:1.45;font-weight:500;color:#75899b}
+.ef-action-icon{flex:0 0 38px;width:38px;height:38px;display:grid;place-items:center;border-radius:11px;background:#eaf4fc;color:#267bb5;font-size:18px;font-weight:800}
+.ef-action-arrow{font-size:18px;color:#8aa9c0}
+@media(max-width:900px){.ef-action-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ef-hero-art{flex-basis:150px;width:150px}}
+@media(max-width:600px){.ef-dashboard-hero{min-height:0!important;align-items:flex-start!important;padding:20px!important}.ef-hero-art{flex:0 0 72px;width:72px;height:90px;margin-top:12px}.ef-hero-symbol{width:58px;height:58px;border-radius:18px;font-size:21px}.ef-orbit-one{width:78px;height:44px}.ef-orbit-two{width:85px;height:56px}.ef-float{font-size:9px;padding:4px 6px}.ef-float-top{right:-5px;top:0}.ef-float-bottom{left:-6px;bottom:0}.ef-hero-copy h2{font-size:24px!important}.ef-hero-copy p{font-size:13px}.ef-section-heading{align-items:flex-start;flex-direction:column}.ef-live-label{font-size:10px}.ef-action-grid{grid-template-columns:1fr}.ef-action-card{min-height:76px!important}.ef-dashboard-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
