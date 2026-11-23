@@ -308,6 +308,30 @@ async function run(name, req) {
         closesAt: closesAt?.toDate().toISOString() || null,
         resultsAt: resultsAt?.toDate().toISOString() || null };
     }
+    case "reportQuizQuestion": {
+      if (await roleOf(uid) !== "student") fail("permission-denied", "केवल Student प्रश्न report कर सकता है।");
+      const quizId = String(d.quizId || "").trim();
+      const questionId = String(d.questionId || "").trim();
+      const reason = String(d.reason || "").trim().slice(0, 500);
+      if (!quizId || !questionId || reason.length < 3) fail("invalid-argument", "Quiz, question और report reason जरूरी हैं।");
+      const quizRef = db.doc("quizzes/" + quizId);
+      const quizSnap = await quizRef.get();
+      if (!quizSnap.exists || quizSnap.data().status !== "published") fail("not-found", "Quiz उपलब्ध नहीं है।");
+      const questionSnap = await quizRef.collection("publicQuestions").doc(questionId).get();
+      if (!questionSnap.exists) fail("not-found", "Question नहीं मिला।");
+      const profileSnap = await db.doc("roles/" + uid).get();
+      const studentClass = profileSnap.exists ? profileSnap.data().className : "";
+      const quizClass = String(quizSnap.data().className || "").trim();
+      const generalClass = !quizClass || ["all", "general", "सभी"].includes(quizClass.toLowerCase());
+      if (!generalClass && normalizeClassName(studentClass) !== normalizeClassName(quizClass)) fail("permission-denied", "यह Quiz आपकी कक्षा के लिए नहीं है।");
+      const reportRef = db.collection("quizQuestionReports").doc();
+      await reportRef.set({
+        quizId, questionId, quizTitle: String(quizSnap.data().title || ""),
+        questionText: String(questionSnap.data().text || "").slice(0, 2000),
+        reason, reportedBy: uid, status: "open", createdAt: FieldValue.serverTimestamp()
+      });
+      return { ok: true, reportId: reportRef.id };
+    }
     case "startQuiz": {
       if (await roleOf(uid) !== "student") fail("permission-denied", "केवल Student Quiz attempt कर सकता है।");
       const quizId = String(d.id || "");
