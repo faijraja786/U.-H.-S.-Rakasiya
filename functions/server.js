@@ -1593,9 +1593,9 @@ app.post("/api/notice-upload/:id", express.raw({type:"application/octet-stream",
     if(!/^[A-Za-z0-9_-]{10,100}$/.test(id))fail("invalid-argument","Notice ID मान्य नहीं है।");
     await requireTeacher(req);
     if(!Buffer.isBuffer(req.body)||!req.body.length)fail("invalid-argument","खाली media upload नहीं हो सकता।");
-    if(req.body.length>50*1024*1024)fail("invalid-argument","Photo या video 50 MB से छोटी होनी चाहिए।");
+    if(req.body.length>20*1024*1024)fail("invalid-argument","Photo 20 MB से छोटी होनी चाहिए।");
     const mime=String(req.get("X-File-Type")||"").toLowerCase().split(";")[0];
-    if(!new Set(["image/jpeg","image/png","image/webp","image/gif","video/mp4","video/webm","video/quicktime"]).has(mime))fail("invalid-argument","केवल JPG, PNG, WEBP, GIF, MP4, WEBM या MOV स्वीकार है।");
+    if(!new Set(["image/jpeg","image/png","image/webp","image/gif"]).has(mime))fail("invalid-argument","Notice में केवल JPG, PNG, WEBP या GIF photo स्वीकार है।");
     let name=String(req.get("X-File-Name")||"notice-media");try{name=decodeURIComponent(name)}catch{}
     const safe=name.replace(/[^a-zA-Z0-9._-]/g,"_").slice(-100)||"notice-media";
     const path="notices/"+id+"/"+Date.now()+"-"+safe;
