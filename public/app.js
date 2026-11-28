@@ -159,7 +159,7 @@ function render(){
   tabs=tabs.filter(x=>x[0]!=="premium");
   const navGroups = [
     {title:"OVERVIEW", ids:["home","overview"]},
-    {title:"LEARN", ids:["aichat","learning","studyplan","ainotes","notes","pyq","notices"]},
+    {title:"LEARN", ids:["aichat","learning","textbook","studyplan","ainotes","notes","pyq","notices"]},
     {title:"PRACTICE", ids:["quiz","createquiz","aiquestions","objectivebuilder","subjectivebuilder","results","progress","leaderboard","doubts","tasks","planner","cards"]},
     {title:"MANAGE", ids:["teacher","analytics","pyqdiscover","memberships","admin","activity","super"]}
   ];
@@ -475,6 +475,34 @@ async function cardsPage(){
     cardsPage();
   });
 }
+async function textbookQrPage(){
+ panel("Textbook QR Scanner",'<div class="ef-library-intro"><h3>Scan a textbook QR code</h3><p>Read the QR code printed in your textbook and inspect its linked resource. Camera access is used only while scanning.</p></div><section class="item ef-qr-card"><div class="ef-qr-video-wrap"><video id="qrCameraVideo" playsinline muted hidden></video><div id="qrCameraPlaceholder" class="ef-qr-placeholder"><span>⌕</span><b>Textbook QR Reader</b><small>Start camera or paste the QR value manually.</small></div></div><div class="ef-qr-actions"><button id="startQrCamera" class="primary" type="button">Start Camera</button><button id="stopQrCamera" class="secondary" type="button" disabled>Stop Camera</button></div><label for="qrManualValue">QR code value or resource URL</label><input id="qrManualValue" maxlength="2000" placeholder="Paste QR code text or link"><button id="decodeQrManual" class="secondary" type="button">Read QR Value</button><div id="qrReaderStatus" class="hint" role="status"></div><section id="qrDecodedPanel" class="ef-qr-result" hidden><b>QR code detected</b><p id="qrDecodedText"></p><div class="ef-qr-actions"><button id="copyQrValue" class="secondary" type="button">Copy QR value</button><button id="openQrResource" class="primary" type="button" hidden>Open HTTPS link</button></div></section></section>');
+ const video=$("qrCameraVideo"),status=$("qrReaderStatus"),placeholder=$("qrCameraPlaceholder");
+ let stream=null,detector=null,active=false,frame=0;
+ const stop=()=>{active=false;if(frame)cancelAnimationFrame(frame);if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;video.pause();video.srcObject=null;video.hidden=true;placeholder.hidden=false;$("startQrCamera").disabled=false;$("stopQrCamera").disabled=true;};
+ activeQrStop=stop;
+ const showValue=value=>{
+  const text=String(value||"").trim();if(!text)return;
+  $("qrDecodedPanel").hidden=false;$("qrDecodedText").textContent=text;$("qrManualValue").value=text;
+  let safeUrl=null;try{const u=new URL(text);if(u.protocol==="https:")safeUrl=u.href;}catch{}
+  const open=$("openQrResource");open.hidden=!safeUrl;open.onclick=()=>{if(safeUrl)window.open(safeUrl,"_blank","noopener,noreferrer");};
+  $("copyQrValue").onclick=async()=>{try{await navigator.clipboard.writeText(text);status.textContent="QR value copied."}catch{status.textContent="Copy is unavailable in this browser."}};
+  status.textContent=safeUrl?"QR detected. Check the link before opening it.":"QR text detected. It may be a content code rather than a direct URL.";
+  stop();
+ };
+ $("decodeQrManual").onclick=()=>showValue($("qrManualValue").value);
+ $("startQrCamera").onclick=async()=>{
+  if(!("BarcodeDetector" in window)){status.textContent="Built-in QR scanning is not supported in this browser. Use your phone's QR reader and paste the value here.";return;}
+  try{
+   detector=new BarcodeDetector({formats:["qr_code"]});
+   stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});
+   video.srcObject=stream;video.hidden=false;placeholder.hidden=true;await video.play();active=true;$("startQrCamera").disabled=true;$("stopQrCamera").disabled=false;status.textContent="Camera active. Hold the QR code steady in view.";
+   const scan=async()=>{if(!active)return;try{const codes=await detector.detect(video);if(codes.length&&codes[0].rawValue){showValue(codes[0].rawValue);return;}}catch{}frame=requestAnimationFrame(scan);};scan();
+  }catch{stop();status.textContent="Camera permission or camera access failed. Paste the QR value manually.";}
+ };
+ $("stopQrCamera").onclick=()=>{stop();activeQrStop=null;};
+}
+
 async function adminPage(){
   if(role!=="admin"&&role!=="superadmin")return;
   panel("Admin Dashboard",'<div class="admin-welcome"><span class="eyebrow">EDUFUTURE • CONTROL CENTER</span><h2>Learning Management</h2><p>Quiz बनाएं, Notes और PYQ अलग-अलग upload करें और learning activities manage करें।</p></div><div class="admin-action-grid"><button class="admin-action-card" data-admin-go="createquiz"><span>＋</span><b>Create Quiz</b><small>Objective या Subjective चुनें</small></button><button class="admin-action-card" data-admin-go="notesupload"><span>▤</span><b>Upload Notes</b><small>Notes अलग से publish करें</small></button><button class="admin-action-card" data-admin-go="pyqupload"><span>▧</span><b>Upload PYQ</b><small>Previous year papers अलग रखें</small></button><button class="admin-action-card" data-admin-go="teacher"><span>♙</span><b>Teacher Workspace</b><small>Written answers और doubts Check</small></button><button class="admin-action-card" data-admin-go="aiquestions"><span>✦</span><b>AI Question Generator</b><small>Gemini से प्रश्न बनाएं और approve करें</small></button></div><section class="item"><h3>Teacher Assignment</h3><label>Registered Teacher Email</label><input id="teacherEmail" type="email" placeholder="teacher@example.com"><label>Assigned Subjects (comma separated)</label><input id="teacherSubjects" placeholder="Maths, Science"><label>Assigned Classes (comma separated)</label><input id="teacherClasses" placeholder="Class 9, Class 10"><button id="assignTeacher">Assign Teacher</button></section><section class="item"><h3>Student Management</h3><button id="loadStudents" class="secondary">View Students</button><div id="studentList"></div></section><section class="item ef-report-section"><div class="question-head"><div><h3>Question Reports</h3><p>Students द्वारा report किए गए सवालों की जाँच करें।</p></div><button id="loadQuestionReports" class="secondary">Refresh Reports</button></div><div id="questionReports">Loading reports…</div></section><section class="item"><h3>Quiz Results</h3><div id="adminResults">Loading quizzes…</div></section>');
