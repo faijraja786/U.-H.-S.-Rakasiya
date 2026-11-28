@@ -115,7 +115,7 @@ onAuthStateChanged(auth,async u=>{
     openApp();
     tab="home";
     if(role==="student"&&!u.isAnonymous&&(!profile.displayName||!profile.className)){showStudentProfileSetup(u,profile);return;}
-    if(u.isAnonymous){const target=sessionStorage.getItem("ef_guest_target");sessionStorage.removeItem("ef_guest_target");sessionStorage.removeItem("ef_guest_class");if(["aichat","learning","notes","pyq","cards"].includes(target))tab=target;}
+    if(u.isAnonymous){const target=sessionStorage.getItem("ef_guest_target");sessionStorage.removeItem("ef_guest_target");sessionStorage.removeItem("ef_guest_class");if(["aichat","learning","textbook","notes","pyq","cards"].includes(target))tab=target;}
     render();
   }catch(e){
     console.error("EduFuture role verification failed:",e);
@@ -140,7 +140,7 @@ async function showStudentProfileSetup(current,profile={}){
     }catch(e){$("profileSetupStatus").textContent=e.message;button.disabled=false}
   };
 }
-const studentTabs=[["home","Dashboard"],["progress","My Progress"],["aichat","AI Study Tutor"],["learning","Interactive Lab"],["studyplan","Personal Study Plan"],["notices","Notices"],["quiz","Online Tests"],["notes","Study Notes"],["pyq","Previous Year Papers"],["leaderboard","Leaderboard"],["results","My Results"],["doubts","Ask a Question"],["tasks","Daily Goals"],["planner","Study Planner"],["cards","Flashcards"]];
+const studentTabs=[["home","Dashboard"],["progress","My Progress"],["aichat","AI Study Tutor"],["learning","Interactive Lab"],["textbook","Textbook QR Scanner"],["studyplan","Personal Study Plan"],["notices","Notices"],["quiz","Online Tests"],["notes","Study Notes"],["pyq","Previous Year Papers"],["leaderboard","Leaderboard"],["results","My Results"],["doubts","Ask a Question"],["tasks","Daily Goals"],["planner","Study Planner"],["cards","Flashcards"]];
 function closeWorkspaceMenu(){
   $("app").classList.remove("menu-open");
   $("menuToggle").setAttribute("aria-expanded","false");
@@ -152,7 +152,7 @@ function render(){
   if(role==="teacher")tabs=[["home","Dashboard"],["notices","Notices"],["teacher","Teacher Workspace"],["analytics","Performance Reports"]];
   if(role==="admin")tabs=[["home","Dashboard"],["aichat","AI Study Tutor"],["learning","Interactive Lab"],["studyplan","Personal Study Plan"],["ainotes","AI Notes PDF"],["notices","Notices"],["teacher","Teacher Workspace"],["pyqdiscover","AI PYQ Finder"],["memberships","Premium Members"],["admin","Management"],["activity","Activity Log"]];
   if(role==="superadmin")tabs=[["home","Dashboard"],["aichat","AI Study Tutor"],["learning","Interactive Lab"],["studyplan","Personal Study Plan"],["ainotes","AI Notes PDF"],["notices","Notices"],["overview","Institution Report"],["teacher","Teacher Workspace"],["pyqdiscover","AI PYQ Finder"],["memberships","Premium Members"],["admin","Management"],["activity","Activity Log"],["super","System Control"]];
-  const pages={overview:superOverviewPage,progress:studentProgressPage,analytics:teacherAnalyticsPage,activity:adminActivityPage,pyqdiscover:pyqDiscoveryAdminPage,home:role==="superadmin"?superHomePage:homePage,aichat:()=>window.aiChatPage(),learning:()=>window.learningLabPage(),studyplan:()=>window.studyPlanPage(),ainotes:()=>window.aiNotesPage(),notices:importantNoticesPage,quiz:quizPage,notes:notesPage,pyq:pyqPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,memberships:membershipAdminPage,admin:adminPage,aiquestions:aiQuestionBankPage,createquiz:createQuizPage,objectivebuilder:()=>quizBuilderPage("objective"),subjectivebuilder:()=>quizBuilderPage("subjective"),notesupload:()=>contentUploadPage("note"),pyqupload:()=>contentUploadPage("pyq"),super:superPage};
+  const pages={overview:superOverviewPage,progress:studentProgressPage,analytics:teacherAnalyticsPage,activity:adminActivityPage,pyqdiscover:pyqDiscoveryAdminPage,home:role==="superadmin"?superHomePage:homePage,aichat:()=>window.aiChatPage(),learning:()=>window.learningLabPage(),textbook:textbookQrPage,studyplan:()=>window.studyPlanPage(),ainotes:()=>window.aiNotesPage(),notices:importantNoticesPage,quiz:quizPage,notes:notesPage,pyq:pyqPage,leaderboard:leaderboardPage,results:resultsPage,doubts:doubtsPage,teacher:teacherPage,tasks:tasksPage,planner:plannerPage,cards:cardsPage,memberships:membershipAdminPage,admin:adminPage,aiquestions:aiQuestionBankPage,createquiz:createQuizPage,objectivebuilder:()=>quizBuilderPage("objective"),subjectivebuilder:()=>quizBuilderPage("subjective"),notesupload:()=>contentUploadPage("note"),pyqupload:()=>contentUploadPage("pyq"),super:superPage};
   // Internal workflow pages are intentionally not sidebar items. Keep them routable.
   if(!tabs.some(x=>x[0]===tab)&&!pages[tab])tab=tabs[0][0];
   tabs=tabs.filter(x=>x[0]!=="premium");
@@ -162,7 +162,7 @@ function render(){
     {title:"PRACTICE", ids:["quiz","createquiz","aiquestions","objectivebuilder","subjectivebuilder","results","progress","leaderboard","doubts","tasks","planner","cards"]},
     {title:"MANAGE", ids:["teacher","analytics","pyqdiscover","memberships","admin","activity","super"]}
   ];
-  const navIcon={overview:"◈",home:"⌂",aichat:"✦",learning:"⚗",studyplan:"▤",ainotes:"▤",notices:"◉",quiz:"▣",notes:"▧",pyq:"▤",leaderboard:"♛",results:"◷",doubts:"?",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜",progress:"↗",analytics:"▥",memberships:"◇",activity:"◷",pyqdiscover:"⌕"};
+  const navIcon={overview:"◈",home:"⌂",aichat:"✦",learning:"⚗",textbook:"⌕",studyplan:"▤",ainotes:"▤",notices:"◉",quiz:"▣",notes:"▧",pyq:"▤",leaderboard:"♛",results:"◷",doubts:"?",tasks:"✓",planner:"▦",cards:"▣",teacher:"▤",admin:"⚙",super:"♜",progress:"↗",analytics:"▥",memberships:"◇",activity:"◷",pyqdiscover:"⌕"};
   $("nav").innerHTML=navGroups.map(group=>{
     const items=tabs.filter(x=>group.ids.includes(x[0]));
     return items.length?'<div class="nav-group"><div class="nav-section-label">'+group.title+'</div>'+items.map(x=>'<button data-tab="'+x[0]+'" class="nav-link '+(tab===x[0]?"active":"")+'"><span class="nav-icon">'+(navIcon[x[0]]||"•")+'</span><span>'+x[1]+'</span></button>').join("")+'</div>':"";
@@ -463,6 +463,34 @@ async function cardsPage(){
   panel("Flashcards",'<label>Question</label><input id="front" placeholder="Question / Front"><label>Answer</label><textarea id="back" placeholder="Answer / Back"></textarea><button id="saveCard">Save Flashcard</button>'+(s.empty?"<p>No flashcards yet.</p>":s.docs.map(d=>'<article class="item"><b>'+esc(d.data().front)+'</b><details><summary>Answer देखें</summary><p>'+esc(d.data().back)+'</p></details></article>').join("")));
   $("saveCard").onclick=async()=>{const f=$("front").value.trim(),b=$("back").value.trim();if(!f||!b)return alertMsg("Enter both a question and an answer.");await addDoc(ref,{front:f,back:b,createdAt:serverTimestamp()});cardsPage()};
 }
+async function textbookQrPage(){
+ panel("Textbook QR Scanner",'<div class="ef-library-intro"><h3>Scan a textbook QR code</h3><p>Scan a QR code printed in your textbook to find its linked learning resource. Camera access is used only while scanning.</p></div><section class="item ef-qr-card"><div class="ef-qr-video-wrap"><video id="qrCameraVideo" playsinline muted hidden></video><div id="qrCameraPlaceholder" class="ef-qr-placeholder"><span>⌕</span><b>Textbook QR Reader</b><small>Start the camera or enter a QR code value manually.</small></div></div><div class="ef-qr-actions"><button id="startQrCamera" class="primary" type="button">Start Camera</button><button id="stopQrCamera" class="secondary" type="button" disabled>Stop Camera</button></div><label for="qrManualValue">QR code value or resource URL</label><input id="qrManualValue" maxlength="2000" placeholder="Paste the QR code text or link"><button id="decodeQrManual" class="secondary" type="button">Open Resource Details</button><div id="qrReaderStatus" class="hint" role="status"></div><section id="qrDecodedPanel" class="ef-qr-result" hidden><b>QR code detected</b><p id="qrDecodedText"></p><div class="ef-qr-actions"><button id="copyQrValue" class="secondary" type="button">Copy QR value</button><button id="openQrResource" class="primary" type="button" hidden>Open secure link</button></div></section></section>');
+ const video=$("qrCameraVideo"),status=$("qrReaderStatus"),placeholder=$("qrCameraPlaceholder");
+ let stream=null,detector=null,active=false,frame=0;
+ const stop=()=>{active=false;if(frame)cancelAnimationFrame(frame);if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;video.pause();video.srcObject=null;video.hidden=true;placeholder.hidden=false;$("startQrCamera").disabled=false;$("stopQrCamera").disabled=true;};
+ const showValue=value=>{
+  const text=String(value||"").trim();if(!text)return;
+  $("qrDecodedPanel").hidden=false;$("qrDecodedText").textContent=text;$("qrManualValue").value=text;
+  const open=$("openQrResource");let safeUrl=null;try{const u=new URL(text);if(u.protocol==="https:")safeUrl=u.href;}catch{}
+  open.hidden=!safeUrl;open.onclick=()=>{if(safeUrl)window.open(safeUrl,"_blank","noopener,noreferrer");};
+  $("copyQrValue").onclick=async()=>{try{await navigator.clipboard.writeText(text);status.textContent="QR value copied."}catch{status.textContent="Copy not available on this browser."}};
+  status.textContent=safeUrl?"QR detected. Check the link before opening it.":"QR text detected. It may be a content code rather than a direct URL.";
+  stop();
+ };
+ $("decodeQrManual").onclick=()=>showValue($("qrManualValue").value);
+ $("startQrCamera").onclick=async()=>{
+  if(!("BarcodeDetector" in window)){status.textContent="This browser does not support built-in QR scanning. Use the manual field or your phone camera's QR scanner.";return;}
+  try{
+   detector=new BarcodeDetector({formats:["qr_code"]});
+   stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});
+   video.srcObject=stream;video.hidden=false;placeholder.hidden=true;await video.play();active=true;$("startQrCamera").disabled=true;$("stopQrCamera").disabled=false;status.textContent="Camera is active. Hold the QR code steady inside the camera view.";
+   const scan=async()=>{if(!active)return;try{const codes=await detector.detect(video);if(codes.length&&codes[0].rawValue){showValue(codes[0].rawValue);return;}}catch{}frame=requestAnimationFrame(scan);};scan();
+  }catch(e){stop();status.textContent="Camera permission or camera access failed. You can paste the QR code value manually.";}
+ };
+ $("stopQrCamera").onclick=stop;
+ const old=$("view").querySelector("[data-qr-stop]");if(old)old.onclick=stop;
+}
+
 async function adminPage(){
   if(role!=="admin"&&role!=="superadmin")return;
   panel("Admin Dashboard",'<div class="admin-welcome"><span class="eyebrow">EDUFUTURE • CONTROL CENTER</span><h2>Learning Management</h2><p>Quiz बनाएं, Notes और PYQ अलग-अलग upload करें और learning activities manage करें।</p></div><div class="admin-action-grid"><button class="admin-action-card" data-admin-go="createquiz"><span>＋</span><b>Create Quiz</b><small>Objective या Subjective चुनें</small></button><button class="admin-action-card" data-admin-go="notesupload"><span>▤</span><b>Upload Notes</b><small>Notes अलग से publish करें</small></button><button class="admin-action-card" data-admin-go="pyqupload"><span>▧</span><b>Upload PYQ</b><small>Previous year papers अलग रखें</small></button><button class="admin-action-card" data-admin-go="teacher"><span>♙</span><b>Teacher Workspace</b><small>Written answers और doubts Check</small></button><button class="admin-action-card" data-admin-go="aiquestions"><span>✦</span><b>AI Question Generator</b><small>Gemini से प्रश्न बनाएं और approve करें</small></button></div><section class="item"><h3>Teacher Assignment</h3><label>Registered Teacher Email</label><input id="teacherEmail" type="email" placeholder="teacher@example.com"><label>Assigned Subjects (comma separated)</label><input id="teacherSubjects" placeholder="Maths, Science"><label>Assigned Classes (comma separated)</label><input id="teacherClasses" placeholder="Class 9, Class 10"><button id="assignTeacher">Assign Teacher</button></section><section class="item"><h3>Student Management</h3><button id="loadStudents" class="secondary">View Students</button><div id="studentList"></div></section><section class="item ef-report-section"><div class="question-head"><div><h3>Question Reports</h3><p>Students द्वारा report किए गए सवालों की जाँच करें।</p></div><button id="loadQuestionReports" class="secondary">Refresh Reports</button></div><div id="questionReports">Loading reports…</div></section><section class="item"><h3>Quiz Results</h3><div id="adminResults">Loading quizzes…</div></section>');
@@ -682,7 +710,7 @@ async function quizBuilderPage(mode){
 async function importantNoticesPage(){
   const canPost=["teacher","admin","superadmin"].includes(role);
   panel("Important Notice",'<div class="builder-heading"><span class="eyebrow">EDUFUTURE • SCHOOL UPDATES</span><h2>Important Notice</h2><p>परीक्षा, Admit Card और जरूरी निर्देश। पुराने Notice 30 दिन बाद सूची से छिप जाते हैं। Delete करने पर Storage media भी हटेगा।</p></div>'+
-    (canPost?'<section class="item"><h3>नया Notice बनाएँ</h3><label>शीर्षक (वैकल्पिक)</label><input id="noticeTitle" maxlength="140" placeholder="जैसे: वार्षिक परीक्षा सूचना"><label>जानकारी / निर्देश</label><textarea id="noticeBody" rows="4" maxlength="5000" placeholder="Notice की जानकारी लिखें…"></textarea><label>Photo या Video (अधिकतम 50 MB)</label><input id="noticeMedia" type="file" accept="image/*,video/mp4,video/webm,video/quicktime"><p class="hint">मोबाइल पर Gallery या उपलब्ध media picker खुलेगा। Text, photo, video या combination भेजें।</p><button id="publishNotice" class="success-action">Publish Notice</button><span id="noticeStatus" class="hint"></span></section>':'')+'<div id="noticeList">Notices लोड हो रहे हैं…</div>');
+    (canPost?'<section class="item"><h3>नया Notice बनाएँ</h3><label>शीर्षक (वैकल्पिक)</label><input id="noticeTitle" maxlength="140" placeholder="जैसे: वार्षिक परीक्षा सूचना"><label>जानकारी / निर्देश</label><textarea id="noticeBody" rows="4" maxlength="5000" placeholder="Notice की जानकारी लिखें…"></textarea><label>Photo (अधिकतम 20 MB)</label><input id="noticeMedia" type="file" accept="image/jpeg,image/png,image/webp,image/gif"><p class="hint">मोबाइल पर Gallery या उपलब्ध media picker खुलेगा। Text, photo, video या combination भेजें।</p><button id="publishNotice" class="success-action">Publish Notice</button><span id="noticeStatus" class="hint"></span></section>':'')+'<div id="noticeList">Notices लोड हो रहे हैं…</div>');
   async function refresh(){
     const out=$("noticeList");
     try{
@@ -695,7 +723,7 @@ async function importantNoticesPage(){
     const b=$("publishNotice"),file=$("noticeMedia").files[0],id=doc(collection(db,"notices")).id;b.disabled=true;$("noticeStatus").textContent="Publish हो रहा है…";
     try{
       const title=$("noticeTitle").value.trim(),body=$("noticeBody").value.trim();
-      if(!title&&!body&&!file)throw Error("Text, photo या video जोड़ें।");
+      if(!title&&!body&&!file)throw Error("Text या photo जोड़ें।");
       if(file&&file.size>50*1024*1024)throw Error("Media 50 MB से छोटी होनी चाहिए।");
       let mediaPath="",mediaType="";
       if(file){const up=await uploadNoticeFile(id,file);mediaPath=up.storagePath;mediaType=up.mediaType}
