@@ -132,6 +132,9 @@ async function roleOf(uid) {
   const snap = await db.doc("roles/" + uid).get();
   return snap.exists ? snap.data().role : "student";
 }
+function requireRegisteredStudent(req){
+  if(req.user?.firebase?.sign_in_provider==="anonymous")fail("permission-denied","Official Quiz, Question Reports और Ranking के लिए Sign In या account बनाना जरूरी है।");
+}
 async function requireAdmin(req, superOnly = false) {
   const role = await roleOf(req.user.uid);
   if (!["admin", "superadmin"].includes(role) || (superOnly && role !== "superadmin")) {
@@ -309,6 +312,7 @@ async function run(name, req) {
         resultsAt: resultsAt?.toDate().toISOString() || null };
     }
     case "reportQuizQuestion": {
+      requireRegisteredStudent(req);
       if (await roleOf(uid) !== "student") fail("permission-denied", "केवल Student प्रश्न report कर सकता है।");
       const quizId = String(d.quizId || "").trim();
       const questionId = String(d.questionId || "").trim();
@@ -348,6 +352,7 @@ async function run(name, req) {
       return {ok:true};
     }
     case "startQuiz": {
+      requireRegisteredStudent(req);
       if (await roleOf(uid) !== "student") fail("permission-denied", "केवल Student Quiz attempt कर सकता है।");
       const quizId = String(d.id || "");
       if (!quizId) fail("invalid-argument", "Quiz ID missing.");
@@ -385,6 +390,7 @@ async function run(name, req) {
         questions: questions.docs.map(x => ({ id: x.id, ...x.data() })) };
     }
     case "submitQuiz": {
+      requireRegisteredStudent(req);
       if (await roleOf(uid) !== "student") fail("permission-denied", "केवल Student Quiz submit कर सकता है।");
       const quizId = String(d.id || "");
       const attemptId = String(d.attemptId || "");
@@ -1066,7 +1072,8 @@ async function run(name, req) {
       const profileSnap = await db.doc("roles/" + uid).get();
       const profile = profileSnap.exists ? profileSnap.data() : {};
       const student = currentRole === "student";
-      const className = student ? String(profile.className || "").trim() : String(d.className || "").trim();
+      const anonymousStudent=student&&req.user?.firebase?.sign_in_provider==="anonymous";
+      const className = student ? (anonymousStudent?String(d.className||profile.className||"").trim():String(profile.className||"").trim()) : String(d.className || "").trim();
       const subject = String(d.subject || "सामान्य पढ़ाई").trim().slice(0,80);
       const topic = String(d.topic || ("कक्षा " + className + " का पाठ्यक्रम")).trim().slice(0,160);
       const question = String(d.question || "").trim().slice(0,3000);
