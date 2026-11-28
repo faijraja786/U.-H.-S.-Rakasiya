@@ -1115,6 +1115,7 @@ async function run(name, req) {
     }
     case "adminGenerateMedia": {
       await requireAdmin(req);
+      if(d.kind==="video")fail("failed-precondition","EduFuture में video upload या video generation उपलब्ध नहीं है।");
       const apiKey=String(process.env.GEMINI_API_KEY||"").trim();
       if(!apiKey)fail("failed-precondition","Gemini API Key Render में उपलब्ध नहीं है।");
       const kind=d.kind==="video"?"video":"image";
