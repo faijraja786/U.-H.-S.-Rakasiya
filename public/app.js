@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, signOut, updateProfile, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, signOut, updateProfile, setPersistence, browserLocalPersistence, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, collection, addDoc, getDocs, query, where, serverTimestamp, updateDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { firebaseConfig, API_BASE } from "./firebase-config.js";
 
@@ -55,9 +55,20 @@ function msg(t,ok=false){$("authMessage").textContent=t;$("authMessage").classNa
 function alertMsg(t){window.alert(t)}
 function panel(title,body){$("view").innerHTML='<section class="panel ef-page-panel"><header class="ef-page-heading"><span class="eyebrow">U.H.S. RAKASIYA • LEARNING WORKSPACE</span><h2>'+esc(title)+'</h2></header><div class="ef-page-body">'+body+'</div></section>'}
 function dateText(v){if(!v)return "—";const d=new Date(v);return Number.isNaN(d.getTime())?"—":d.toLocaleString("hi-IN")}
-function openApp(){ $("auth").hidden=true;$("app").hidden=false }
-function openLogin(){ $("auth").hidden=false;$("app").hidden=true }
+function openApp(){ $("publicHome").hidden=true;$("auth").hidden=true;$("app").hidden=false }
+function openPublicHome(){ $("publicHome").hidden=false;$("auth").hidden=true;$("app").hidden=true }
+function openLogin(){ $("publicHome").hidden=true;$("auth").hidden=false;$("app").hidden=true }
 
+$("landingLogin").onclick=$("landingLoginBottom").onclick=$("landingLoginPlan").onclick=$("loginBack").onclick=()=>openLogin();
+async function startGuest(target){
+ const status=$("guestStatus");if(status)status.textContent="Opening guest learning…";
+ try{sessionStorage.setItem("ef_guest_target",target);sessionStorage.setItem("ef_guest_class",$("guestClass").value||"Class 10");if(auth.currentUser?.isAnonymous){tab=target;render();openApp();return;}await signInAnonymously(auth);}
+ catch(e){sessionStorage.removeItem("ef_guest_target");if(status)status.textContent="Guest access is not enabled yet. Sign In, or enable Anonymous sign-in in Firebase Authentication.";}
+}
+$("landingGuestAI").onclick=()=>startGuest("aichat");
+$("landingGuestLab").onclick=()=>startGuest("learning");
+$("landingPractice").onclick=()=>startGuest("aichat");
+document.querySelectorAll("[data-guest-target]").forEach(b=>b.onclick=()=>startGuest(b.dataset.guestTarget));
 $("signup").onclick=async()=>{try{const name=$("name").value.trim(),email=$("email").value.trim(),password=$("password").value;if(!name||!email||password.length<6)throw Error("Enter your name, email, and a password of at least 6 characters.");const c=await createUserWithEmailAndPassword(auth,email,password);await updateProfile(c.user,{displayName:name})}catch(e){msg(e.message)}};
 $("login").onclick=async()=>{try{await signInWithEmailAndPassword(auth,$("email").value.trim(),$("password").value)}catch(e){msg(e.message)}};
 $("togglePassword").onclick=()=>{const field=$("password"),show=field.type==="password";field.type=show?"text":"password";$("togglePassword").textContent=show?"Hide":"Show";$("togglePassword").setAttribute("aria-label",show?"Hide password":"Show password");$("togglePassword").setAttribute("aria-pressed",String(show))};
@@ -74,21 +85,25 @@ $("sidebarOverlay").onclick=closeWorkspaceMenu;
 $("logout").onclick=()=>signOut(auth);
 
 onAuthStateChanged(auth,async u=>{
-  user=u;if(!u){openLogin();return}
+  user=u;if(!u){openPublicHome();return}
   try{
     const roleInfo=await call("ensureStudentRole");
     role=roleInfo?.role||"student";
     // The first configured bootstrap email is promoted automatically; all other students remain students.
-    if(role==="student"){
+    if(role==="student"&&!u.isAnonymous){
       try{const promoted=await call("bootstrapFirstAdmin");role=promoted?.role||"superadmin"}catch{}
     }
     // Refresh the authoritative role once after bootstrap; never infer access from the visible label.
     const roleSnap=await getDoc(doc(db,"roles",u.uid));
     if(roleSnap.exists()&&["student","teacher","admin","superadmin"].includes(roleSnap.data().role))role=roleSnap.data().role;
     if(!["student","teacher","admin","superadmin"].includes(role))role="student";
-    const profileSnap=await getDoc(doc(db,"roles",u.uid));
-    const profile=profileSnap.exists()?profileSnap.data():{};
-    const displayName=profile.displayName||u.displayName||u.email||"User";
+    let profileSnap=await getDoc(doc(db,"roles",u.uid));
+    let profile=profileSnap.exists()?profileSnap.data():{};
+    if(u.isAnonymous&&!profile.className){
+      await call("saveStudentProfile",{displayName:"Guest Learner",className:sessionStorage.getItem("ef_guest_class")||"Class 10"});
+      profileSnap=await getDoc(doc(db,"roles",u.uid));profile=profileSnap.exists()?profileSnap.data():{};
+    }
+    const displayName=profile.displayName||u.displayName||u.email||"Guest Learner";
     $("identity").textContent=displayName;
     $("avatarInitial").textContent=(displayName.trim().charAt(0)||"U").toLocaleUpperCase("hi-IN");
     $("profileName").textContent=displayName;
@@ -99,7 +114,8 @@ onAuthStateChanged(auth,async u=>{
     $("profileMenu").hidden=true;
     openApp();
     tab="home";
-    if(role==="student"&&(!profile.displayName||!profile.className)){showStudentProfileSetup(u,profile);return;}
+    if(role==="student"&&!u.isAnonymous&&(!profile.displayName||!profile.className)){showStudentProfileSetup(u,profile);return;}
+    if(u.isAnonymous){const target=sessionStorage.getItem("ef_guest_target");sessionStorage.removeItem("ef_guest_target");sessionStorage.removeItem("ef_guest_class");if(["aichat","learning","notes","pyq","cards"].includes(target))tab=target;}
     render();
   }catch(e){
     console.error("EduFuture role verification failed:",e);
@@ -276,6 +292,7 @@ async function quizPage(){
   $("view").querySelectorAll("[data-start]").forEach(b=>b.onclick=()=>startQuiz(b.dataset.start));
 }
 async function startQuiz(id){
+  if(user?.isAnonymous){openLogin();msg("Sign in or create an account to take an official Quiz and receive a ranking.");return;}
   try{
     const d=await call("startQuiz",{id});
     activeQuiz={id:id,...d};answers={};
