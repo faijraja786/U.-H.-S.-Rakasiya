@@ -734,7 +734,7 @@ async function importantNoticesPage(){
     try{
       const items=(await call("listNotices")).notices||[];
       out.innerHTML=items.length?items.map(n=>'<article class="item notice-card"><div class="question-meta"><span>IMPORTANT NOTICE</span><span>'+dateText(n.createdAt)+'</span></div>'+(n.title?'<h3>'+esc(n.title)+'</h3>':'')+(n.body?'<p style="white-space:pre-wrap">'+esc(n.body)+'</p>':'')+(n.mediaUrl?(n.mediaType==="video"?'<video controls playsinline preload="metadata" style="max-width:100%;border-radius:12px"><source src="'+esc(n.mediaUrl)+'"></video>':'<img loading="lazy" src="'+esc(n.mediaUrl)+'" alt="Notice photo" style="max-width:100%;height:auto;border-radius:12px">'):'')+(n.canDelete?'<button class="danger" data-delete-notice="'+esc(n.id)+'">Delete Notice</button>':'')+'</article>').join(""):'<div class="empty-state"><b>अभी कोई Important Notice नहीं है।</b></div>';
-      out.querySelectorAll("[data-delete-notice]").forEach(b=>b.onclick=async()=>{if(!confirm("क्या Notice और उसकी photo/video स्थायी रूप से हटानी है?"))return;try{b.disabled=true;await call("deleteNotice",{id:b.dataset.deleteNotice});await refresh()}catch(e){b.disabled=false;alertMsg(e.message)}});
+      out.querySelectorAll("[data-delete-notice]").forEach(b=>b.onclick=async()=>{if(!confirm("क्या Notice और उसकी photo स्थायी रूप से हटानी है?"))return;try{b.disabled=true;await call("deleteNotice",{id:b.dataset.deleteNotice});await refresh()}catch(e){b.disabled=false;alertMsg(e.message)}});
     }catch(e){out.textContent=e.message}
   }
   if(canPost)$("publishNotice").onclick=async()=>{
