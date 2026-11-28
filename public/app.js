@@ -214,9 +214,15 @@ async function membershipAdminPage(){
 
 async function studentProgressPage(){
   const [stats,results]=await Promise.all([call("getStudentProgress"),call("getMyResults")]);
-  const topics=(stats.weakTopics||[]).map(x=>'<article class="item"><b>'+esc(x.topic)+'</b><p>'+x.accuracy+'% सही उत्तर • '+x.correct+'/'+x.total+'</p></article>').join("");
+  const weak=stats.weakTopics||[];
+  const topics=weak.map(x=>{
+    const accuracy=Math.min(100,Math.max(0,Number(x.accuracy)||0));
+    const status=accuracy>=85?"Mastered":accuracy>=65?"Building confidence":"Needs review";
+    return '<article class="ef-mastery-row"><div class="ef-mastery-head"><b>'+esc(x.topic)+'</b><span>'+accuracy+'% • '+status+'</span></div><div class="ef-mastery-track"><span style="width:'+accuracy+'%"></span></div><small>'+esc(x.correct)+' correct of '+esc(x.total)+' attempts</small></article>';
+  }).join("");
   const recent=(results.results||[]).slice(0,12).map(x=>'<article class="item"><b>'+esc(x.title||"Quiz")+'</b><p>'+(x.released?esc(x.score)+' / '+esc(x.total)+' Marks':"Result अभी जारी नहीं हुआ")+'</p></article>').join("");
-  panel("मेरी पढ़ाई की Progress",'<div class="grid"><div class="stat"><strong>'+stats.attempts+'</strong><span>Quiz शुरू किए</span></div><div class="stat"><strong>'+stats.completed+'</strong><span>Quiz पूरे किए</span></div><div class="stat"><strong>'+stats.score+'/'+stats.total+'</strong><span>कुल Marks</span></div><div class="stat"><strong>'+stats.accuracy+'%</strong><span>सही उत्तर</span></div></div><section class="item"><h3>अधिक अभ्यास वाले विषय</h3>'+(topics||'<p>अभी पर्याप्त विषय-आधारित परिणाम उपलब्ध नहीं हैं।</p>')+'</section><section class="item"><h3>हाल के Quiz</h3>'+(recent||'<p>अभी कोई Quiz Attempt नहीं किया।</p>')+'</section>');
+  const recommended=weak.length?'<section class="ef-focus-recommendation"><span class="eyebrow">YOUR NEXT FOCUS</span><h3>'+esc(weak[0].topic)+'</h3><p>इस topic के notes दोबारा पढ़ें, फिर 5–10 practice questions हल करें। इसके बाद Progress फिर देखें।</p></section>':'<section class="ef-focus-recommendation"><span class="eyebrow">YOUR NEXT FOCUS</span><h3>Keep building your mastery</h3><p>एक chapter चुनें, थोड़ा अभ्यास करें और अपनी समझ को नियमित रूप से जाँचें।</p></section>';
+  panel("मेरी पढ़ाई की Progress",'<div class="grid"><div class="stat"><strong>'+stats.attempts+'</strong><span>Quiz शुरू किए</span></div><div class="stat"><strong>'+stats.completed+'</strong><span>Quiz पूरे किए</span></div><div class="stat"><strong>'+stats.score+'/'+stats.total+'</strong><span>कुल Marks</span></div><div class="stat"><strong>'+stats.accuracy+'%</strong><span>सही उत्तर</span></div></div>'+recommended+'<section class="item"><h3>Topic Mastery</h3><p class="hint">प्रदर्शन के आधार पर topics की स्थिति। यह अभ्यास के परिणामों पर आधारित है, कोई परीक्षा-गारंटी नहीं।</p>'+(topics||'<p>अभी पर्याप्त विषय-आधारित परिणाम उपलब्ध नहीं हैं। Quiz पूरा करने के बाद यहाँ mastery दिखाई देगी।</p>')+'</section><section class="item"><h3>हाल के Quiz</h3>'+(recent||'<p>अभी कोई Quiz Attempt नहीं किया।</p>')+'</section>');
 }
 async function teacherAnalyticsPage(){
   const a=await call("getTeacherAnalytics");
