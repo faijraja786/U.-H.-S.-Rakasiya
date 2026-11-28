@@ -49,7 +49,7 @@ async function uploadNoticeFile(id,file){
 }
 const esc = v => String(v ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 try{await setPersistence(auth,browserLocalPersistence)}catch(e){console.warn("EduFuture: browser persistence unavailable; continuing with default Firebase Auth persistence.",e)}
-let user=null, role="student", tab="home", activeQuiz=null, answers={}, timer=null;
+let user=null, role="student", tab="home", activeQuiz=null, answers={}, timer=null, activeQrStop=null;
 
 function msg(t,ok=false){$("authMessage").textContent=t;$("authMessage").className=ok?"success":"error"}
 function alertMsg(t){window.alert(t)}
@@ -146,6 +146,7 @@ function closeWorkspaceMenu(){
   $("menuToggle").setAttribute("aria-expanded","false");
 }
 function render(){
+  if(tab!=="textbook"&&activeQrStop){activeQrStop();activeQrStop=null;}
   const premiumAction=$("premiumTopAction");
   if(premiumAction){premiumAction.hidden=false;premiumAction.style.display="inline-flex";}
   let tabs=studentTabs.filter(x=>x[0]!=="premium");
@@ -459,38 +460,21 @@ async function tasksPage(){
   $("view").querySelectorAll("[data-task]").forEach(x=>x.onchange=async()=>{await updateDoc(doc(ref,x.dataset.task),{done:x.checked});x.nextElementSibling.classList.toggle("done",x.checked)});
 }
 async function cardsPage(){
-  const ref=collection(db,"users",user.uid,"flashcards"),s=await getDocs(ref);
-  panel("Flashcards",'<label>Question</label><input id="front" placeholder="Question / Front"><label>Answer</label><textarea id="back" placeholder="Answer / Back"></textarea><button id="saveCard">Save Flashcard</button>'+(s.empty?"<p>No flashcards yet.</p>":s.docs.map(d=>'<article class="item"><b>'+esc(d.data().front)+'</b><details><summary>Answer देखें</summary><p>'+esc(d.data().back)+'</p></details></article>').join("")));
-  $("saveCard").onclick=async()=>{const f=$("front").value.trim(),b=$("back").value.trim();if(!f||!b)return alertMsg("Enter both a question and an answer.");await addDoc(ref,{front:f,back:b,createdAt:serverTimestamp()});cardsPage()};
+  const ref=collection(db,"users",user.uid,"flashcards"),snap=await getDocs(ref);
+  const cards=snap.docs.map(d=>({id:d.id,...d.data()}));
+  const due=cards.filter(c=>{const t=c.nextReviewAt?.toDate?c.nextReviewAt.toDate().getTime():c.nextReviewAt?new Date(c.nextReviewAt).getTime():0;return !t||t<=Date.now();}).sort((a,b)=>(a.nextReviewAt?.toMillis?.()||0)-(b.nextReviewAt?.toMillis?.()||0));
+  const current=due[0],upcoming=cards.filter(c=>!due.some(d=>d.id===c.id)).length;
+  panel("Flashcards & Spaced Review",'<div class="ef-library-intro"><h3>Remember more with spaced review</h3><p>Review due cards, then schedule them again based on how well you remembered the answer.</p></div><div class="grid"><div class="stat"><strong>'+cards.length+'</strong><span>Total Cards</span></div><div class="stat"><strong>'+due.length+'</strong><span>Due Today</span></div><div class="stat"><strong>'+upcoming+'</strong><span>Scheduled</span></div></div><section class="item"><h3>Create a Flashcard</h3><label for="front">Question / Front</label><input id="front" maxlength="500" placeholder="Question or key concept"><label for="back">Answer / Back</label><textarea id="back" maxlength="2500" placeholder="Answer, definition or formula"></textarea><button id="saveCard" class="primary" type="button">Save Flashcard</button></section>'+(current?'<section class="ef-srs-card"><span class="eyebrow">CARD '+(due.length)+' DUE</span><h3>'+esc(current.front)+'</h3><details id="srsAnswer"><summary>Reveal Answer</summary><p>'+esc(current.back)+'</p></details><p class="hint">How well did you remember it?</p><div class="ef-srs-rating"><button data-srs="again" class="secondary" type="button">Again</button><button data-srs="hard" class="secondary" type="button">Hard</button><button data-srs="good" class="primary" type="button">Good</button><button data-srs="easy" class="success-action" type="button">Easy</button></div></section>':'<section class="item"><h3>All caught up!</h3><p>No cards are due right now. Add a card or come back when your next review is scheduled.</p></section>')+(cards.length?'<section class="item"><h3>Your Flashcards</h3>'+cards.map(c=>'<article class="ef-srs-list-row"><b>'+esc(c.front)+'</b><details><summary>Answer</summary><p>'+esc(c.back)+'</p></details><small>'+(c.nextReviewAt?.toDate?dateText(c.nextReviewAt.toDate()):"Due for first review")+'</small></article>').join("")+'</section>':''));
+  $("saveCard").onclick=async()=>{const f=$("front").value.trim(),b=$("back").value.trim();if(!f||!b)return alertMsg("Enter both a question and an answer.");await addDoc(ref,{front:f,back:b,createdAt:serverTimestamp(),intervalDays:0,nextReviewAt:null});cardsPage();};
+  if(current)$("view").querySelectorAll("[data-srs]").forEach(b=>b.onclick=async()=>{
+    const rating=b.dataset.srs,old=Math.max(0,Number(current.intervalDays)||0);
+    const days=rating==="again"?0:rating==="hard"?Math.max(1,old?old*1.2:1):rating==="good"?Math.max(2,old?old*2:2):Math.max(4,old?old*3:4);
+    const next=rating==="again"?Date.now()+10*60*1000:Date.now()+days*24*60*60*1000;
+    b.disabled=true;
+    await updateDoc(doc(ref,current.id),{intervalDays:days,lastReviewedAt:serverTimestamp(),nextReviewAt:new Date(next),lastRating:rating});
+    cardsPage();
+  });
 }
-async function textbookQrPage(){
- panel("Textbook QR Scanner",'<div class="ef-library-intro"><h3>Scan a textbook QR code</h3><p>Scan a QR code printed in your textbook to find its linked learning resource. Camera access is used only while scanning.</p></div><section class="item ef-qr-card"><div class="ef-qr-video-wrap"><video id="qrCameraVideo" playsinline muted hidden></video><div id="qrCameraPlaceholder" class="ef-qr-placeholder"><span>⌕</span><b>Textbook QR Reader</b><small>Start the camera or enter a QR code value manually.</small></div></div><div class="ef-qr-actions"><button id="startQrCamera" class="primary" type="button">Start Camera</button><button id="stopQrCamera" class="secondary" type="button" disabled>Stop Camera</button></div><label for="qrManualValue">QR code value or resource URL</label><input id="qrManualValue" maxlength="2000" placeholder="Paste the QR code text or link"><button id="decodeQrManual" class="secondary" type="button">Open Resource Details</button><div id="qrReaderStatus" class="hint" role="status"></div><section id="qrDecodedPanel" class="ef-qr-result" hidden><b>QR code detected</b><p id="qrDecodedText"></p><div class="ef-qr-actions"><button id="copyQrValue" class="secondary" type="button">Copy QR value</button><button id="openQrResource" class="primary" type="button" hidden>Open secure link</button></div></section></section>');
- const video=$("qrCameraVideo"),status=$("qrReaderStatus"),placeholder=$("qrCameraPlaceholder");
- let stream=null,detector=null,active=false,frame=0;
- const stop=()=>{active=false;if(frame)cancelAnimationFrame(frame);if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;video.pause();video.srcObject=null;video.hidden=true;placeholder.hidden=false;$("startQrCamera").disabled=false;$("stopQrCamera").disabled=true;};
- const showValue=value=>{
-  const text=String(value||"").trim();if(!text)return;
-  $("qrDecodedPanel").hidden=false;$("qrDecodedText").textContent=text;$("qrManualValue").value=text;
-  const open=$("openQrResource");let safeUrl=null;try{const u=new URL(text);if(u.protocol==="https:")safeUrl=u.href;}catch{}
-  open.hidden=!safeUrl;open.onclick=()=>{if(safeUrl)window.open(safeUrl,"_blank","noopener,noreferrer");};
-  $("copyQrValue").onclick=async()=>{try{await navigator.clipboard.writeText(text);status.textContent="QR value copied."}catch{status.textContent="Copy not available on this browser."}};
-  status.textContent=safeUrl?"QR detected. Check the link before opening it.":"QR text detected. It may be a content code rather than a direct URL.";
-  stop();
- };
- $("decodeQrManual").onclick=()=>showValue($("qrManualValue").value);
- $("startQrCamera").onclick=async()=>{
-  if(!("BarcodeDetector" in window)){status.textContent="This browser does not support built-in QR scanning. Use the manual field or your phone camera's QR scanner.";return;}
-  try{
-   detector=new BarcodeDetector({formats:["qr_code"]});
-   stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});
-   video.srcObject=stream;video.hidden=false;placeholder.hidden=true;await video.play();active=true;$("startQrCamera").disabled=true;$("stopQrCamera").disabled=false;status.textContent="Camera is active. Hold the QR code steady inside the camera view.";
-   const scan=async()=>{if(!active)return;try{const codes=await detector.detect(video);if(codes.length&&codes[0].rawValue){showValue(codes[0].rawValue);return;}}catch{}frame=requestAnimationFrame(scan);};scan();
-  }catch(e){stop();status.textContent="Camera permission or camera access failed. You can paste the QR code value manually.";}
- };
- $("stopQrCamera").onclick=stop;
- const old=$("view").querySelector("[data-qr-stop]");if(old)old.onclick=stop;
-}
-
 async function adminPage(){
   if(role!=="admin"&&role!=="superadmin")return;
   panel("Admin Dashboard",'<div class="admin-welcome"><span class="eyebrow">EDUFUTURE • CONTROL CENTER</span><h2>Learning Management</h2><p>Quiz बनाएं, Notes और PYQ अलग-अलग upload करें और learning activities manage करें।</p></div><div class="admin-action-grid"><button class="admin-action-card" data-admin-go="createquiz"><span>＋</span><b>Create Quiz</b><small>Objective या Subjective चुनें</small></button><button class="admin-action-card" data-admin-go="notesupload"><span>▤</span><b>Upload Notes</b><small>Notes अलग से publish करें</small></button><button class="admin-action-card" data-admin-go="pyqupload"><span>▧</span><b>Upload PYQ</b><small>Previous year papers अलग रखें</small></button><button class="admin-action-card" data-admin-go="teacher"><span>♙</span><b>Teacher Workspace</b><small>Written answers और doubts Check</small></button><button class="admin-action-card" data-admin-go="aiquestions"><span>✦</span><b>AI Question Generator</b><small>Gemini से प्रश्न बनाएं और approve करें</small></button></div><section class="item"><h3>Teacher Assignment</h3><label>Registered Teacher Email</label><input id="teacherEmail" type="email" placeholder="teacher@example.com"><label>Assigned Subjects (comma separated)</label><input id="teacherSubjects" placeholder="Maths, Science"><label>Assigned Classes (comma separated)</label><input id="teacherClasses" placeholder="Class 9, Class 10"><button id="assignTeacher">Assign Teacher</button></section><section class="item"><h3>Student Management</h3><button id="loadStudents" class="secondary">View Students</button><div id="studentList"></div></section><section class="item ef-report-section"><div class="question-head"><div><h3>Question Reports</h3><p>Students द्वारा report किए गए सवालों की जाँच करें।</p></div><button id="loadQuestionReports" class="secondary">Refresh Reports</button></div><div id="questionReports">Loading reports…</div></section><section class="item"><h3>Quiz Results</h3><div id="adminResults">Loading quizzes…</div></section>');
